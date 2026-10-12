@@ -1,0 +1,10 @@
+services:
+  jarvis:
+    build: .
+    env_file: .env
+    volumes:
+      - jarvis-data:/data
+    restart: unless-stopped
+
+volumes:
+  jarvis-data:
