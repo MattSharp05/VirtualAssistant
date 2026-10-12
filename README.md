@@ -1,91 +1,138 @@
 # JARVIS
 
-A headless personal assistant that runs in Docker and drives **Claude Code cloud sessions** from
-Telegram. This is the first milestone: text JARVIS, it starts or steers a cloud session, and the
-session texts you back with what it did, how long it took and how many tokens it used.
+A headless personal assistant that runs in Docker and drives **Claude Code cloud sessions**. You
+give it a task from the **dashboard** (or Telegram), it starts a cloud session on it, you steer
+that session with follow-up messages, and the session reports back with what it did, how long it
+took and how many tokens it used.
 
 Everything runs on the Claude subscription. There's no API key and no LLM in the container: the
 container is a small Node app plus the Claude Code CLI, and all the AI work happens in the cloud.
 
+![The JARVIS dashboard (sample data)](docs/dashboard.png)
+
 ```
- You (Telegram) ──► JARVIS container ──fire routine (HTTP)────────► new cloud session
-                         │            ──claude -p --cloud <id>────► existing cloud session
-                         │                                               │
- You (Telegram) ◄──────── session runs scripts/report.sh (curl Telegram) ┘
+ Dashboard / Telegram ──► JARVIS container ──fire routine (HTTP)──────► new cloud session
+                                  │         ──claude -p --cloud <id>──► existing cloud session
+                                  │                                          │
+ Telegram / dashboard ◄──────────── session runs scripts/report.sh ──────────┘
 ```
 
 | Action | How | Docs |
 |---|---|---|
 | Start a session | Routines API trigger (`POST /v1/claude_code/routines/{id}/fire`) | [routines](https://code.claude.com/docs/en/routines) |
 | Message a running session | `claude -p --cloud <session-id>` in the container | [follow-ups from the CLI](https://code.claude.com/docs/en/claude-code-on-the-web#send-follow-ups-from-the-cli) |
-| Hear back | The session runs `scripts/report.sh`, which posts to Telegram | [network access](https://code.claude.com/docs/en/cloud-environments) |
+| Hear back | The session runs `scripts/report.sh` (Telegram and/or the dashboard) | [network access](https://code.claude.com/docs/en/cloud-environments) |
 
-## Telegram commands
+## Setup, in order
 
-| Command | What it does |
-|---|---|
-| `/new <task>` | Starts a cloud session on the task (one routine fire) |
-| `/jobs` | The sessions JARVIS started (▶ = current) |
-| `/use <job>` | Picks which session plain messages go to |
-| `/say <job> <msg>` | Messages a specific session |
-| `/status` | Claude login, routine config, fires used this hour |
-| any text | Goes to the current session |
+You need: Docker (Docker Desktop on a Mac), your Claude Max login, and Claude Code on the web
+already connected to GitHub with access to this repo (claude.ai/code → it's the same connection
+your orchestrators use).
 
-## Setup (about 15 minutes, once)
+### Part A: on claude.ai (about 10 minutes)
 
-### 1. Telegram bot
-Message **@BotFather** → `/newbot` → copy the token.
+**A1. Make a cloud environment for JARVIS jobs.** At claude.ai/code, open the environment menu →
+add an environment named `JARVIS`.
+- Network access: **Trusted** is fine for now. If you'll use Telegram (Part C), pick **Custom**
+  instead, keep the default allowlist, and add `api.telegram.org`.
+- No environment variables yet.
 
-### 2. Cloud environment (claude.ai/code → environment menu → new environment, e.g. "JARVIS")
-- **Network access:** Custom, keep the default allowlist, and add `api.telegram.org`.
-- **Environment variables:** `TELEGRAM_BOT_TOKEN=<token>` and `TELEGRAM_CHAT_ID=<your chat id>`.
-  You get the chat ID in step 4. These are visible to anyone who can use the environment, which
-  on a personal plan is just you.
+**A2. Make the routine that starts sessions.** At claude.ai/code/routines → **New routine**:
+- **Repository:** `MattSharp05/VirtualAssistant` (it clones `main`, which has `scripts/report.sh`).
+- **Environment:** `JARVIS`.
+- **Instructions:** paste everything below the line in [docs/routine-prompt.md](docs/routine-prompt.md).
+- No schedule. Save it.
 
-### 3. Routine (claude.ai/code/routines → New routine)
-- **Repository:** `MattSharp05/VirtualAssistant`. The routine clones the default branch, so this
-  code (it needs `scripts/report.sh`) must be merged to `main` first.
-- **Environment:** the one from step 2.
-- **Instructions:** paste [docs/routine-prompt.md](docs/routine-prompt.md).
-- **Trigger:** Add another trigger → **API** → Generate token. Copy the token (it's shown only
-  once) and the routine ID (`trig_…`).
+**A3. Give the routine an API trigger.** Open the routine → **Add another trigger** → **API** →
+**Generate token**. Copy two things somewhere safe:
+- The **token** (starts `sk-ant-oat01-`). It's shown only once; generating a new one revokes it.
+- The **routine ID** (starts `trig_`). It's in the fire URL shown with the token:
+  `…/routines/trig_XXXX/fire`.
 
-### 4. Run the container
+### Part B: on your machine (about 5 minutes)
+
+**B1. Get the code.**
 ```bash
-cp .env.example .env            # fill in TELEGRAM_BOT_TOKEN, ROUTINE_ID, ROUTINE_TOKEN
+git clone https://github.com/MattSharp05/VirtualAssistant.git
+cd VirtualAssistant
+```
+
+**B2. Configure.**
+```bash
+cp .env.example .env
+```
+Open `.env` and fill in `ROUTINE_ID` and `ROUTINE_TOKEN` from A3. Leave the rest empty for now.
+
+**B3. Build the image.**
+```bash
 docker compose build
-docker compose run --rm jarvis claude auth login   # once: open the link, paste the code back
+```
+
+**B4. Log the container's Claude Code in to your claude.ai account (once).**
+```bash
+docker compose run --rm jarvis claude auth login
+```
+Pick the Claude subscription when asked, open the link it prints, approve, and paste the code
+back into the terminal. The login is saved on the `jarvis-data` volume, so rebuilds keep it.
+
+**B5. Start JARVIS.**
+```bash
 docker compose up -d
 ```
-Send `/start` to your bot. It replies with your chat ID. Put it in `.env` as
-`TELEGRAM_ALLOWED_CHAT_ID` and in the cloud environment as `TELEGRAM_CHAT_ID`, then run
-`docker compose up -d` again. Until that's set the bot answers nobody but that `/start`.
+Open **http://localhost:8080**. The chips at the top should say **Claude: claude.ai** and
+**Routine ready**, and the two **Plan** tiles should show your 5-hour and weekly usage.
 
-Check everything: `docker compose run --rm jarvis npm run doctor`
+**B6. Check from the terminal (optional).**
+```bash
+docker compose exec jarvis npm run doctor
+```
 
-The login and the job list live on the `jarvis-data` volume, so they survive rebuilds.
-`docker compose down -v` deletes them.
+### First-win test (dashboard)
 
-### 5. The first-win test
-1. `/status`: login says yes, routine configured.
-2. `/new Create hello.md saying hello from JARVIS on a new branch and open a draft PR`.
-   JARVIS replies with the session link. Within a few minutes the session should text you an
-   acknowledgement, then the PR link.
-3. Reply in plain text, e.g. `add today's date to it too`. JARVIS says "Sent to j1", and the
-   session should report again.
+1. In **New task**, enter `Create hello.md saying hello from JARVIS on a new branch and open a draft PR`
+   and click **Start**. You should see "Started j1 in …s", and the fire counter goes to 1/30.
+2. Click **Open live session ↗** to watch it work on claude.ai.
+3. Type a follow-up in the job's message box, e.g. `also add today's date to the file`, and click
+   **Send**. You should see "Sent to j1 in …s", and the message should appear in the live session.
 
-If step 2 starts a session but you never hear back, the session can't reach Telegram: check the
-environment's allowlist and variables. If step 3 fails, run `/status` and check the login.
+If step 3 works, the container can steer cloud sessions, which is the core of the whole project.
+
+**Reports while JARVIS runs on your laptop:** a cloud session can't reach `localhost`, so its
+reports can't arrive in the dashboard yet. Watch it with **Open live session**, or add Telegram
+(Part C), which works without a public URL. Once JARVIS is on a VPS, Part D sends reports to the
+dashboard too.
+
+### Part C (optional): Telegram
+
+1. Message **@BotFather** → `/newbot` → copy the token into `.env` as `TELEGRAM_BOT_TOKEN`.
+2. `docker compose up -d`, then send `/start` to your bot. It replies with your chat ID.
+3. Put the chat ID in `.env` as `TELEGRAM_ALLOWED_CHAT_ID`, and `docker compose up -d` again.
+   Until this is set, the bot answers nobody but that `/start`.
+4. In the `JARVIS` cloud environment: set network access to **Custom** (defaults + `api.telegram.org`)
+   and add environment variables `TELEGRAM_BOT_TOKEN=<token>` and `TELEGRAM_CHAT_ID=<chat id>`.
+   These are visible to anyone who can use the environment, which on a personal plan is just you.
+
+Commands: `/new <task>`, `/jobs`, `/use <job>`, `/say <job> <message>`, `/status`. Any other text
+goes to the current job.
+
+### Part D (later, on a VPS): reports in the dashboard
+
+1. Give JARVIS a public HTTPS URL (a reverse proxy such as Caddy in front of port 8080).
+2. In `.env`, set `DASHBOARD_PASSWORD` (the dashboard is otherwise open to anyone who can reach
+   it) and `REPORT_SECRET` (`openssl rand -hex 32`).
+3. In the `JARVIS` cloud environment: add your host to the Custom allowlist, and set
+   `JARVIS_REPORT_URL=https://your-host` and `JARVIS_REPORT_SECRET=<same secret>`.
 
 ## Metrics
 
-| Metric | Where you see it | How it's measured |
+| Metric | Where | How it's measured |
 |---|---|---|
-| Time to start a session | JARVIS's reply to `/new` ("Started j1 in 1.4s") | Container: the routine API call |
+| **Plan usage** (5-hour and weekly) | Dashboard tiles, `/status` | Asked from the CLI every minute; amber from 75%, red from 90% |
+| Routine fires used | Dashboard tile, `/status` | Container: timestamps of each new task |
+| Time to start a session | "Started j1 in 1.4s" | Container: the routine API call |
 | Time to deliver a follow-up | "Sent to j1 in 2.1s" | Container: the `claude -p --cloud` call |
-| **Time taken per response** | Footer of every session report: `⏱ 4m12s since your message` | Session: now minus the send time JARVIS stamped on the message |
-| **Tokens** | Same footer: `🔢 1.84M tokens (31k output) over 22 replies · context 85k` | Session: its own transcript, counted like claude-workflow's `session_tokens.py` |
-| Routine fires used | `/status` ("Routine fires this hour: 3/30") | Container: timestamps of each `/new` |
+| **Time taken per response** | Report footer: `⏱ 4m12s since your message` | Session: now minus the send time JARVIS stamped on the message |
+| **Tokens** | Report footer: `🔢 1.84M tokens (31k output) over 22 replies · context 85k` | Session: its own transcript, counted like claude-workflow's `session_tokens.py` |
 
 How to read the token numbers:
 - **The total is mostly cache re-reads.** Every reply re-reads the whole conversation, so the total
@@ -93,19 +140,21 @@ How to read the token numbers:
 - **`context`** is the size of the latest reply's context. Every next reply re-reads that much, so
   a large context means each step costs more.
 
-Not shown yet: **plan usage** (how much of the 5-hour and weekly allowance is spent). The CLI
-only exposes it through an undocumented request, so it's left for later.
+**Plan usage is read through an undocumented request.** The CLI answers a `get_usage` control
+request (the same one backtalk uses), but no public API covers it. It makes no model call. If
+Anthropic changes it, the tiles say "not available" and nothing else breaks.
 
 ## Limits to know
 
 - **Routines: 30 fires per hour per routine, and 100 per hour per account.** A "fire" is one API
-  call that starts one new session, so only `/new` uses one; follow-ups and reports don't. "Run
-  now" on the website counts too. The hour rolls: each fire frees up 60 minutes after it happened.
-  JARVIS counts its own fires and refuses a 31st with the time the next slot frees, rather than
-  letting the API return 429.
+  call that starts one new session, so only a new task uses one; follow-ups and reports don't.
+  "Run now" on the website counts too. The hour rolls: each fire frees up 60 minutes after it
+  happened. JARVIS counts its own fires and refuses a 31st with the time the next slot frees,
+  rather than letting the API return 429.
 - **The subscription allowance is shared.** JARVIS jobs, your orchestrators and builders all draw
-  from the same Max plan, with a rolling 5-hour window and a weekly cap. When the window runs out,
-  every session stops until it resets. The container uses nothing while idle.
+  from the same Max plan, with a rolling 5-hour window and a weekly cap; the Plan tiles show both.
+  When the window runs out, every session stops until it resets. The container uses nothing while
+  idle.
 - **Idle sessions get paused.** A cloud session's VM is reclaimed after a period of inactivity.
   The conversation is kept, but background work in it is lost. Archived sessions reject new messages.
 - **Size caps:** a routine fire's text is capped at 65,536 characters, and a Telegram message at
@@ -114,12 +163,24 @@ only exposes it through an undocumented request, so it's left for later.
   reading their transcripts from outside, so JARVIS tracks only the sessions it started, and
   sessions have to report out.
 
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| "Claude: not signed in", or sends fail with "needs a claude.ai sign-in" | Run B4 again. Don't set `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` in `.env`: they override the login and can't drive cloud sessions. |
+| Start fails with HTTP 401/403 | `ROUTINE_TOKEN` is wrong or was regenerated. Copy the current one. |
+| Start fails with HTTP 404 | `ROUTINE_ID` is wrong. Take it from the fire URL. |
+| Session starts but never reports on Telegram | Check the `JARVIS` environment: Custom allowlist includes `api.telegram.org`, and both Telegram variables are set. |
+| Plan tiles say "not available" | The login isn't a claude.ai subscription login, or the undocumented request changed. Everything else still works. |
+
 ## Development
 
 ```bash
 npm install
-npm test        # typecheck + unit tests (fake claude binary and fake fetch, no network)
+npm test        # typecheck + 13 unit tests (fake claude binary and fake fetch, no network)
 ```
 
-Layout: `src/bot.ts` (Telegram commands), `src/routines.ts` (fire API), `src/cloud.ts` (CLI
-wrapper), `src/store.ts` (job list on the volume), `scripts/` (run inside cloud sessions).
+Layout: `src/jarvis.ts` (what JARVIS can do), `src/web.ts` + `public/index.html` (dashboard),
+`src/bot.ts` (Telegram), `src/routines.ts` (fire API), `src/cloud.ts` (CLI wrapper),
+`src/usage.ts` (plan usage), `src/store.ts` (jobs, reports and fires on the volume), `scripts/`
+(runs inside cloud sessions).

@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS</title>
+<style>
+  :root {
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --hairline: #e1e0d9; --ring: rgba(11,11,11,0.10);
+    --accent: #2a78d6; --accent-ink: #ffffff;
+    --good: #0ca30c; --good-ink: #006300; --warning: #fab219; --critical: #d03b3b;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+      --hairline: #2c2c2a; --ring: rgba(255,255,255,0.10);
+      --accent: #3987e5; --good-ink: #0ca30c;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: 0.04em; }
+  h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 0 0 10px; text-transform: none; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--ring); background: var(--surface); font-size: 13px; color: var(--ink-2); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--good); } .dot.off { background: var(--critical); }
+  .card { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
+  .tile-label { font-size: 13px; color: var(--ink-2); }
+  .tile-value { font-size: 28px; font-weight: 600; margin: 2px 0 8px; }
+  .tile-value small { font-size: 14px; font-weight: 400; color: var(--ink-2); }
+  .meter { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 18%, var(--surface)); overflow: hidden; }
+  .meter > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width .3s; }
+  .meter.warning > span { background: var(--warning); } .meter.critical > span { background: var(--critical); }
+  .tile-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .state { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); }
+  .grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  textarea, input { width: 100%; font: inherit; color: var(--ink); background: var(--page); border: 1px solid var(--hairline); border-radius: 8px; padding: 10px; }
+  textarea { min-height: 84px; resize: vertical; }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 8px; padding: 9px 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+  button:disabled { opacity: .5; cursor: progress; }
+  .row { display: flex; gap: 8px; align-items: flex-start; margin-top: 8px; }
+  .row > :first-child { flex: 1; }
+  .jobs { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+  .job { padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 8px; cursor: pointer; }
+  .job:hover { border-color: var(--muted); }
+  .job.selected { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .job-id { font-weight: 600; margin-right: 6px; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  a { color: var(--accent); }
+  .reports { display: grid; gap: 8px; margin-top: 12px; }
+  .report { border-left: 3px solid var(--hairline); padding: 6px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .report .meta { margin: 0 0 2px; }
+  .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+  .notice { margin-top: 8px; font-size: 13px; color: var(--ink-2); min-height: 1.4em; }
+  .notice.error { color: var(--critical); }
+  .detail-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .warn { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--warning); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>JARVIS</h1>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <div id="warnings"></div>
+
+  <section class="tiles" aria-label="Limits">
+    <div class="card" id="tile-five_hour"></div>
+    <div class="card" id="tile-seven_day"></div>
+    <div class="card" id="tile-fires"></div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <h2>New task</h2>
+      <form id="new-form">
+        <textarea id="task" placeholder="e.g. Create hello.md on a new branch and open a draft PR" required></textarea>
+        <div class="row"><span class="meta">Starts a cloud session (uses 1 routine fire)</span><button id="start">Start</button></div>
+      </form>
+      <div class="notice" id="new-notice" role="status"></div>
+      <h2 style="margin-top:16px">Jobs</h2>
+      <ul class="jobs" id="jobs"></ul>
+    </div>
+
+    <div class="card" id="detail"></div>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let state = null;
+  let selected = null;
+
+  function el(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === "class") node.className = v;
+      else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v);
+    }
+    for (const c of children.flat()) if (c != null) node.append(c); // strings become text nodes: no HTML injection
+    return node;
+  }
+
+  function ago(iso) {
+    const mins = Math.round((Date.now() - Date.parse(iso)) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return mins + "m ago";
+    if (mins < 1440) return Math.floor(mins / 60) + "h " + (mins % 60) + "m ago";
+    return Math.floor(mins / 1440) + "d ago";
+  }
+
+  function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
+
+  function until(iso) {
+    if (!iso) return "";
+    const mins = Math.max(0, Math.round((Date.parse(iso) - Date.now()) / 60000));
+    if (mins < 60) return "resets in " + mins + "m";
+    if (mins < 1440) return "resets in " + Math.floor(mins / 60) + "h " + (mins % 60) + "m";
+    return "resets in " + Math.floor(mins / 1440) + "d " + Math.floor((mins % 1440) / 60) + "h";
+  }
+
+  // Severity rides on the fill, and always with a word + symbol so it never depends on color alone.
+  function severity(pct) {
+    if (pct >= 90) return { cls: "critical", label: "■ Nearly out" };
+    if (pct >= 75) return { cls: "warning", label: "▲ Getting close" };
+    return { cls: "", label: "● Plenty left" };
+  }
+
+  function tile(node, label, pct, valueText, foot) {
+    node.replaceChildren(
+      el("div", { class: "tile-label" }, label),
+      el("div", { class: "tile-value" }, valueText),
+    );
+    if (pct == null) return node.append(el("div", { class: "tile-foot" }, el("span", {}, foot)));
+    const s = severity(pct);
+    const meter = el("div", { class: "meter " + s.cls, role: "meter", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(Math.round(pct)), "aria-label": label });
+    meter.append(el("span", { style: "width:" + Math.min(100, pct) + "%" }));
+    node.append(meter, el("div", { class: "tile-foot" }, el("span", { class: "state" }, s.label), el("span", {}, foot)));
+  }
+
+  function render() {
+    const s = state.status;
+    $("chips").replaceChildren(
+      chip(s.auth.loggedIn && !s.auth.warning, s.auth.loggedIn ? "Claude: " + (s.auth.authMethod || "signed in") : "Claude: not signed in"),
+      chip(s.routineConfigured, s.routineConfigured ? "Routine ready" : "No routine"),
+      chip(s.telegram ? true : null, s.telegram ? "Telegram on" : "Telegram off"),
+      chip(s.reportsEndpoint ? true : null, s.reportsEndpoint ? "Reports endpoint on" : "Reports endpoint off"),
+    );
+
+    const warnings = [];
+    if (!s.auth.loggedIn) warnings.push("Claude isn't signed in, so messages to sessions will fail. Run: docker compose run --rm jarvis claude auth login");
+    if (s.auth.warning) warnings.push(s.auth.warning);
+    if (!s.routineConfigured) warnings.push("No routine configured, so new tasks can't start. Set ROUTINE_ID and ROUTINE_TOKEN in .env (see README).");
+    $("warnings").replaceChildren(...warnings.map((w) => el("p", { class: "warn" }, "⚠ " + w)));
+
+    for (const name of ["five_hour", "seven_day"]) {
+      const label = name === "five_hour" ? "Plan · 5-hour window" : "Plan · weekly";
+      const w = s.usage.windows.find((x) => x.name === name);
+      if (w) tile($("tile-" + name), label, w.percent, Math.round(w.percent) + "% used", until(w.resetsAt));
+      else tile($("tile-" + name), label, null, "—", s.usage.reason || "Not available");
+    }
+    const firePct = (s.firesThisHour / s.firesPerHour) * 100;
+    tile($("tile-fires"), "Routine fires · this hour", firePct,
+      s.firesThisHour + " / " + s.firesPerHour,
+      s.nextFireFreesAt ? "oldest frees " + until(s.nextFireFreesAt).replace("resets ", "") : "each new task uses one");
+
+    if (!selected || !state.jobs.some((j) => j.id === selected)) selected = state.currentJobId || state.jobs[0]?.id || null;
+    $("jobs").replaceChildren(...(state.jobs.length ? state.jobs.map(jobItem) : [el("li", { class: "empty" }, "No jobs yet. Start one above.")]));
+    renderDetail();
+  }
+
+  function chip(on, text) {
+    return el("span", { class: "chip" }, el("span", { class: "dot " + (on === true ? "on" : on === false ? "off" : "") }), text);
+  }
+
+  function jobItem(job) {
+    const reports = state.reports.filter((r) => r.jobId === job.id).length;
+    return el("li", { class: "job" + (job.id === selected ? " selected" : ""), tabindex: "0",
+      onclick: () => { selected = job.id; render(); },
+      onkeydown: (e) => { if (e.key === "Enter") { selected = job.id; render(); } } },
+      el("div", {}, el("span", { class: "job-id" }, job.id), job.task.length > 80 ? job.task.slice(0, 80) + "…" : job.task),
+      el("div", { class: "meta" }, "started " + ago(job.createdAt) + " · " + plural(job.messagesSent || 0, "follow-up") + " · " + plural(reports, "report")));
+  }
+
+  function renderDetail() {
+    const box = $("detail");
+    const job = state.jobs.find((j) => j.id === selected);
+    if (!job) {
+      box.replaceChildren(el("h2", {}, "Session"), el("p", { class: "empty" }, "Start a task to see its session here."));
+      return;
+    }
+    const reports = state.reports.filter((r) => r.jobId === job.id);
+    const form = el("form", { onsubmit: sendMessage },
+      el("div", { class: "row" }, el("input", { id: "message", placeholder: "Message " + job.id + "…", autocomplete: "off" }), el("button", { id: "send" }, "Send")));
+    box.replaceChildren(
+      el("div", { class: "detail-head" },
+        el("h2", {}, job.id + " · session"),
+        el("a", { href: job.url, target: "_blank", rel: "noopener" }, "Open live session ↗")),
+      el("p", { style: "margin:0 0 4px; white-space:pre-wrap" }, job.task),
+      el("div", { class: "meta" }, "started " + ago(job.createdAt) + (job.lastMessageAt ? " · last message " + ago(job.lastMessageAt) : "")),
+      form,
+      el("div", { class: "notice", id: "msg-notice", role: "status" }),
+      el("h2", { style: "margin-top:16px" }, "Reports"),
+      el("div", { class: "reports" }, reports.length
+        ? reports.map((r) => el("div", { class: "report" }, el("div", { class: "meta" }, ago(r.receivedAt)), r.text))
+        : el("p", { class: "empty" }, state.status.reportsEndpoint
+            ? "No reports yet. They arrive when the session posts to /api/reports."
+            : "Reports go to Telegram until JARVIS has a public URL (see README). Use “Open live session” to watch it now.")),
+    );
+  }
+
+  async function api(path, body) {
+    const res = await fetch(path, body ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+    return data;
+  }
+
+  function notice(id, text, isError) {
+    const n = $(id);
+    if (!n) return;
+    n.textContent = text;
+    n.className = "notice" + (isError ? " error" : "");
+  }
+
+  async function refresh() {
+    try { state = await api("/api/state"); render(); }
+    catch (err) { notice("new-notice", "Can't reach JARVIS: " + err.message, true); }
+  }
+
+  $("new-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const button = $("start");
+    button.disabled = true;
+    notice("new-notice", "Starting…");
+    try {
+      const r = await api("/api/jobs", { task: $("task").value });
+      $("task").value = "";
+      selected = r.job.id;
+      notice("new-notice", "Started " + r.job.id + " in " + (r.ms / 1000).toFixed(1) + "s (fire " + r.fireNumber + "/30 this hour).");
+      await refresh();
+    } catch (err) { notice("new-notice", err.message, true); }
+    finally { button.disabled = false; }
+  });
+
+  async function sendMessage(e) {
+    e.preventDefault();
+    const input = $("message");
+    const button = $("send");
+    button.disabled = true;
+    try {
+      const r = await api("/api/jobs/" + selected + "/messages", { message: input.value });
+      await refresh();
+      notice("msg-notice", "Sent to " + r.job.id + " in " + (r.ms / 1000).toFixed(1) + "s.");
+    } catch (err) { notice("msg-notice", err.message, true); }
+    finally { const b = $("send"); if (b) b.disabled = false; }
+  }
+
+  refresh();
+  // Don't re-render while you're typing a message (it would wipe the box).
+  setInterval(() => { if (document.activeElement?.id !== "message") refresh(); }, 10000);
+</script>
+</body>
+</html>

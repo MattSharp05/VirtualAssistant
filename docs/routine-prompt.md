@@ -25,7 +25,9 @@ The script adds how long the work took and how many tokens this session used. Re
    arrives later as a new message in this session.
 4. If you get stuck or something fails: what happened and what you need.
 
-Keep reports short, because he reads them on his phone. Never print or echo the Telegram token.
+Keep reports short, because he reads them on his phone. Never print or echo tokens or secrets.
+If `report.sh` says no destination is configured, carry on with the work: he can watch this
+session live on claude.ai.
 
 **Follow-ups** arrive as messages starting `Message from Matthew via JARVIS`. Each one has its own
 sent-at time. Use that time in the report that answers it.

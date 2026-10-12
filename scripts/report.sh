@@ -1,21 +1,30 @@
 #!/usr/bin/env bash
-# Sends a JARVIS report from a cloud session to Matthew's Telegram, with a metrics footer.
+# Sends a JARVIS report from a cloud session, with a metrics footer, to every destination the
+# cloud environment configures:
+#   Telegram:  TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID   (api.telegram.org on the network allowlist)
+#   Dashboard: JARVIS_REPORT_URL + JARVIS_REPORT_SECRET (JARVIS's public URL on the allowlist)
 # Usage: scripts/report.sh <job-id> <sent-at ISO time from the message> "<message>"
-# Needs TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in the cloud environment, and api.telegram.org
-# on its network allowlist (see README).
 set -euo pipefail
 
 job="$1" sent_at="$2" message="$3"
 metrics="$(python3 "$(dirname "$0")/session_metrics.py" --since "$sent_at" 2>/dev/null || true)"
 
-text="[$job] $message"
+text="$message"
 [ -n "$metrics" ] && text="$text
 
 $metrics"
 
-# Telegram caps a message at 4096 characters.
-curl -sS --fail-with-body -o /dev/null -X POST \
-  "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN not set in the cloud environment}/sendMessage" \
-  -d chat_id="${TELEGRAM_CHAT_ID:?TELEGRAM_CHAT_ID not set in the cloud environment}" \
-  --data-urlencode text="${text:0:4000}"
-echo "reported to Telegram"
+sent=0
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+  # Telegram caps a message at 4096 characters.
+  full="[$job] $text"
+  curl -sS --fail-with-body -o /dev/null -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    -d chat_id="$TELEGRAM_CHAT_ID" --data-urlencode text="${full:0:4000}" && sent=$((sent + 1)) && echo "reported to Telegram"
+fi
+if [ -n "${JARVIS_REPORT_URL:-}" ] && [ -n "${JARVIS_REPORT_SECRET:-}" ]; then
+  body="$(python3 -c 'import json,sys; print(json.dumps({"job": sys.argv[1], "text": sys.argv[2]}))' "$job" "$text")"
+  curl -sS --fail-with-body -o /dev/null -X POST "${JARVIS_REPORT_URL%/}/api/reports" \
+    -H "Authorization: Bearer ${JARVIS_REPORT_SECRET}" -H "Content-Type: application/json" -d "$body" \
+    && sent=$((sent + 1)) && echo "reported to the JARVIS dashboard"
+fi
+[ "$sent" -gt 0 ] || { echo "No report destination configured in the cloud environment (see README)." >&2; exit 1; }

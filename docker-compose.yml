@@ -2,6 +2,10 @@ services:
   jarvis:
     build: .
     env_file: .env
+    ports:
+      # Dashboard on http://localhost:8080. Bound to this machine only; on a VPS put it behind
+      # HTTPS and set DASHBOARD_PASSWORD before exposing it.
+      - "127.0.0.1:8080:8080"
     volumes:
       - jarvis-data:/data
     restart: unless-stopped

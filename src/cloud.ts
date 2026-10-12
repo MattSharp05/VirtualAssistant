@@ -31,6 +31,9 @@ function run(bin: string, args: string[], stdin?: string, timeoutMs = 90_000): P
       resolve({ code, stdout, stderr });
     });
     // The message goes in on stdin, never argv, so text starting with "-" can't be read as a flag.
+    // If the CLI exits before reading it, the write fails with EPIPE; the exit code and stderr
+    // already tell the story, so the stream error must not crash JARVIS.
+    child.stdin.on("error", () => {});
     child.stdin.end(stdin ?? "");
   });
 }

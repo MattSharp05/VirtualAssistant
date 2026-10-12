@@ -102,3 +102,14 @@ test("prompts carry the job id and send time", () => {
   assert.match(newJobText("j1", " fix it ", at), /JARVIS job: j1\nSent at: 2026-10-12T20:00:00.000Z[\s\S]*fix it$/);
   assert.match(followUpText("j1", "and this", at), /scripts\/report\.sh j1 2026-10-12T20:00:00\.000Z/);
 });
+
+test("a CLI that exits without reading stdin doesn't crash JARVIS", async () => {
+  const dir = tmp();
+  const bin = join(dir, "claude");
+  writeFileSync(bin, "#!/bin/sh\necho 'not logged in' >&2\nexit 1\n");
+  chmodSync(bin, 0o755);
+  const big = "x".repeat(1 << 20); // larger than the pipe buffer, so the write really hits EPIPE
+  const result = await sendToSession(bin, "session_1", big);
+  assert.equal(result.ok, false);
+  assert.match(result.error ?? "", /not logged in/);
+});
