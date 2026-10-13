@@ -7,6 +7,8 @@ const HELP = [
   "/new <task> — start a cloud session on the task",
   "/jobs — sessions I've started",
   "/use <job> — pick which session plain messages go to",
+  "/attach <link> <name> [note] — add a session I didn't start (e.g. an orchestrator)",
+  "/forget <job> — stop tracking a session",
   "/say <job> <message> — message a specific session",
   "/status — Claude login, plan usage, routine fires",
   "",
@@ -85,6 +87,27 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     if (jobs.length === 0) return ctx.reply("No jobs yet. Start one with /new <task>.");
     const current = store.currentJob()?.id;
     await ctx.reply(jobs.map((j) => (j.id === current ? "▶ " : "") + describe(j)).join("\n\n"));
+  });
+
+  bot.command("attach", async (ctx) => {
+    const [link, name, ...note] = ctx.match.trim().split(/\s+/);
+    if (!link || !name) return ctx.reply("Usage: /attach <claude.ai session link> <name> [note]");
+    try {
+      const job = jarvis.attachSession(link, name, note.join(" "));
+      store.setCurrent(job.id);
+      await ctx.reply(`Attached ${job.id}. Plain messages now go to it.\n${job.url}`);
+    } catch (err) {
+      await ctx.reply((err as Error).message);
+    }
+  });
+
+  bot.command("forget", async (ctx) => {
+    try {
+      jarvis.forget(ctx.match.trim());
+      await ctx.reply(`Forgot ${ctx.match.trim()}. The session itself is untouched.`);
+    } catch (err) {
+      await ctx.reply((err as Error).message);
+    }
   });
 
   bot.command("use", async (ctx) => {

@@ -63,6 +63,11 @@
   .job:hover { border-color: var(--muted); }
   .job.selected { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
   .job-id { font-weight: 600; margin-right: 6px; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 6px; margin-right: 6px; border-radius: 999px; border: 1px solid var(--hairline); color: var(--ink-2); vertical-align: 1px; }
+  .link-button { background: none; color: var(--ink-2); padding: 0; font-weight: 400; text-decoration: underline; }
+  details.attach { margin-top: 12px; }
+  details.attach summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+  details.attach .row input:first-child { flex: 2; }
   .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
   a { color: var(--accent); }
   .reports { display: grid; gap: 8px; margin-top: 12px; }
@@ -106,6 +111,17 @@
         <div class="row"><span class="meta">Starts a cloud session (uses 1 routine fire)</span><button id="start">Start</button></div>
       </form>
       <div class="notice" id="new-notice" role="status"></div>
+      <details class="attach">
+        <summary>Add an existing session (e.g. an orchestrator)</summary>
+        <form id="attach-form">
+          <div class="row">
+            <input id="attach-link" placeholder="claude.ai/code/… link" autocomplete="off" required>
+            <input id="attach-name" placeholder="name, e.g. mk" autocomplete="off" required style="flex:1">
+          </div>
+          <div class="row"><input id="attach-note" placeholder="what it is (optional)" autocomplete="off"><button id="attach">Add</button></div>
+        </form>
+        <div class="notice" id="attach-notice" role="status"></div>
+      </details>
       <h2 style="margin-top:16px">Jobs</h2>
       <ul class="jobs" id="jobs"></ul>
     </div>
@@ -202,13 +218,16 @@
     return el("span", { class: "chip" }, el("span", { class: "dot " + (on === true ? "on" : on === false ? "off" : "") }), text);
   }
 
+  const KIND = { started: "started here", attached: "attached", reported: "reports in" };
+  function kindTag(job) { return el("span", { class: "tag" }, KIND[job.kind || "started"]); }
+
   function jobItem(job) {
     const reports = state.reports.filter((r) => r.jobId === job.id).length;
     return el("li", { class: "job" + (job.id === selected ? " selected" : ""), tabindex: "0",
       onclick: () => { selected = job.id; render(); },
       onkeydown: (e) => { if (e.key === "Enter") { selected = job.id; render(); } } },
-      el("div", {}, el("span", { class: "job-id" }, job.id), job.task.length > 80 ? job.task.slice(0, 80) + "…" : job.task),
-      el("div", { class: "meta" }, "started " + ago(job.createdAt) + " · " + plural(job.messagesSent || 0, "follow-up") + " · " + plural(reports, "report")));
+      el("div", {}, el("span", { class: "job-id" }, job.id), kindTag(job), job.task.length > 80 ? job.task.slice(0, 80) + "…" : job.task),
+      el("div", { class: "meta" }, (job.kind === "started" || !job.kind ? "started " : "added ") + ago(job.createdAt) + " · " + plural(job.messagesSent || 0, "follow-up") + " · " + plural(reports, "report")));
   }
 
   function renderDetail() {
@@ -226,7 +245,12 @@
         el("h2", {}, job.id + " · session"),
         el("a", { href: job.url, target: "_blank", rel: "noopener" }, "Open live session ↗")),
       el("p", { style: "margin:0 0 4px; white-space:pre-wrap" }, job.task),
-      el("div", { class: "meta" }, "started " + ago(job.createdAt) + (job.lastMessageAt ? " · last message " + ago(job.lastMessageAt) : "")),
+      el("div", { class: "meta" },
+        kindTag(job),
+        (job.kind === "started" || !job.kind ? "started " : "added ") + ago(job.createdAt) +
+        (job.lastMessageAt ? " · last message " + ago(job.lastMessageAt) : "") +
+        (job.sessionUpdatedAt ? " · moved to a newer session " + ago(job.sessionUpdatedAt) : "") + " · ",
+        el("button", { class: "link-button", type: "button", onclick: () => forgetJob(job.id) }, "forget")),
       form,
       el("div", { class: "notice", id: "msg-notice", role: "status" }),
       el("h2", { style: "margin-top:16px" }, "Reports"),
@@ -333,6 +357,23 @@
   async function refresh() {
     try { state = await api("/api/state"); render(); }
     catch (err) { notice("new-notice", "Can't reach JARVIS: " + err.message, true); }
+  }
+
+  $("attach-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const job = await api("/api/jobs/attach", { link: $("attach-link").value, name: $("attach-name").value, note: $("attach-note").value });
+      ["attach-link", "attach-name", "attach-note"].forEach((id) => ($(id).value = ""));
+      selected = job.id;
+      await refresh();
+      notice("attach-notice", "Added " + job.id + ". Message it from the panel on the right.");
+    } catch (err) { notice("attach-notice", err.message, true); }
+  });
+
+  async function forgetJob(id) {
+    if (!confirm("Stop tracking " + id + "? The cloud session itself keeps running; its reports stay.")) return;
+    try { await api("/api/jobs/" + id + "/forget", {}); selected = null; await refresh(); }
+    catch (err) { notice("msg-notice", err.message, true); }
   }
 
   $("new-form").addEventListener("submit", async (e) => {

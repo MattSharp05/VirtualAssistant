@@ -3,15 +3,34 @@ import { join } from "node:path";
 
 const HOUR_MS = 60 * 60 * 1000;
 
-/** A cloud session JARVIS started. JARVIS can't list your cloud sessions, so it remembers the ones it made. */
+/**
+ * A cloud session JARVIS can message. JARVIS can't list your cloud sessions, so it knows the ones
+ * it started, the ones you attach by link, and the ones that report in.
+ */
 export interface Job {
-  id: string; // short handle for Telegram, e.g. "j3"
+  id: string; // short handle: "j3" for ones JARVIS started, a name like "mk" for the rest
   sessionId: string;
   url: string;
   task: string;
   createdAt: string;
   lastMessageAt?: string;
   messagesSent?: number;
+  /** started: JARVIS fired the routine. attached: you pasted its link. reported: it reported in first. */
+  kind?: "started" | "attached" | "reported";
+  /** Set when a report moved this name to a newer session (a successor orchestrator took over). */
+  sessionUpdatedAt?: string;
+}
+
+/** Names you can give attached sessions: short, lowercase, and never shaped like JARVIS's own j-numbers. */
+export const JOB_NAME = /^(?!j\d+$)[a-z][a-z0-9-]{0,23}$/;
+
+/** Pulls a session ID out of a claude.ai link or a bare ID. */
+export function parseSessionId(input: string): string | undefined {
+  return input.match(/\b((?:session|cse)_[A-Za-z0-9]+)\b/)?.[1];
+}
+
+export function sessionUrl(sessionId: string): string {
+  return `https://claude.ai/code/${sessionId}`;
 }
 
 /** A message a cloud session sent back (POST /api/reports). */
@@ -98,11 +117,37 @@ export class Store {
     return (this.state.fires ?? []).filter((t) => Date.parse(t) > cutoffMs);
   }
 
-  addReport(jobId: string, text: string): Report {
-    const report = { jobId: jobId.toLowerCase(), text, receivedAt: new Date().toISOString() };
+  /**
+   * Stores a report. When it says which session sent it, JARVIS follows that session: an unknown
+   * name becomes a new "reported" job, and a known one moves to the newer session, so messages
+   * reach whichever orchestrator is current.
+   */
+  addReport(jobId: string, text: string, sessionId?: string): Report {
+    const id = jobId.toLowerCase();
+    const now = new Date().toISOString();
+    if (sessionId) {
+      const job = this.getJob(id);
+      if (!job) {
+        this.state.jobs.push({ id, sessionId, url: sessionUrl(sessionId), task: "Reported in on its own", createdAt: now, kind: "reported" });
+      } else if (job.sessionId !== sessionId) {
+        job.sessionId = sessionId;
+        job.url = sessionUrl(sessionId);
+        job.sessionUpdatedAt = now;
+      }
+    }
+    const report = { jobId: id, text, receivedAt: now };
     this.state.reports = [...(this.state.reports ?? []), report].slice(-MAX_REPORTS);
     this.save();
     return report;
+  }
+
+  /** Forgets a job (not its reports). The cloud session itself is untouched. */
+  removeJob(id: string): boolean {
+    const before = this.state.jobs.length;
+    this.state.jobs = this.state.jobs.filter((j) => j.id !== id.toLowerCase());
+    if (this.state.currentJobId === id.toLowerCase()) this.state.currentJobId = undefined;
+    this.save();
+    return this.state.jobs.length < before;
   }
 
   /** Newest first. */
@@ -110,8 +155,13 @@ export class Store {
     return (this.state.reports ?? []).slice(-limit).reverse();
   }
 
+  /** Most recently active first. */
   recentJobs(limit = 10): Job[] {
-    return this.state.jobs.slice(-limit).reverse();
+    const lastReport = new Map<string, string>();
+    for (const r of this.state.reports ?? []) lastReport.set(r.jobId, r.receivedAt);
+    const active = (j: Job) =>
+      [j.createdAt, j.lastMessageAt, j.sessionUpdatedAt, lastReport.get(j.id)].filter(Boolean).sort().pop() ?? "";
+    return [...this.state.jobs].sort((a, b) => active(b).localeCompare(active(a))).slice(0, limit);
   }
 
   private save(): void {

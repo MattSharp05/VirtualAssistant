@@ -4,7 +4,9 @@
 //   GET  /api/state              status, plan usage, jobs, reports
 //   GET  /api/system             container memory, CPU, claude processes, last hour of history
 //   POST /api/jobs               { task }            start a cloud session
+//   POST /api/jobs/attach        { link, name, note } add a session JARVIS didn't start
 //   POST /api/jobs/:id/messages  { message }         message a session
+//   POST /api/jobs/:id/forget    {}                  stop tracking a session
 //   POST /api/reports            { job, text }       a cloud session reporting back (Bearer REPORT_SECRET)
 //
 // createReportsServer() serves only POST /api/reports (and a GET / health line) on its own port,
@@ -15,7 +17,7 @@ import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { JarvisError, type Jarvis } from "./jarvis.js";
 import { RoutineError } from "./routines.js";
-import type { Store } from "./store.js";
+import { parseSessionId, type Store } from "./store.js";
 import type { SystemMonitor } from "./system.js";
 
 const PAGE = new URL("../../public/index.html", import.meta.url) // dist/src/web.js → <app>/public;
@@ -65,7 +67,10 @@ async function receiveReport(req: IncomingMessage, res: ServerResponse, store: S
   const job = String(body.job ?? "").trim();
   const text = String(body.text ?? "").trim();
   if (!job || !text) return send(res, 400, { error: "job and text are required" });
-  send(res, 201, store.addReport(job, text.slice(0, 8000)));
+  // The sending session's own ID (report.sh reads it from the environment), so JARVIS can follow
+  // an orchestrator to its successor. Optional: older senders don't include it.
+  const session = typeof body.session === "string" ? parseSessionId(body.session) : undefined;
+  send(res, 201, store.addReport(job, text.slice(0, 8000), session));
 }
 
 /**
@@ -129,10 +134,22 @@ export function createDashboard(jarvis: Jarvis, monitor?: SystemMonitor): Server
         return send(res, 201, result);
       }
 
-      const message = url.pathname.match(/^\/api\/jobs\/([a-z0-9]+)\/messages$/i);
+      if (req.method === "POST" && url.pathname === "/api/jobs/attach") {
+        const body = await readJson(req);
+        return send(res, 201, jarvis.attachSession(String(body.link ?? ""), String(body.name ?? ""), String(body.note ?? "")));
+      }
+
+      const message = url.pathname.match(/^\/api\/jobs\/([a-z0-9-]+)\/messages$/i);
       if (req.method === "POST" && message) {
         const body = await readJson(req);
         return send(res, 201, await jarvis.sendMessage(message[1], String(body.message ?? "")));
+      }
+
+      const forget = url.pathname.match(/^\/api\/jobs\/([a-z0-9-]+)\/forget$/i);
+      if (req.method === "POST" && forget) {
+        await readJson(req); // JSON-only, like every other write (blocks cross-site form posts)
+        jarvis.forget(forget[1]);
+        return send(res, 200, { ok: true });
       }
 
       send(res, 404, { error: "not found" });

@@ -3,7 +3,8 @@
 # cloud environment configures:
 #   Telegram:  TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID   (api.telegram.org on the network allowlist)
 #   Dashboard: JARVIS_REPORT_URL + JARVIS_REPORT_SECRET (JARVIS's public URL on the allowlist)
-# Usage: scripts/report.sh <job-id> <sent-at ISO time from the message> "<message>"
+# Usage: scripts/report.sh <job-id> <sent-at ISO time from the message, or - > "<message>"
+# Pass - as the sent-at time for reports nobody asked for (e.g. an orchestrator's progress note).
 set -euo pipefail
 
 job="$1" sent_at="$2" message="$3"
@@ -24,7 +25,11 @@ if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
 fi
 if [ -n "${JARVIS_REPORT_URL:-}" ] && [ -n "${JARVIS_REPORT_SECRET:-}" ]; then
   configured=$((configured + 1))
-  body="$(python3 -c 'import json,sys; print(json.dumps({"job": sys.argv[1], "text": sys.argv[2]}))' "$job" "$text")"
+  # This session's own ID (the end of CLAUDE_CODE_REMOTE_SDK_URL, an undocumented variable; omitted
+  # if absent), so JARVIS can follow an orchestrator to its successor session.
+  session="${CLAUDE_CODE_REMOTE_SDK_URL##*/}"
+  case "$session" in session_*|cse_*) ;; *) session="" ;; esac
+  body="$(python3 -c 'import json,sys; d={"job": sys.argv[1], "text": sys.argv[2]}; sys.argv[3] and d.update(session=sys.argv[3]); print(json.dumps(d))' "$job" "$text" "$session")"
   curl -sS --fail-with-body -o /dev/null -X POST "${JARVIS_REPORT_URL%/}/api/reports" \
     -H "Authorization: Bearer ${JARVIS_REPORT_SECRET}" -H "Content-Type: application/json" -d "$body" \
     && sent=$((sent + 1)) && echo "reported to the JARVIS dashboard"

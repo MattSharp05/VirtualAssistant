@@ -110,7 +110,8 @@ Part C (Telegram) its reports stay in the session. Watch it with **Open live ses
    and add environment variables `TELEGRAM_BOT_TOKEN=<token>` and `TELEGRAM_CHAT_ID=<chat id>`.
    These are visible to anyone who can use the environment, which on a personal plan is just you.
 
-Commands: `/new <task>`, `/jobs`, `/use <job>`, `/say <job> <message>`, `/status`. Any other text
+Commands: `/new <task>`, `/jobs`, `/use <job>`, `/say <job> <message>`, `/attach <link> <name>`,
+`/forget <job>`, `/status`. Any other text
 goes to the current job.
 
 ### Part D: reports in the dashboard (Tailscale)
@@ -167,6 +168,30 @@ or it drops off the tailnet after about 180 days.
 
 **Bonus:** install the Tailscale app on your phone, sign in with the same account, and open
 `https://jarvis.<tailnet>.ts.net:8443` to use the dashboard from anywhere. Only your devices can.
+
+### Part E: connect your orchestrators
+
+JARVIS can message **any** cloud session, not only the ones it starts. There are two ways a session
+gets onto the dashboard:
+
+- **Attach it by link.** Dashboard → **Add an existing session**: paste its `claude.ai/code/…`
+  address and give it a short name (`mk`, `shapemint`). Telegram: `/attach <link> <name>`. You
+  can message it straight away.
+- **It reports in.** A session that runs the reporter (`scripts/report.sh` here, or
+  `scripts/jarvis_report.sh` in the claude-workflow plugin) sends its own session ID with every
+  report. JARVIS adds an unknown name automatically, and when a successor orchestrator takes
+  over and reports under the same name, JARVIS moves the name to the new session. "mk" always
+  means the current Mario Kart orchestrator.
+
+For an orchestrator to report, its project's cloud environment needs the same settings as the
+`JARVIS` environment in Part D: `jarvis.<tailnet>.ts.net` in **Allowed domains**, plus
+`JARVIS_REPORT_URL` and `JARVIS_REPORT_SECRET` (and the Telegram pair if you use it). The
+claude-workflow plugin's `run-batch` skill then reports batch starts, merges, blocks and handovers
+on its own, under the project's ticket prefix (MK → `mk`).
+
+Messages to attached and self-reporting sessions tell them to answer with the plugin's reporter, or
+simply in their own session if they can't. **Forget** (on the dashboard, or `/forget <name>`) only
+stops JARVIS tracking a session; the session itself keeps running.
 
 ## Metrics
 
