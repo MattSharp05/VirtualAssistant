@@ -5,8 +5,13 @@ give it a task from the **dashboard** (or Telegram), it starts a cloud session o
 that session with follow-up messages, and the session reports back with what it did, how long it
 took and how many tokens it used.
 
-Everything runs on the Claude subscription. There's no API key and no LLM in the container: the
-container is a small Node app plus the Claude Code CLI, and all the AI work happens in the cloud.
+You can also just **talk to JARVIS** in plain language ("what's mk up to?", "tell mk to pause after
+MK-77", "summarise the Mario Kart PRD from Notion"). It answers using its tools: your sessions'
+reports and history, sending messages, starting sessions, and reading Notion.
+
+Everything runs on the Claude subscription. There's no API key: the container is a small Node app
+plus the Claude Code CLI. The chat runs through `claude -p` on your login, and the coding work
+happens in cloud sessions.
 
 ![The JARVIS dashboard (sample data)](docs/dashboard.png)
 
@@ -110,10 +115,13 @@ Part C (Telegram) its reports stay in the session. Watch it with **Open live ses
    and add environment variables `TELEGRAM_BOT_TOKEN=<token>` and `TELEGRAM_CHAT_ID=<chat id>`.
    These are visible to anyone who can use the environment, which on a personal plan is just you.
 
-Commands: `/sessions` (tap one of your cloud sessions, then just type), `/new <task>`, `/jobs`,
-`/use <job>`, `/say <job> <message>`, `/attach <link> <name>`,
-`/forget <job>`, `/status`. Any other text
-goes to the current job.
+Commands:
+- `/sessions`: tap one of your cloud sessions; what you type next goes straight to it.
+- `/jarvis`: go back to talking to JARVIS. This is the default; plain text goes to JARVIS.
+- `/model`: pick the model JARVIS's chat uses.
+- `/newchat`: start a fresh conversation with JARVIS.
+- `/new <task>`, `/jobs`, `/use <job>`, `/say <job> <message>`, `/attach <link> <name>`,
+  `/forget <job>`, `/status`.
 
 ### Part D: reports in the dashboard (Tailscale)
 
@@ -201,6 +209,33 @@ Messages to attached and self-reporting sessions tell them to answer with the pl
 simply in their own session if they can't. **Forget** (on the dashboard, or `/forget <name>`) only
 stops JARVIS tracking a session; the session itself keeps running.
 
+### Part F: talk to JARVIS (and Notion)
+
+Nothing to set up for the chat itself: it uses the same Claude login as follow-ups (B4). Type in
+**Talk to JARVIS** on the dashboard, or send plain text to the bot.
+
+- **What it can do without asking:** read and summarise (reports, session history, Notion), send
+  a message to a session, start a new session. It can't run commands or touch files in the
+  container: its only tools are JARVIS's own.
+- **Model:** the dropdown on the dashboard or `/model` in Telegram. The choices come from
+  `BRAIN_MODELS` in `.env` (first one is the default, or set `BRAIN_MODEL`). A cheaper model is
+  fine for status questions.
+- **Conversation:** it remembers the conversation across messages, on both the dashboard and Telegram.
+  "new conversation" or `/newchat` starts over, which also keeps each reply cheaper.
+- **Metrics** under every reply: `⏱ 4.2s · 🔢 18k in (16k cached) · 212 out · sonnet · 3 steps`.
+  Steps are model turns; each tool call adds one. The dashboard shows running totals.
+
+**Connect Notion (read-only):**
+1. Go to [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration**.
+   Name it `JARVIS`, pick your workspace, type **Internal**, then **Save**.
+2. On the integration's **Configuration** tab, under **Capabilities**, leave only **Read content**
+   ticked, then **Save**. Copy the **Internal Integration Secret**.
+3. Paste it into `.env` as `NOTION_TOKEN=` (in your editor; don't paste it into chats).
+4. Share pages with it. JARVIS sees only what you share. Open a top-level page (for example your
+   projects page) → **•••** (top right) → **Connections** → **Connect to** → `JARVIS`. Child
+   pages and databases under it are included.
+5. `docker compose up -d`. The log line `brain: …, Notion connected` (`docker compose logs jarvis`) confirms it.
+
 ## Metrics
 
 | Metric | Where | How it's measured |
@@ -210,6 +245,7 @@ stops JARVIS tracking a session; the session itself keeps running.
 | Time to start a session | "Started j1 in 1.4s" | Container: the routine API call |
 | Time to deliver a follow-up | "Sent to j1 in 2.1s" | Container: the `claude -p --cloud` call |
 | **Time taken per response** | Report footer: `⏱ 4m12s since your message` | Session: now minus the send time JARVIS stamped on the message |
+| **JARVIS chat: time, tokens, steps** | Under each reply | The CLI's own result (`duration_ms`, `usage`, `num_turns`) |
 | **Tokens** | Report footer: `🔢 1.84M tokens (31k output) over 22 replies · context 85k` | Session: its own transcript, counted like claude-workflow's `session_tokens.py` |
 
 How to read the token numbers:
@@ -237,9 +273,11 @@ Anthropic changes it, the tiles say "not available" and nothing else breaks.
   The conversation is kept, but background work in it is lost. Archived sessions reject new messages.
 - **Size caps:** a routine fire's text is capped at 65,536 characters, and a Telegram message at
   4,096. `report.sh` trims to 4,000.
-- **JARVIS can't list your other sessions.** There's no documented API for listing sessions or
-  reading their transcripts from outside, so JARVIS tracks only the sessions it started, and
-  sessions have to report out.
+- **Session lists and history use undocumented endpoints.** They're the same ones the CLI uses
+  for `claude agents` and teleport. If they change, the list falls back to tracked sessions,
+  and "what is X doing" falls back to that session's reports.
+- **Chat uses the plan too.** Every JARVIS reply draws on the same allowance; long conversations
+  re-read more each time, so start a new one now and then.
 
 ## Troubleshooting
 
@@ -249,13 +287,14 @@ Anthropic changes it, the tiles say "not available" and nothing else breaks.
 | Start fails with HTTP 401/403 | `ROUTINE_TOKEN` is wrong or was regenerated. Copy the current one. |
 | Start fails with HTTP 404 | `ROUTINE_ID` is wrong. Take it from the fire URL. |
 | Session starts but never reports on Telegram | Check the `JARVIS` environment: Custom allowlist includes `api.telegram.org`, and both Telegram variables are set. |
+| JARVIS says Notion isn't connected | `NOTION_TOKEN` is missing; see Part F. "Not found" for a page means it isn't shared with the integration. |
 | Plan tiles say "not available" | The login isn't a claude.ai subscription login, or the undocumented request changed. Everything else still works. |
 
 ## Development
 
 ```bash
 npm install
-npm test        # typecheck + 13 unit tests (fake claude binary and fake fetch, no network)
+npm test        # typecheck + unit tests (fake claude binary and fake fetch, no network)
 ```
 
 Layout: `src/jarvis.ts` (what JARVIS can do), `src/web.ts` + `public/index.html` (dashboard),

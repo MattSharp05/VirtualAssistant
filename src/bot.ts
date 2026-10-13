@@ -1,20 +1,33 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
+import { formatMetrics, type Brain } from "./brain.js";
 import type { Jarvis } from "./jarvis.js";
 import type { Job } from "./store.js";
 
 const HELP = [
-  "JARVIS commands:",
+  "Just talk to me: \"what's mk up to?\", \"tell mk to pause after this ticket\", \"what's in the ShapeMint PRD?\".",
+  "",
+  "Commands:",
+  "/jarvis — talk to me (default)",
+  "/model [name] — see or switch my model",
+  "/newchat — start a fresh conversation",
   "/new <task> — start a cloud session on the task",
-  "/sessions — pick one of your cloud sessions to talk to",
+  "/sessions — pick a cloud session to talk to directly",
   "/jobs — sessions I'm tracking",
-  "/use <job> — pick which session plain messages go to",
+  "/use <job> — talk directly to a tracked session",
   "/attach <link> <name> [note] — add a session I didn't start (e.g. an orchestrator)",
   "/forget <job> — stop tracking a session",
   "/say <job> <message> — message a specific session",
   "/status — Claude login, plan usage, routine fires",
   "",
-  "Any other text goes to the current session.",
+  "Plain messages go to me, or straight to a session after /sessions or /use.",
 ].join("\n");
+
+/** Telegram caps messages at 4096 characters. */
+function chunks(text: string, size = 4000): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < text.length; i += size) out.push(text.slice(i, i + size));
+  return out.length ? out : [""];
+}
 
 function describe(job: Job): string {
   const sent = job.messagesSent ? `, ${job.messagesSent} follow-up${job.messagesSent === 1 ? "" : "s"}` : "";
@@ -34,7 +47,7 @@ function seconds(ms: number): string {
 
 const WINDOW_LABEL = { five_hour: "5-hour window", seven_day: "Weekly" } as const;
 
-export function createBot(token: string, allowedChatId: number | undefined, jarvis: Jarvis): Bot {
+export function createBot(token: string, allowedChatId: number | undefined, jarvis: Jarvis, brain?: Brain): Bot {
   const bot = new Bot(token);
   const { store } = jarvis;
 
@@ -110,7 +123,8 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     try {
       const job = jarvis.pickSession(id, title);
       await ctx.answerCallbackQuery({ text: `Talking to ${job.id}` });
-      await ctx.reply(`Plain messages now go to ${job.id}${title ? ` (${title})` : ""}.\n${job.url}`);
+      talkTo(job.id);
+      await ctx.reply(`Plain messages now go straight to ${job.id}${title ? ` (${title})` : ""}. /jarvis to talk to me again.\n${job.url}`);
     } catch (err) {
       await ctx.answerCallbackQuery({ text: (err as Error).message.slice(0, 190), show_alert: true });
     }
@@ -121,8 +135,8 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     if (!link || !name) return ctx.reply("Usage: /attach <claude.ai session link> <name> [note]");
     try {
       const job = jarvis.attachSession(link, name, note.join(" "));
-      store.setCurrent(job.id);
-      await ctx.reply(`Attached ${job.id}. Plain messages now go to it.\n${job.url}`);
+      talkTo(job.id);
+      await ctx.reply(`Attached ${job.id}. Plain messages now go straight to it; /jarvis to talk to me again.\n${job.url}`);
     } catch (err) {
       await ctx.reply((err as Error).message);
     }
@@ -139,7 +153,46 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
 
   bot.command("use", async (ctx) => {
     const job = store.setCurrent(ctx.match.trim());
-    await ctx.reply(job ? `Plain messages now go to ${describe(job)}` : "No such job. See /jobs.");
+    if (!job) return ctx.reply("No such job. See /jobs.");
+    talkTo(job.id);
+    await ctx.reply(`Plain messages now go straight to ${describe(job)}\n/jarvis to talk to me again.`);
+  });
+
+  bot.command("jarvis", async (ctx) => {
+    talkTo("jarvis");
+    await ctx.reply(brain ? `Talking to me (${brain.model}). Ask me anything.` : "The brain isn't running.");
+  });
+
+  bot.command("newchat", async (ctx) => {
+    if (!brain) return ctx.reply("The brain isn't running.");
+    brain.reset();
+    talkTo("jarvis");
+    await ctx.reply("Fresh conversation started.");
+  });
+
+  bot.command("model", async (ctx) => {
+    if (!brain) return ctx.reply("The brain isn't running.");
+    const wanted = ctx.match.trim().toLowerCase();
+    if (wanted) {
+      const match = brain.models.find((m) => m === wanted) ?? brain.models.find((m) => m.includes(wanted));
+      if (!match) return ctx.reply(`No model matching "${wanted}". Options: ${brain.models.join(", ")}`);
+      brain.setModel(match);
+      return ctx.reply(`Switched to ${match}.`);
+    }
+    const keyboard = new InlineKeyboard();
+    for (const m of brain.models) keyboard.text(`${m === brain.model ? "✓ " : ""}${m}`, `model:${m}`).row();
+    await ctx.reply(`I'm using ${brain.model}. Switch to:`, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery(/^model:(.+)$/, async (ctx) => {
+    if (!brain) return ctx.answerCallbackQuery();
+    try {
+      brain.setModel(ctx.match[1]);
+      await ctx.answerCallbackQuery({ text: `Switched to ${ctx.match[1]}` });
+      await ctx.reply(`Switched to ${ctx.match[1]}.`);
+    } catch (err) {
+      await ctx.answerCallbackQuery({ text: (err as Error).message.slice(0, 190), show_alert: true });
+    }
   });
 
   bot.command("say", async (ctx) => {
@@ -149,10 +202,26 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
   });
 
   bot.on("message:text", async (ctx) => {
-    const job = store.currentJob();
-    if (!job) return ctx.reply("No current session. Start one with /new <task>, or /help.");
-    await relay(ctx, job.id, ctx.message.text);
+    const target = store.brain().talkTo ?? "jarvis";
+    if (target !== "jarvis" && store.getJob(target)) return relay(ctx, target, ctx.message.text);
+    if (!brain) return ctx.reply("The brain isn't running. Use /sessions to message a session directly.");
+    // "typing…" while the brain works (Telegram shows it for ~5s per call).
+    const typing = setInterval(() => void ctx.replyWithChatAction("typing").catch(() => {}), 4500);
+    void ctx.replyWithChatAction("typing").catch(() => {});
+    try {
+      const { reply, metrics } = await brain.chat(ctx.message.text, "telegram");
+      const parts = chunks(`${reply}\n\n${formatMetrics(metrics)}`);
+      for (const part of parts) await ctx.reply(part);
+    } catch (err) {
+      await ctx.reply(`I couldn't answer that: ${(err as Error).message.slice(0, 300)}`);
+    } finally {
+      clearInterval(typing);
+    }
   });
+
+  function talkTo(target: string): void {
+    store.updateBrain({ talkTo: target });
+  }
 
   async function relay(ctx: Context, jobId: string, message: string): Promise<void> {
     try {

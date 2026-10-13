@@ -1,9 +1,12 @@
+import { randomBytes } from "node:crypto";
+import { Brain } from "./brain.js";
 import { createBot } from "./bot.js";
 import { authStatus } from "./cloud.js";
 import { loadConfig } from "./config.js";
 import { Jarvis } from "./jarvis.js";
 import { Store } from "./store.js";
 import { SystemMonitor } from "./system.js";
+import { Tools } from "./tools.js";
 import { createDashboard, createReportsServer } from "./web.js";
 
 const config = loadConfig();
@@ -11,7 +14,23 @@ const jarvis = new Jarvis(config, new Store(config.dataDir));
 
 const monitor = new SystemMonitor();
 monitor.start();
-const dashboard = createDashboard(jarvis, monitor);
+// The brain's tool server reaches JARVIS on loopback with a token that lives only in this process.
+const internalToken = randomBytes(32).toString("hex");
+const tools = new Tools(jarvis, config.notionToken);
+const brain = new Brain(
+  {
+    claudeBin: config.claudeBin,
+    dataDir: config.dataDir,
+    models: config.brainModels,
+    defaultModel: config.brainModel,
+    internalUrl: `http://127.0.0.1:${config.dashboardPort}`,
+    internalToken,
+  },
+  jarvis.store,
+);
+console.log(`brain: ${brain.model}${config.notionToken ? ", Notion connected" : ", no Notion (NOTION_TOKEN unset)"}`);
+
+const dashboard = createDashboard(jarvis, { monitor, brain, tools, internalToken });
 dashboard.listen(config.dashboardPort, () => {
   console.log(`dashboard on port ${config.dashboardPort}${config.dashboardPassword ? " (password protected)" : ""}`);
 });
@@ -24,7 +43,7 @@ console.log(`claude login: ${auth.loggedIn ? "yes" : "no"} (${auth.detail})`);
 if (auth.warning) console.warn(auth.warning);
 if (!auth.loggedIn) console.warn("Run: docker compose run --rm jarvis claude auth login");
 
-const bot = config.telegramBotToken ? createBot(config.telegramBotToken, config.allowedChatId, jarvis) : undefined;
+const bot = config.telegramBotToken ? createBot(config.telegramBotToken, config.allowedChatId, jarvis, brain) : undefined;
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
@@ -48,7 +67,10 @@ if (!bot) {
         // The menu Telegram shows when you type "/".
         void bot.api
           .setMyCommands([
-            { command: "sessions", description: "Pick one of your cloud sessions to talk to" },
+            { command: "jarvis", description: "Talk to JARVIS (plain language)" },
+            { command: "sessions", description: "Pick a cloud session to talk to directly" },
+            { command: "model", description: "See or switch JARVIS's model" },
+            { command: "newchat", description: "Start a fresh conversation with JARVIS" },
             { command: "jobs", description: "Sessions I'm tracking" },
             { command: "new", description: "Start a cloud session on a task" },
             { command: "use", description: "Pick which session plain messages go to" },

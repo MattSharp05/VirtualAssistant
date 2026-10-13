@@ -72,6 +72,14 @@
   .sessions li:hover, .sessions li:focus { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); outline: none; }
   .sessions .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sessions .tracked { font-size: 11px; color: var(--accent); white-space: nowrap; }
+  .chat-log { display: flex; flex-direction: column; gap: 10px; max-height: 380px; overflow-y: auto; padding: 4px 2px 8px; }
+  .bubble { max-width: 85%; padding: 8px 12px; border-radius: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .bubble.you { align-self: flex-end; background: var(--accent); color: var(--accent-ink); border-bottom-right-radius: 4px; }
+  .bubble.jarvis { align-self: flex-start; background: var(--page); border: 1px solid var(--hairline); border-bottom-left-radius: 4px; }
+  .bubble .meta { margin-top: 4px; }
+  .bubble.you .meta { color: color-mix(in srgb, var(--accent-ink) 75%, transparent); }
+  .chat-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .chat-head select { font: inherit; font-size: 13px; color: var(--ink); background: var(--page); border: 1px solid var(--hairline); border-radius: 6px; padding: 3px 6px; }
   .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 16px; }
   details.attach summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
   details.attach .row input:first-child { flex: 2; }
@@ -108,6 +116,23 @@
     <div class="card" id="sys-cpu"></div>
     <div class="card" id="sys-procs"></div>
     <div class="card" id="sys-uptime"></div>
+  </section>
+
+  <section class="card" style="margin-bottom:12px" aria-label="Talk to JARVIS">
+    <div class="chat-head">
+      <h2 style="margin:0">Talk to JARVIS</h2>
+      <div class="meta" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+        <span id="brain-totals"></span>
+        <label>model <select id="brain-model"></select></label>
+        <button class="link-button" type="button" id="brain-reset">new conversation</button>
+      </div>
+    </div>
+    <div class="chat-log" id="chat-log"><p class="empty">Ask about your projects, sessions or Notion, e.g. “what's mk up to?”</p></div>
+    <form id="chat-form" class="row">
+      <input id="chat-input" placeholder="Message JARVIS…" autocomplete="off">
+      <button id="chat-send">Send</button>
+    </form>
+    <div class="notice" id="chat-notice" role="status"></div>
   </section>
 
   <section class="grid">
@@ -383,6 +408,71 @@
     } catch (err) { notice("attach-notice", err.message, true); }
   });
 
+  // ---- Talk to JARVIS (the brain) -----------------------------------------------------------
+
+  let brainCount = -1;
+  function k(n) { return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + "k" : String(n); }
+  function metricsLine(m) {
+    const input = m.inputTokens + m.cacheReadTokens + m.cacheWriteTokens;
+    return "⏱ " + (m.ms / 1000).toFixed(1) + "s · 🔢 " + k(input) + " in (" + k(m.cacheReadTokens) + " cached) · " + k(m.outputTokens) + " out · " +
+      m.model.replace(/^claude-/, "").replace(/-\d.*$/, "") + (m.turns > 1 ? " · " + m.turns + " steps" : "");
+  }
+  function bubble(msg) {
+    const node = el("div", { class: "bubble " + msg.from }, msg.text);
+    const meta = [msg.channel === "telegram" ? "via Telegram" : null, msg.metrics ? metricsLine(msg.metrics) : null, ago(msg.at)].filter(Boolean).join(" · ");
+    node.append(el("div", { class: "meta" }, meta));
+    return node;
+  }
+  async function loadBrain(force) {
+    let b;
+    try { b = await api("/api/brain"); } catch { return; }
+    const select = $("brain-model");
+    if (select.options.length !== b.models.length) select.replaceChildren(...b.models.map((m) => el("option", { value: m }, m)));
+    if (document.activeElement !== select) select.value = b.model;
+    const t = b.totals;
+    $("brain-totals").textContent = t.replies ? t.replies + " replies · " + k(t.inputTokens) + " in · " + k(t.outputTokens) + " out · avg " + (t.ms / t.replies / 1000).toFixed(1) + "s" : "";
+    if (!force && b.messages.length === brainCount) return;
+    brainCount = b.messages.length;
+    const log = $("chat-log");
+    if (b.messages.length) log.replaceChildren(...b.messages.map(bubble));
+    log.scrollTop = log.scrollHeight;
+  }
+  $("chat-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const input = $("chat-input");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    const log = $("chat-log");
+    if (log.querySelector(".empty")) log.replaceChildren();
+    log.append(bubble({ from: "you", text, at: new Date().toISOString() }));
+    const thinking = el("div", { class: "bubble jarvis" }, "thinking…");
+    log.append(thinking);
+    log.scrollTop = log.scrollHeight;
+    const started = Date.now();
+    const tick = setInterval(() => { thinking.textContent = "thinking… " + Math.round((Date.now() - started) / 1000) + "s"; }, 1000);
+    $("chat-send").disabled = true;
+    try {
+      await api("/api/brain/chat", { message: text });
+      notice("chat-notice", "");
+    } catch (err) { notice("chat-notice", err.message, true); }
+    finally {
+      clearInterval(tick);
+      $("chat-send").disabled = false;
+      await loadBrain(true);
+      refresh();
+      input.focus();
+    }
+  });
+  $("brain-model").addEventListener("change", async (e) => {
+    try { await api("/api/brain/model", { model: e.target.value }); notice("chat-notice", "Switched to " + e.target.value + "."); }
+    catch (err) { notice("chat-notice", err.message, true); }
+  });
+  $("brain-reset").addEventListener("click", async () => {
+    try { await api("/api/brain/reset", {}); notice("chat-notice", "New conversation started: the next message starts fresh."); }
+    catch (err) { notice("chat-notice", err.message, true); }
+  });
+
   // ---- Your cloud sessions (the picker) --------------------------------------------------------
 
   async function loadSessions(refresh) {
@@ -454,6 +544,8 @@
   }
 
   refresh().then(() => loadSessions(false));
+  loadBrain(true);
+  setInterval(() => { if (document.activeElement?.id !== "chat-input") loadBrain(false); }, 10000);
   refreshSystem();
   setInterval(() => loadSessions(false), 60000);
   setInterval(refreshSystem, 5000);
