@@ -39,6 +39,15 @@
   .meter > span { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width .3s; }
   .meter.warning > span { background: var(--warning); } .meter.critical > span { background: var(--critical); }
   .tile-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .section-label { font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 4px 0 8px; }
+  .tiles.system { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .spark { position: relative; margin-top: 12px; height: 40px; }
+  .spark svg { display: block; width: 100%; height: 40px; overflow: visible; }
+  .spark .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .spark .base { stroke: var(--hairline); stroke-width: 1; }
+  .spark .cross { stroke: var(--muted); stroke-width: 1; }
+  .spark .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+  .spark .tip { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; font-size: 12px; padding: 2px 6px; border-radius: 6px; background: var(--ink); color: var(--surface); pointer-events: none; }
   .state { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); }
   .grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 12px; }
   @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
@@ -76,9 +85,17 @@
   <div id="warnings"></div>
 
   <section class="tiles" aria-label="Limits">
-    <div class="card" id="tile-five_hour"></div>
-    <div class="card" id="tile-seven_day"></div>
-    <div class="card" id="tile-fires"></div>
+    <div class="card" id="tile-five_hour"><span class="meta">Loading…</span></div>
+    <div class="card" id="tile-seven_day"><span class="meta">Loading…</span></div>
+    <div class="card" id="tile-fires"><span class="meta">Loading…</span></div>
+  </section>
+
+  <div class="section-label">System · JARVIS container</div>
+  <section class="tiles system" aria-label="System">
+    <div class="card" id="sys-memory"></div>
+    <div class="card" id="sys-cpu"></div>
+    <div class="card" id="sys-procs"></div>
+    <div class="card" id="sys-uptime"></div>
   </section>
 
   <section class="grid">
@@ -93,7 +110,7 @@
       <ul class="jobs" id="jobs"></ul>
     </div>
 
-    <div class="card" id="detail"></div>
+    <div class="card" id="detail"><span class="meta">Loading…</span></div>
   </section>
 </main>
 
@@ -235,6 +252,84 @@
     n.className = "notice" + (isError ? " error" : "");
   }
 
+  // ---- System panel -------------------------------------------------------------------------
+
+  function mb(bytes) { return bytes == null ? "—" : Math.round(bytes / 1048576) + " MB"; }
+
+  function duration(seconds) {
+    const d = Math.floor(seconds / 86400), h = Math.floor((seconds % 86400) / 3600), m = Math.floor((seconds % 3600) / 60);
+    return d ? d + "d " + h + "h" : h ? h + "h " + m + "m" : m + "m";
+  }
+
+  // A one-series sparkline with a hover crosshair + tooltip. The title above names the series.
+  function sparkline(points, format) {
+    const wrap = el("div", { class: "spark" });
+    const vals = points.filter((p) => p.v != null);
+    if (vals.length < 2) { wrap.append(el("div", { class: "meta" }, "Collecting history…")); return wrap; }
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 100 40");
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("role", "img");
+    const max = Math.max(...vals.map((p) => p.v)) || 1;
+    const x = (i) => (i / (points.length - 1)) * 100;
+    const y = (v) => 38 - (v / max) * 34;
+    const base = document.createElementNS(NS, "line");
+    base.setAttribute("class", "base"); base.setAttribute("x1", "0"); base.setAttribute("x2", "100");
+    base.setAttribute("y1", "38"); base.setAttribute("y2", "38"); base.setAttribute("vector-effect", "non-scaling-stroke");
+    const line = document.createElementNS(NS, "polyline");
+    line.setAttribute("class", "line"); line.setAttribute("vector-effect", "non-scaling-stroke");
+    line.setAttribute("points", points.map((p, i) => p.v == null ? null : x(i) + "," + y(p.v)).filter(Boolean).join(" "));
+    svg.append(base, line);
+    const last = vals[vals.length - 1];
+    svg.setAttribute("aria-label", "Last hour, latest " + format(last.v) + ", high " + format(max));
+    wrap.append(svg);
+
+    const cross = document.createElementNS(NS, "line");
+    cross.setAttribute("class", "cross"); cross.setAttribute("y1", "0"); cross.setAttribute("y2", "40");
+    cross.setAttribute("vector-effect", "non-scaling-stroke"); cross.style.display = "none";
+    svg.append(cross);
+    const tip = el("div", { class: "tip" }); tip.style.display = "none";
+    wrap.append(tip);
+    svg.addEventListener("mousemove", (e) => {
+      const r = svg.getBoundingClientRect();
+      const i = Math.round(((e.clientX - r.left) / r.width) * (points.length - 1));
+      const p = points[Math.max(0, Math.min(points.length - 1, i))];
+      if (!p || p.v == null) return;
+      cross.setAttribute("x1", x(points.indexOf(p))); cross.setAttribute("x2", x(points.indexOf(p)));
+      cross.style.display = "";
+      tip.style.display = ""; tip.style.left = (x(points.indexOf(p)) / 100) * r.width + "px";
+      tip.textContent = format(p.v) + " · " + new Date(p.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    });
+    svg.addEventListener("mouseleave", () => { cross.style.display = "none"; tip.style.display = "none"; });
+    return wrap;
+  }
+
+  function renderSystem(sys) {
+    if (!sys) return;
+    const c = sys.current;
+    const mem = $("sys-memory");
+    if (c.memoryLimit) {
+      tile(mem, "Memory", (c.memoryUsed / c.memoryLimit) * 100, mb(c.memoryUsed) + " ", "peak " + mb(c.memoryPeak));
+      mem.querySelector(".tile-value").append(el("small", {}, "of " + mb(c.memoryLimit)));
+    } else {
+      tile(mem, "Memory", null, mb(c.memoryUsed), "no limit set · peak " + mb(c.memoryPeak));
+    }
+    mem.append(sparkline(sys.history.map((h) => ({ at: h.at, v: h.memoryUsed })), mb));
+
+    const cpu = $("sys-cpu");
+    tile(cpu, "CPU", null, c.cpuPercent == null ? "—" : c.cpuPercent + "%", "100% = one full core");
+    cpu.append(sparkline(sys.history.map((h) => ({ at: h.at, v: h.cpuPercent })), (v) => v + "%"));
+
+    tile($("sys-procs"), "Claude CLI processes", null, String(c.claudeProcesses),
+      c.claudeProcesses ? "running now: a send or a check is in progress" : "none running (idle)");
+    tile($("sys-uptime"), "Uptime", null, duration(c.uptimeSeconds), "since the container started");
+  }
+
+  async function refreshSystem() {
+    try { renderSystem(await api("/api/system")); } catch { /* the main refresh reports connection problems */ }
+  }
+
   async function refresh() {
     try { state = await api("/api/state"); render(); }
     catch (err) { notice("new-notice", "Can't reach JARVIS: " + err.message, true); }
@@ -269,6 +364,8 @@
   }
 
   refresh();
+  refreshSystem();
+  setInterval(refreshSystem, 5000);
   // Don't re-render while you're typing a message (it would wipe the box).
   setInterval(() => { if (document.activeElement?.id !== "message") refresh(); }, 10000);
 </script>

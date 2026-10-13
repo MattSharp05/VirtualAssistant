@@ -97,10 +97,8 @@ docker compose exec jarvis npm run doctor
 
 If step 3 works, the container can steer cloud sessions, which is the core of the whole project.
 
-**Reports while JARVIS runs on your laptop:** a cloud session can't reach `localhost`, so its
-reports can't arrive in the dashboard yet. Watch it with **Open live session**, or add Telegram
-(Part C), which works without a public URL. Once JARVIS is on a VPS, Part D sends reports to the
-dashboard too.
+**Reports:** a cloud session can't reach `localhost`, so until you set up Part D (dashboard) or
+Part C (Telegram) its reports stay in the session. Watch it with **Open live session**.
 
 ### Part C (optional): Telegram
 
@@ -115,13 +113,60 @@ dashboard too.
 Commands: `/new <task>`, `/jobs`, `/use <job>`, `/say <job> <message>`, `/status`. Any other text
 goes to the current job.
 
-### Part D (later, on a VPS): reports in the dashboard
+### Part D: reports in the dashboard (Tailscale)
 
-1. Give JARVIS a public HTTPS URL (a reverse proxy such as Caddy in front of port 8080).
-2. In `.env`, set `DASHBOARD_PASSWORD` (the dashboard is otherwise open to anyone who can reach
-   it) and `REPORT_SECRET` (`openssl rand -hex 32`).
-3. In the `JARVIS` cloud environment: add your host to the Custom allowlist, and set
-   `JARVIS_REPORT_URL=https://your-host` and `JARVIS_REPORT_SECRET=<same secret>`.
+A cloud session can't reach `localhost` on your machine, so the Tailscale container gives JARVIS a
+permanent address, `https://jarvis.<your-tailnet>.ts.net`, with two separate doors:
+
+```
+ Cloud session ──report──► https://jarvis.<tailnet>.ts.net:8443  (Funnel: public, needs REPORT_SECRET,
+                                        │                          accepts reports and nothing else)
+                                        ▼
+                              JARVIS container ──► dashboard
+                                        ▲
+ Your devices ─────────────► https://jarvis.<tailnet>.ts.net      (Serve: private, your tailnet only)
+```
+
+It works the same on a laptop and on a VPS: no ports opened, no domain, no certificates to manage.
+Moving to a VPS means copying the folder (with `.env`) and running `docker compose up -d`; the
+address doesn't change. See [tailscale/README.md](tailscale/README.md) for what's exposed.
+
+**In the Tailscale admin console** (sign up free at tailscale.com):
+1. **DNS** page: check **MagicDNS** is on, then under **HTTPS Certificates** click **Enable HTTPS**.
+2. **Access controls** page: in the **Funnel** section click **Add Funnel to policy**. If you only see
+   the JSON editor, add this inside the top-level braces and save:
+   ```json
+   "nodeAttrs": [{ "target": ["autogroup:member"], "attr": ["funnel"] }],
+   ```
+3. **Settings → Keys**: **Generate auth key**. Leave Reusable and Ephemeral off, no tags. Copy the
+   `tskey-auth-…` value.
+
+**On your machine**, in `.env` (replace any existing empty lines with the same names):
+```
+COMPOSE_PROFILES=tailscale
+TS_AUTHKEY=tskey-auth-…
+TS_HOSTNAME=jarvis
+REPORT_SECRET=<output of: openssl rand -hex 32>
+```
+Then `docker compose up -d --build`. Find your address with
+`docker compose exec tailscale tailscale serve status`, and check the public door by opening
+`https://jarvis.<tailnet>.ts.net:8443` from any browser. It should say "JARVIS reports endpoint is
+up." The first load can take a minute while the certificate is issued.
+
+**In the Tailscale admin console → Machines:** on `jarvis`, open the menu and **Disable key expiry**,
+or it drops off the tailnet after about 180 days.
+
+**On claude.ai**, edit the `JARVIS` cloud environment:
+- Network access **Custom**: tick **Also include default list of common package managers**, and put
+  `jarvis.<tailnet>.ts.net` in **Allowed domains** (plus `api.telegram.org` if you use Telegram).
+- Environment variables:
+  ```
+  JARVIS_REPORT_URL=https://jarvis.<tailnet>.ts.net:8443
+  JARVIS_REPORT_SECRET=<same value as REPORT_SECRET>
+  ```
+
+**Bonus:** install the Tailscale app on your phone, sign in with the same account, and open
+`https://jarvis.<tailnet>.ts.net` to use the dashboard from anywhere. Only your devices can.
 
 ## Metrics
 

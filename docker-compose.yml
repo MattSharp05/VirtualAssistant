@@ -3,12 +3,40 @@ services:
     build: .
     env_file: .env
     ports:
-      # Dashboard on http://localhost:8080. Bound to this machine only; on a VPS put it behind
-      # HTTPS and set DASHBOARD_PASSWORD before exposing it.
+      # Dashboard on http://localhost:8080, bound to this machine only. Remote access goes through
+      # Tailscale (below), which keeps the dashboard private to your own devices.
       - "127.0.0.1:8080:8080"
     volumes:
       - jarvis-data:/data
+    # JARVIS idles around 25-100 MB and briefly adds ~150-250 MB per claude CLI call. The cap keeps
+    # a leak or runaway process from ever eating the host's memory.
+    mem_limit: 512m
+    restart: unless-stopped
+
+  # Optional: turned on by COMPOSE_PROFILES=tailscale in .env (see README, "Reports in the dashboard").
+  # Gives JARVIS a permanent https://jarvis.<tailnet>.ts.net address, on a laptop or a VPS alike:
+  # the dashboard privately (your devices only), the reports endpoint publicly (Funnel).
+  tailscale:
+    image: tailscale/tailscale:v1.102.5
+    profiles: ["tailscale"]
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_HOSTNAME: ${TS_HOSTNAME:-jarvis}
+      TS_STATE_DIR: /var/lib/tailscale
+      # Log in with the auth key only the first time; afterwards the saved state is reused.
+      TS_AUTH_ONCE: "true"
+      # Userspace networking needs no special privileges, so it runs the same on Docker Desktop and a VPS.
+      TS_USERSPACE: "true"
+      TS_SERVE_CONFIG: /config/serve.json
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      # Mounted as a directory so Tailscale picks up edits to serve.json.
+      - ./tailscale:/config:ro
+    depends_on:
+      - jarvis
+    mem_limit: 256m
     restart: unless-stopped
 
 volumes:
   jarvis-data:
+  tailscale-state:
