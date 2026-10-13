@@ -42,7 +42,24 @@ if (!bot) {
   if (config.allowedChatId === undefined) console.warn("TELEGRAM_ALLOWED_CHAT_ID unset: setup mode, send /start to the bot.");
   // Long polling: the container only makes outbound calls, so it needs no public URL.
   try {
-    await bot.start({ onStart: (me) => console.log(`Telegram online as @${me.username}`) });
+    await bot.start({
+      onStart: (me) => {
+        console.log(`Telegram online as @${me.username}`);
+        // The menu Telegram shows when you type "/".
+        void bot.api
+          .setMyCommands([
+            { command: "sessions", description: "Pick one of your cloud sessions to talk to" },
+            { command: "jobs", description: "Sessions I'm tracking" },
+            { command: "new", description: "Start a cloud session on a task" },
+            { command: "use", description: "Pick which session plain messages go to" },
+            { command: "say", description: "Message a specific session" },
+            { command: "attach", description: "Add a session by link" },
+            { command: "forget", description: "Stop tracking a session" },
+            { command: "status", description: "Login, plan usage, routine fires" },
+          ])
+          .catch((err) => console.warn("couldn't set the Telegram command menu:", (err as Error).message));
+      },
+    });
   } catch (err) {
     const unauthorized = (err as { error_code?: number }).error_code === 401;
     console.error(unauthorized ? "Telegram rejected TELEGRAM_BOT_TOKEN. Check it with @BotFather." : err);

@@ -110,7 +110,8 @@ Part C (Telegram) its reports stay in the session. Watch it with **Open live ses
    and add environment variables `TELEGRAM_BOT_TOKEN=<token>` and `TELEGRAM_CHAT_ID=<chat id>`.
    These are visible to anyone who can use the environment, which on a personal plan is just you.
 
-Commands: `/new <task>`, `/jobs`, `/use <job>`, `/say <job> <message>`, `/attach <link> <name>`,
+Commands: `/sessions` (tap one of your cloud sessions, then just type), `/new <task>`, `/jobs`,
+`/use <job>`, `/say <job> <message>`, `/attach <link> <name>`,
 `/forget <job>`, `/status`. Any other text
 goes to the current job.
 
@@ -171,8 +172,15 @@ or it drops off the tailnet after about 180 days.
 
 ### Part E: connect your orchestrators
 
-JARVIS can message **any** cloud session, not only the ones it starts. There are two ways a session
-gets onto the dashboard:
+JARVIS can message **any** cloud session, not only the ones it starts. There are three ways a
+session gets onto the dashboard:
+
+- **Pick it from your session list.** The dashboard's **Your cloud sessions** list (and `/sessions`
+  in Telegram, as tap-to-select buttons) shows your active cloud sessions, newest first. Pick one
+  and type: JARVIS tracks it under a name made from its title. The list comes from an
+  **undocumented** source (`claude agents --json`, falling back to the endpoint the CLI's teleport
+  picker uses), so if it ever says "not available", attaching by link still works. Check what
+  JARVIS sees with `docker compose exec jarvis npm run -s sessions`.
 
 - **Attach it by link.** Dashboard → **Add an existing session**: paste its `claude.ai/code/…`
   address and give it a short name (`mk`, `shapemint`). Telegram: `/attach <link> <name>`. You

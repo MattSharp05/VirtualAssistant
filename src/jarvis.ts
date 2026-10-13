@@ -5,6 +5,7 @@ import type { Config } from "./config.js";
 import { followUpText, newJobText } from "./prompts.js";
 import { fireRoutine } from "./routines.js";
 import { JOB_NAME, parseSessionId, sessionUrl, type Job, type Store } from "./store.js";
+import { SessionListCache, type SessionList } from "./sessions.js";
 import { UsageCache, type PlanUsage } from "./usage.js";
 
 /** Documented per-routine cap on API fires (shared with "Run now"). Each new job is one fire. */
@@ -27,6 +28,7 @@ export interface Status {
 
 export class Jarvis {
   private readonly usage: UsageCache;
+  private readonly sessionList: SessionListCache;
   private auth?: { value: AuthStatus; at: number };
 
   constructor(
@@ -34,6 +36,30 @@ export class Jarvis {
     readonly store: Store,
   ) {
     this.usage = new UsageCache(config.claudeBin);
+    this.sessionList = new SessionListCache(config.claudeBin);
+  }
+
+  /** Your cloud sessions, newest activity first (undocumented source; see sessions.ts). */
+  listSessions(force = false): Promise<SessionList> {
+    return this.sessionList.get(force);
+  }
+
+  /**
+   * Picks a session from the list to talk to: reuses the job already tracking it, or attaches it
+   * under a name made from its title (e.g. "Mario Kart orchestrator" → "mario-kart-orchestrator").
+   */
+  pickSession(sessionId: string, title = ""): Job {
+    const existing = this.store.findBySession(sessionId);
+    if (existing) {
+      this.store.setCurrent(existing.id);
+      return existing;
+    }
+    const base = slugName(title) ?? "session";
+    let name = base;
+    // Names max out at 24 characters, so trim only as much as the "-n" suffix needs.
+    for (let n = 2; this.store.getJob(name); n++) name = `${base.slice(0, 23 - String(n).length).replace(/-+$/, "")}-${n}`;
+    const job = this.attachSession(sessionId, name, title || "Picked from your session list");
+    return job;
   }
 
   async startJob(task: string): Promise<{ job: Job; ms: number; fireNumber: number }> {
@@ -118,4 +144,12 @@ export class Jarvis {
       reportsEndpoint: Boolean(this.config.reportSecret),
     };
   }
+}
+
+/** A job name from a session title: lowercase words joined by dashes, at most 24 characters. */
+export function slugName(title: string): string | undefined {
+  let slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24).replace(/-+$/, "");
+  if (!slug) return undefined;
+  if (!/^[a-z]/.test(slug)) slug = `s-${slug}`.slice(0, 24);
+  return JOB_NAME.test(slug) ? slug : undefined;
 }

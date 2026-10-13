@@ -81,6 +81,10 @@ export class Store {
     return this.state.jobs.find((j) => j.id === id.toLowerCase());
   }
 
+  findBySession(sessionId: string): Job | undefined {
+    return this.state.jobs.find((j) => j.sessionId === sessionId);
+  }
+
   currentJob(): Job | undefined {
     return this.state.currentJobId ? this.getJob(this.state.currentJobId) : undefined;
   }

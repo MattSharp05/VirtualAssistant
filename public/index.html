@@ -66,6 +66,13 @@
   .tag { display: inline-block; font-size: 11px; padding: 1px 6px; margin-right: 6px; border-radius: 999px; border: 1px solid var(--hairline); color: var(--ink-2); vertical-align: 1px; }
   .link-button { background: none; color: var(--ink-2); padding: 0; font-weight: 400; text-decoration: underline; }
   details.attach { margin-top: 12px; }
+  .sessions { list-style: none; margin: 8px 0 0; padding: 0; max-height: 280px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 8px; }
+  .sessions li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--hairline); cursor: pointer; }
+  .sessions li:last-child { border-bottom: 0; }
+  .sessions li:hover, .sessions li:focus { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); outline: none; }
+  .sessions .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sessions .tracked { font-size: 11px; color: var(--accent); white-space: nowrap; }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 16px; }
   details.attach summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
   details.attach .row input:first-child { flex: 2; }
   .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -122,6 +129,12 @@
         </form>
         <div class="notice" id="attach-notice" role="status"></div>
       </details>
+      <div class="section-head">
+        <h2 style="margin:0">Your cloud sessions</h2>
+        <button class="link-button" type="button" id="sessions-refresh">refresh</button>
+      </div>
+      <ul class="sessions" id="sessions"><li class="meta">Loading…</li></ul>
+      <div class="notice" id="sessions-notice" role="status"></div>
       <h2 style="margin-top:16px">Jobs</h2>
       <ul class="jobs" id="jobs"></ul>
     </div>
@@ -370,6 +383,42 @@
     } catch (err) { notice("attach-notice", err.message, true); }
   });
 
+  // ---- Your cloud sessions (the picker) --------------------------------------------------------
+
+  async function loadSessions(refresh) {
+    try {
+      const list = await api("/api/sessions" + (refresh ? "?refresh=1" : ""));
+      const box = $("sessions");
+      if (!list.available) {
+        box.replaceChildren(el("li", { class: "meta" }, "Couldn't list your sessions: " + list.reason + ". You can still add one by link above."));
+        return;
+      }
+      if (!list.sessions.length) { box.replaceChildren(el("li", { class: "meta" }, "No active cloud sessions.")); return; }
+      const tracked = new Map((state?.jobs || []).map((j) => [j.sessionId, j.id]));
+      box.replaceChildren(...list.sessions.map((s) => {
+        const pick = () => pickSession(s);
+        return el("li", { tabindex: "0", title: s.url, onclick: pick, onkeydown: (e) => { if (e.key === "Enter") pick(); } },
+          el("div", { style: "min-width:0" },
+            el("div", { class: "title" }, s.title),
+            el("div", { class: "meta" }, [s.status, s.lastActivityAt ? "active " + ago(s.lastActivityAt) : null].filter(Boolean).join(" · "))),
+          tracked.has(s.id) ? el("span", { class: "tracked" }, "as " + tracked.get(s.id)) : el("span", { class: "tracked" }, "talk →"));
+      }));
+    } catch (err) { notice("sessions-notice", err.message, true); }
+  }
+
+  async function pickSession(s) {
+    try {
+      const job = await api("/api/sessions/pick", { id: s.id, title: s.title });
+      selected = job.id;
+      await refresh();
+      await loadSessions(false);
+      notice("sessions-notice", "Talking to " + job.id + ". Type in the message box on the right.");
+      $("message")?.focus();
+    } catch (err) { notice("sessions-notice", err.message, true); }
+  }
+
+  $("sessions-refresh").addEventListener("click", () => loadSessions(true));
+
   async function forgetJob(id) {
     if (!confirm("Stop tracking " + id + "? The cloud session itself keeps running; its reports stay.")) return;
     try { await api("/api/jobs/" + id + "/forget", {}); selected = null; await refresh(); }
@@ -404,8 +453,9 @@
     finally { const b = $("send"); if (b) b.disabled = false; }
   }
 
-  refresh();
+  refresh().then(() => loadSessions(false));
   refreshSystem();
+  setInterval(() => loadSessions(false), 60000);
   setInterval(refreshSystem, 5000);
   // Don't re-render while you're typing a message (it would wipe the box).
   setInterval(() => { if (document.activeElement?.id !== "message") refresh(); }, 10000);
