@@ -178,7 +178,10 @@ export interface NotionStatus {
   detail?: string;
 }
 
-/** Checks the token against Notion: every 5 minutes when it works, every minute when it doesn't. */
+/**
+ * Checks the token against Notion: every 5 minutes when it works and sees pages, every minute
+ * otherwise (so sharing a page or fixing the token shows up quickly).
+ */
 export class NotionStatusCache {
   private cached?: { value: NotionStatus; at: number };
   private pending?: Promise<NotionStatus>;
@@ -190,7 +193,8 @@ export class NotionStatusCache {
 
   async get(): Promise<NotionStatus> {
     if (!this.token) return { state: "off" };
-    const ttl = this.cached?.value.state === "ok" ? 300_000 : 60_000;
+    const settled = this.cached?.value.state === "ok" && this.cached.value.shared !== "0";
+    const ttl = settled ? 300_000 : 60_000;
     if (this.cached && Date.now() - this.cached.at < ttl) return this.cached.value;
     this.pending ??= this.check().then((value) => {
       this.cached = { value, at: Date.now() };
