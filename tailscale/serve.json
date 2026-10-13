@@ -5,13 +5,13 @@
   },
   "Web": {
     "${TS_CERT_DOMAIN}:443": {
-      "Handlers": { "/": { "Proxy": "http://jarvis:8080" } }
+      "Handlers": { "/": { "Proxy": "http://jarvis:8081" } }
     },
     "${TS_CERT_DOMAIN}:8443": {
-      "Handlers": { "/": { "Proxy": "http://jarvis:8081" } }
+      "Handlers": { "/": { "Proxy": "http://jarvis:8080" } }
     }
   },
   "AllowFunnel": {
-    "${TS_CERT_DOMAIN}:8443": true
+    "${TS_CERT_DOMAIN}:443": true
   }
 }
