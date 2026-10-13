@@ -15,6 +15,11 @@ export interface Config {
   reportSecret: string | undefined;
   /** Port of the reports-only server (the one Tailscale Funnel exposes). Runs when reportSecret is set. */
   reportsPort: number;
+  /** Notion internal integration token (read-only use). Unset = the brain has no Notion. */
+  notionToken: string | undefined;
+  /** Models the brain may use (first = default unless BRAIN_MODEL is set). */
+  brainModels: string[];
+  brainModel: string;
 }
 
 function optional(name: string): string | undefined {
@@ -35,7 +40,17 @@ export function loadConfig(): Config {
   if (reportSecret !== undefined && reportSecret.length < 24) {
     throw new Error("REPORT_SECRET is too short; generate one with: openssl rand -hex 32");
   }
+  // Full model ids on purpose: an alias can quietly resolve to an older model.
+  const brainModels = (optional("BRAIN_MODELS") ?? "claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+  const brainModel = optional("BRAIN_MODEL") ?? brainModels[0];
+  if (!brainModels.includes(brainModel)) brainModels.push(brainModel);
   return {
+    notionToken: optional("NOTION_TOKEN"),
+    brainModels,
+    brainModel,
     telegramBotToken: optional("TELEGRAM_BOT_TOKEN"),
     allowedChatId: chatId === undefined ? undefined : Number(chatId),
     routineId: optional("ROUTINE_ID"),

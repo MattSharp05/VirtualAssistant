@@ -10,8 +10,7 @@
 // Anything that fails returns { available: false, reason } and nothing else breaks.
 
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { API_BASE, apiHeaders, claudeConfigDir, readAccessToken } from "./claudeApi.js";
 
 export interface CloudSession {
   id: string;
@@ -30,7 +29,7 @@ export interface SessionList {
 }
 
 const SESSION_ID = /^(?:session|cse)_[A-Za-z0-9_-]+$/;
-const API = "https://api.anthropic.com/v1/code/sessions?limit=100";
+const API = `${API_BASE}/v1/code/sessions?limit=100`;
 
 function toIso(value: unknown): string | undefined {
   if (typeof value === "number") return new Date(value < 1e12 ? value * 1000 : value).toISOString();
@@ -104,20 +103,9 @@ function runAgents(claudeBin: string): Promise<string> {
   });
 }
 
-function readAccessToken(configDir: string): string | undefined {
-  try {
-    const creds = JSON.parse(readFileSync(join(configDir, ".credentials.json"), "utf8")) as {
-      claudeAiOauth?: { accessToken?: string };
-    };
-    return creds.claudeAiOauth?.accessToken;
-  } catch {
-    return undefined;
-  }
-}
-
 export async function listCloudSessions(
   claudeBin: string,
-  configDir = process.env.CLAUDE_CONFIG_DIR ?? join(process.env.HOME ?? "", ".claude"),
+  configDir = claudeConfigDir(),
   fetchImpl: typeof fetch = fetch,
 ): Promise<SessionList> {
   const checkedAt = new Date().toISOString();
@@ -138,12 +126,7 @@ export async function listCloudSessions(
   }
   try {
     const res = await fetchImpl(API, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "anthropic-version": "2023-06-01",
-        "anthropic-beta": "oauth-2025-04-20",
-        "Content-Type": "application/json",
-      },
+      headers: apiHeaders(token),
       signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) {

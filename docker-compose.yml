@@ -8,9 +8,10 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - jarvis-data:/data
-    # JARVIS idles around 25-100 MB and briefly adds ~150-250 MB per claude CLI call. The cap keeps
-    # a leak or runaway process from ever eating the host's memory.
-    mem_limit: 512m
+    # JARVIS idles around 25-100 MB; each claude CLI call adds ~150-250 MB while it runs, and a brain
+    # reply runs one (plus its small tool server). The cap keeps a leak or runaway process from ever
+    # eating the host's memory.
+    mem_limit: 1g
     restart: unless-stopped
 
   # Optional: turned on by COMPOSE_PROFILES=tailscale in .env (see README, "Reports in the dashboard").

@@ -41,6 +41,37 @@ export interface Report {
 }
 
 const MAX_REPORTS = 200;
+const MAX_BRAIN_MESSAGES = 300;
+
+/** Per-reply measurements for the brain, the same kind sessions report. */
+export interface BrainMetrics {
+  ms: number;
+  model: string;
+  inputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  outputTokens: number;
+  turns: number;
+  /** What the reply would cost on the API; on the subscription it's a guide to plan usage, not a bill. */
+  apiEquivalentUsd?: number;
+}
+
+export interface BrainMessage {
+  at: string;
+  from: "you" | "jarvis";
+  channel: "dashboard" | "telegram";
+  text: string;
+  metrics?: BrainMetrics;
+}
+
+export interface BrainState {
+  sessionId?: string;
+  model?: string;
+  messages: BrainMessage[];
+  totals: { replies: number; inputTokens: number; outputTokens: number; ms: number; apiEquivalentUsd: number };
+  /** Telegram: "jarvis" = plain messages go to the brain; a job id = straight to that session. */
+  talkTo?: string;
+}
 
 interface State {
   nextJob: number;
@@ -49,6 +80,7 @@ interface State {
   /** When each routine fire happened, to stay under the 30/hour-per-routine limit. */
   fires?: string[];
   reports?: Report[];
+  brain?: BrainState;
 }
 
 export class Store {
@@ -166,6 +198,30 @@ export class Store {
     const active = (j: Job) =>
       [j.createdAt, j.lastMessageAt, j.sessionUpdatedAt, lastReport.get(j.id)].filter(Boolean).sort().pop() ?? "";
     return [...this.state.jobs].sort((a, b) => active(b).localeCompare(active(a))).slice(0, limit);
+  }
+
+  brain(): BrainState {
+    this.state.brain ??= { messages: [], totals: { replies: 0, inputTokens: 0, outputTokens: 0, ms: 0, apiEquivalentUsd: 0 } };
+    return this.state.brain;
+  }
+
+  updateBrain(patch: Partial<Omit<BrainState, "messages" | "totals">>): void {
+    Object.assign(this.brain(), patch);
+    this.save();
+  }
+
+  addBrainMessage(message: BrainMessage): void {
+    const brain = this.brain();
+    brain.messages = [...brain.messages, message].slice(-MAX_BRAIN_MESSAGES);
+    const m = message.metrics;
+    if (m) {
+      brain.totals.replies++;
+      brain.totals.inputTokens += m.inputTokens + m.cacheReadTokens + m.cacheWriteTokens;
+      brain.totals.outputTokens += m.outputTokens;
+      brain.totals.ms += m.ms;
+      brain.totals.apiEquivalentUsd += m.apiEquivalentUsd ?? 0;
+    }
+    this.save();
   }
 
   private save(): void {

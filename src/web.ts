@@ -4,6 +4,11 @@
 //   GET  /api/state              status, plan usage, jobs, reports
 //   GET  /api/system             container memory, CPU, claude processes, last hour of history
 //   POST /api/jobs               { task }            start a cloud session
+//   GET  /api/brain                                  the conversation, model, totals
+//   POST /api/brain/chat         { message }         talk to JARVIS (plain language)
+//   POST /api/brain/model        { model }           switch the brain's model
+//   POST /api/brain/reset        {}                  start a new conversation
+//   /internal/*                                      the brain's tools (loopback + internal token)
 //   GET  /api/sessions[?refresh=1]                   your cloud sessions (undocumented source)
 //   POST /api/sessions/pick      { id, title }       start talking to one of them
 //   POST /api/jobs/attach        { link, name, note } add a session JARVIS didn't start
@@ -21,6 +26,48 @@ import { JarvisError, type Jarvis } from "./jarvis.js";
 import { RoutineError } from "./routines.js";
 import { parseSessionId, type Store } from "./store.js";
 import type { SystemMonitor } from "./system.js";
+import type { Brain } from "./brain.js";
+import type { Tools } from "./tools.js";
+
+export interface DashboardExtras {
+  monitor?: SystemMonitor;
+  brain?: Brain;
+  /** The brain's tool server calls /internal/* with this token, from inside the container only. */
+  tools?: Tools;
+  internalToken?: string;
+}
+
+function isLoopback(req: IncomingMessage): boolean {
+  const ip = req.socket.remoteAddress ?? "";
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
+/** The brain's tools (mcp.ts → here). Loopback + token only: never reachable through Tailscale. */
+async function internalRoute(req: IncomingMessage, res: ServerResponse, url: URL, tools: Tools): Promise<void> {
+  const q = (name: string) => url.searchParams.get(name) ?? "";
+  const text = (t: string) => send(res, 200, { text: t });
+  const post = req.method === "POST" ? await readJson(req) : {};
+  switch (url.pathname) {
+    case "/internal/overview":
+      return text(await tools.overview());
+    case "/internal/sessions":
+      return text(await tools.sessions());
+    case "/internal/activity":
+      return text(await tools.activity(q("target"), Number(q("limit") || 15)));
+    case "/internal/send":
+      return text(await tools.send(String(post.target ?? ""), String(post.message ?? "")));
+    case "/internal/start":
+      return text(await tools.start(String(post.task ?? "")));
+    case "/internal/notion/search":
+      return text(await tools.notionSearch(q("q")));
+    case "/internal/notion/page":
+      return text(await tools.notionPage(q("id")));
+    case "/internal/notion/query":
+      return text(await tools.notionQuery(String(post.database_id ?? ""), Number(post.limit ?? 25)));
+    default:
+      return send(res, 404, { error: "not found" });
+  }
+}
 
 const PAGE = new URL("../../public/index.html", import.meta.url) // dist/src/web.js → <app>/public;
 const MAX_BODY = 64 * 1024;
@@ -98,12 +145,19 @@ export function createReportsServer(store: Store, secret: string): Server {
   });
 }
 
-export function createDashboard(jarvis: Jarvis, monitor?: SystemMonitor): Server {
+export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): Server {
   const { config, store } = jarvis;
+  const { monitor, brain, tools, internalToken } = extras;
 
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
+      if (url.pathname.startsWith("/internal/")) {
+        const ok = tools && internalToken && isLoopback(req) && safeEqual(req.headers.authorization ?? "", `Bearer ${internalToken}`);
+        if (!ok) return send(res, 403, { error: "forbidden" });
+        return await internalRoute(req, res, url, tools);
+      }
+
       // Reports authenticate with their own secret, so a cloud session never needs the dashboard password.
       if (req.method === "POST" && url.pathname === "/api/reports") return await receiveReport(req, res, store, config.reportSecret);
 
@@ -134,6 +188,35 @@ export function createDashboard(jarvis: Jarvis, monitor?: SystemMonitor): Server
         const body = await readJson(req);
         const result = await jarvis.startJob(String(body.task ?? ""));
         return send(res, 201, result);
+      }
+
+      if (url.pathname.startsWith("/api/brain")) {
+        if (!brain) return send(res, 404, { error: "brain not running" });
+        if (req.method === "GET" && url.pathname === "/api/brain") {
+          const state = store.brain();
+          return send(res, 200, { model: brain.model, models: brain.models, totals: state.totals, messages: state.messages.slice(-100) });
+        }
+        if (req.method === "POST" && url.pathname === "/api/brain/chat") {
+          const body = await readJson(req);
+          const message = String(body.message ?? "").trim();
+          if (!message) throw new JarvisError("The message is empty.");
+          return send(res, 200, await brain.chat(message, "dashboard"));
+        }
+        if (req.method === "POST" && url.pathname === "/api/brain/model") {
+          const body = await readJson(req);
+          try {
+            brain.setModel(String(body.model ?? ""));
+          } catch (err) {
+            throw new JarvisError((err as Error).message);
+          }
+          return send(res, 200, { model: brain.model });
+        }
+        if (req.method === "POST" && url.pathname === "/api/brain/reset") {
+          await readJson(req);
+          brain.reset();
+          return send(res, 200, { ok: true });
+        }
+        return send(res, 404, { error: "not found" });
       }
 
       if (req.method === "GET" && url.pathname === "/api/sessions") {
