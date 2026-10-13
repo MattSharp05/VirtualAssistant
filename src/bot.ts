@@ -1,11 +1,12 @@
-import { Bot, type Context } from "grammy";
+import { Bot, InlineKeyboard, type Context } from "grammy";
 import type { Jarvis } from "./jarvis.js";
 import type { Job } from "./store.js";
 
 const HELP = [
   "JARVIS commands:",
   "/new <task> — start a cloud session on the task",
-  "/jobs — sessions I've started",
+  "/sessions — pick one of your cloud sessions to talk to",
+  "/jobs — sessions I'm tracking",
   "/use <job> — pick which session plain messages go to",
   "/attach <link> <name> [note] — add a session I didn't start (e.g. an orchestrator)",
   "/forget <job> — stop tracking a session",
@@ -87,6 +88,32 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     if (jobs.length === 0) return ctx.reply("No jobs yet. Start one with /new <task>.");
     const current = store.currentJob()?.id;
     await ctx.reply(jobs.map((j) => (j.id === current ? "▶ " : "") + describe(j)).join("\n\n"));
+  });
+
+  // Your cloud sessions as buttons: tap one, then just type to message it.
+  bot.command("sessions", async (ctx) => {
+    const list = await jarvis.listSessions(true);
+    if (!list.available) return ctx.reply(`Couldn't list your sessions: ${list.reason}\nYou can still /attach one by link.`);
+    if (list.sessions.length === 0) return ctx.reply("No active cloud sessions.");
+    const keyboard = new InlineKeyboard();
+    for (const s of list.sessions.slice(0, 12)) {
+      const when = s.lastActivityAt ? ` · ${ago(s.lastActivityAt)}` : "";
+      keyboard.text(`${s.title.slice(0, 40)}${when}`, `pick:${s.id}`).row();
+    }
+    const more = list.sessions.length > 12 ? ` (newest 12 of ${list.sessions.length})` : "";
+    await ctx.reply(`Your cloud sessions${more}. Tap one, then just type to message it:`, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery(/^pick:((?:session|cse)_[A-Za-z0-9_-]+)$/, async (ctx) => {
+    const id = ctx.match[1];
+    const title = (await jarvis.listSessions()).sessions.find((s) => s.id === id)?.title ?? "";
+    try {
+      const job = jarvis.pickSession(id, title);
+      await ctx.answerCallbackQuery({ text: `Talking to ${job.id}` });
+      await ctx.reply(`Plain messages now go to ${job.id}${title ? ` (${title})` : ""}.\n${job.url}`);
+    } catch (err) {
+      await ctx.answerCallbackQuery({ text: (err as Error).message.slice(0, 190), show_alert: true });
+    }
   });
 
   bot.command("attach", async (ctx) => {

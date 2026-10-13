@@ -4,6 +4,8 @@
 //   GET  /api/state              status, plan usage, jobs, reports
 //   GET  /api/system             container memory, CPU, claude processes, last hour of history
 //   POST /api/jobs               { task }            start a cloud session
+//   GET  /api/sessions[?refresh=1]                   your cloud sessions (undocumented source)
+//   POST /api/sessions/pick      { id, title }       start talking to one of them
 //   POST /api/jobs/attach        { link, name, note } add a session JARVIS didn't start
 //   POST /api/jobs/:id/messages  { message }         message a session
 //   POST /api/jobs/:id/forget    {}                  stop tracking a session
@@ -132,6 +134,15 @@ export function createDashboard(jarvis: Jarvis, monitor?: SystemMonitor): Server
         const body = await readJson(req);
         const result = await jarvis.startJob(String(body.task ?? ""));
         return send(res, 201, result);
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/sessions") {
+        return send(res, 200, await jarvis.listSessions(url.searchParams.get("refresh") === "1"));
+      }
+
+      if (req.method === "POST" && url.pathname === "/api/sessions/pick") {
+        const body = await readJson(req);
+        return send(res, 201, jarvis.pickSession(String(body.id ?? ""), String(body.title ?? "")));
       }
 
       if (req.method === "POST" && url.pathname === "/api/jobs/attach") {
