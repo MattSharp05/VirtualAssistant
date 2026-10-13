@@ -234,7 +234,9 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 4. Share pages with it. JARVIS sees only what you share. Open a top-level page (for example your
    projects page) → **•••** (top right) → **Connections** → **Connect to** → `JARVIS`. Child
    pages and databases under it are included.
-5. `docker compose up -d`. The log line `brain: …, Notion connected` (`docker compose logs jarvis`) confirms it.
+5. `docker compose up -d`. The dashboard's **Notion** chip turns green with the number of pages it can see
+   (`/status` in Telegram says the same). "token rejected" means a wrong secret; "0 pages" means
+   nothing is shared with it yet.
 
 ## Metrics
 

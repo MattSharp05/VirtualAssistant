@@ -78,6 +78,7 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
         ...usage,
         `Routine: ${s.routineConfigured ? s.routineId : "not configured (ROUTINE_ID / ROUTINE_TOKEN)"}`,
         `Routine fires this hour: ${s.firesThisHour}/${s.firesPerHour}`,
+        `Notion: ${s.notion.state === "ok" ? `connected, ${s.notion.shared} pages shared` : s.notion.state === "off" ? "off (NOTION_TOKEN unset)" : s.notion.detail}`,
         `Current job: ${store.currentJob()?.id ?? "none"}`,
       ].join("\n"),
     );

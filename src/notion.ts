@@ -169,3 +169,52 @@ export class Notion {
       .join("\n");
   }
 }
+
+export interface NotionStatus {
+  /** off: no NOTION_TOKEN · ok: token accepted · rejected: Notion refused the token · error: couldn't reach Notion. */
+  state: "off" | "ok" | "rejected" | "error";
+  /** Pages and databases shared with the integration ("100+" past the first page). */
+  shared?: string;
+  detail?: string;
+}
+
+/** Checks the token against Notion: every 5 minutes when it works, every minute when it doesn't. */
+export class NotionStatusCache {
+  private cached?: { value: NotionStatus; at: number };
+  private pending?: Promise<NotionStatus>;
+
+  constructor(
+    private readonly token: string | undefined,
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {}
+
+  async get(): Promise<NotionStatus> {
+    if (!this.token) return { state: "off" };
+    const ttl = this.cached?.value.state === "ok" ? 300_000 : 60_000;
+    if (this.cached && Date.now() - this.cached.at < ttl) return this.cached.value;
+    this.pending ??= this.check().then((value) => {
+      this.cached = { value, at: Date.now() };
+      this.pending = undefined;
+      return value;
+    });
+    return this.pending;
+  }
+
+  private async check(): Promise<NotionStatus> {
+    try {
+      const res = await this.fetchImpl(`${API}/search`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${this.token}`, "Notion-Version": VERSION, "Content-Type": "application/json" },
+        body: JSON.stringify({ page_size: 100 }),
+        signal: AbortSignal.timeout(10_000),
+      });
+      const json = (await res.json().catch(() => ({}))) as Json;
+      if (res.status === 401) return { state: "rejected", detail: "Notion rejected NOTION_TOKEN; copy the Internal Integration Secret again." };
+      if (!res.ok) return { state: "error", detail: `Notion ${res.status}: ${String(json.message ?? "").slice(0, 120)}` };
+      const count = ((json.results as Json[]) ?? []).length;
+      return { state: "ok", shared: json.has_more ? "100+" : String(count) };
+    } catch (err) {
+      return { state: "error", detail: `Couldn't reach Notion: ${(err as Error).message}` };
+    }
+  }
+}

@@ -228,6 +228,7 @@
       chip(s.routineConfigured, s.routineConfigured ? "Routine ready" : "No routine"),
       chip(s.telegram ? true : null, s.telegram ? "Telegram on" : "Telegram off"),
       chip(s.reportsEndpoint ? true : null, s.reportsEndpoint ? "Reports endpoint on" : "Reports endpoint off"),
+      notionChip(s.notion),
     );
 
     const warnings = [];
@@ -250,6 +251,18 @@
     if (!selected || !state.jobs.some((j) => j.id === selected)) selected = state.currentJobId || state.jobs[0]?.id || null;
     $("jobs").replaceChildren(...(state.jobs.length ? state.jobs.map(jobItem) : [el("li", { class: "empty" }, "No jobs yet. Start one above.")]));
     renderDetail();
+  }
+
+  function notionChip(n) {
+    if (!n || n.state === "off") return chip(null, "Notion off");
+    if (n.state === "ok") {
+      const c = chip(n.shared === "0" ? false : true, "Notion · " + n.shared + (n.shared === "1" ? " page" : " pages"));
+      if (n.shared === "0") c.title = "The token works, but no pages are shared with it. In Notion: ••• → Connections → JARVIS.";
+      return c;
+    }
+    const c = chip(false, n.state === "rejected" ? "Notion: token rejected" : "Notion: unreachable");
+    c.title = n.detail || "";
+    return c;
   }
 
   function chip(on, text) {
