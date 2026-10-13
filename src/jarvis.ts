@@ -2,6 +2,7 @@
 
 import { authStatus, sendToSession, type AuthStatus } from "./cloud.js";
 import type { Config } from "./config.js";
+import { NotionStatusCache, type NotionStatus } from "./notion.js";
 import { followUpText, newJobText } from "./prompts.js";
 import { fireRoutine } from "./routines.js";
 import { JOB_NAME, parseSessionId, sessionUrl, type Job, type Store } from "./store.js";
@@ -24,11 +25,13 @@ export interface Status {
   nextFireFreesAt?: string;
   telegram: boolean;
   reportsEndpoint: boolean;
+  notion: NotionStatus;
 }
 
 export class Jarvis {
   private readonly usage: UsageCache;
   private readonly sessionList: SessionListCache;
+  private readonly notion: NotionStatusCache;
   private auth?: { value: AuthStatus; at: number };
 
   constructor(
@@ -37,6 +40,7 @@ export class Jarvis {
   ) {
     this.usage = new UsageCache(config.claudeBin);
     this.sessionList = new SessionListCache(config.claudeBin);
+    this.notion = new NotionStatusCache(config.notionToken);
   }
 
   /** Your cloud sessions, newest activity first (undocumented source; see sessions.ts). */
@@ -130,7 +134,7 @@ export class Jarvis {
   }
 
   async status(): Promise<Status> {
-    const [auth, usage] = await Promise.all([this.authStatus(), this.usage.get()]);
+    const [auth, usage, notion] = await Promise.all([this.authStatus(), this.usage.get(), this.notion.get()]);
     const fires = this.store.firesInLastHour();
     return {
       auth,
@@ -142,6 +146,7 @@ export class Jarvis {
       nextFireFreesAt: fires[0] ? new Date(fires[0].getTime() + 60 * 60 * 1000).toISOString() : undefined,
       telegram: Boolean(this.config.telegramBotToken),
       reportsEndpoint: Boolean(this.config.reportSecret),
+      notion,
     };
   }
 }

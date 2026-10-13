@@ -11,7 +11,7 @@ import { describeEvent } from "../src/activity.js";
 import { Brain, formatMetrics, parseCliResult } from "../src/brain.js";
 import type { Config } from "../src/config.js";
 import { Jarvis } from "../src/jarvis.js";
-import { blockText, Notion, propertyText } from "../src/notion.js";
+import { blockText, Notion, NotionStatusCache, propertyText } from "../src/notion.js";
 import { Store } from "../src/store.js";
 import { Tools } from "../src/tools.js";
 import { createDashboard } from "../src/web.js";
@@ -150,4 +150,18 @@ test("session history events become readable activity lines", () => {
   assert.equal(describeEvent({ payload: { type: "assistant", message: { content: [{ type: "tool_use", name: "Bash" }] } } })?.text, "used Bash");
   assert.equal(describeEvent({ payload: { type: "user", message: { content: [{ type: "tool_result", content: "…" }] } } }), undefined);
   assert.equal(describeEvent({ payload: { type: "system", subtype: "init" } }), undefined);
+});
+
+test("the Notion chip's check: off, ok with a page count, rejected token, cached", async () => {
+  assert.deepEqual(await new NotionStatusCache(undefined).get(), { state: "off" });
+  let calls = 0;
+  const ok = (async () => (calls++, new Response(JSON.stringify({ results: [{}, {}, {}], has_more: false })))) as unknown as typeof fetch;
+  const cache = new NotionStatusCache("secret", ok);
+  assert.deepEqual(await cache.get(), { state: "ok", shared: "3" });
+  await cache.get();
+  assert.equal(calls, 1, "a working token is re-checked every 5 minutes, not on every dashboard refresh");
+  const bad = (async () => new Response(JSON.stringify({ message: "API token is invalid." }), { status: 401 })) as unknown as typeof fetch;
+  assert.equal((await new NotionStatusCache("wrong", bad).get()).state, "rejected");
+  const many = (async () => new Response(JSON.stringify({ results: [{}], has_more: true }))) as unknown as typeof fetch;
+  assert.equal((await new NotionStatusCache("secret", many).get()).shared, "100+");
 });
