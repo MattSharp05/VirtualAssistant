@@ -2,6 +2,7 @@
 //
 //   GET  /                       the dashboard page
 //   GET  /api/state              status, plan usage, jobs, reports
+//   GET  /api/system             container memory, CPU, claude processes, last hour of history
 //   POST /api/jobs               { task }            start a cloud session
 //   POST /api/jobs/:id/messages  { message }         message a session
 //   POST /api/reports            { job, text }       a cloud session reporting back (Bearer REPORT_SECRET)
@@ -11,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { JarvisError, type Jarvis } from "./jarvis.js";
 import { RoutineError } from "./routines.js";
+import type { SystemMonitor } from "./system.js";
 
 const PAGE = new URL("../../public/index.html", import.meta.url) // dist/src/web.js → <app>/public;
 const MAX_BODY = 64 * 1024;
@@ -52,7 +54,7 @@ function dashboardAllowed(req: IncomingMessage, password: string | undefined): b
   return safeEqual(decoded.slice(decoded.indexOf(":") + 1), password);
 }
 
-export function createDashboard(jarvis: Jarvis): Server {
+export function createDashboard(jarvis: Jarvis, monitor?: SystemMonitor): Server {
   const { config, store } = jarvis;
 
   return createServer(async (req, res) => {
@@ -78,6 +80,10 @@ export function createDashboard(jarvis: Jarvis): Server {
       if (req.method === "GET" && url.pathname === "/") {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
         return res.end(readFileSync(PAGE));
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/system") {
+        return send(res, 200, monitor ? monitor.stats() : null);
       }
 
       if (req.method === "GET" && url.pathname === "/api/state") {

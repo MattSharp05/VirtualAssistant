@@ -3,12 +3,15 @@ import { authStatus } from "./cloud.js";
 import { loadConfig } from "./config.js";
 import { Jarvis } from "./jarvis.js";
 import { Store } from "./store.js";
+import { SystemMonitor } from "./system.js";
 import { createDashboard } from "./web.js";
 
 const config = loadConfig();
 const jarvis = new Jarvis(config, new Store(config.dataDir));
 
-const dashboard = createDashboard(jarvis);
+const monitor = new SystemMonitor();
+monitor.start();
+const dashboard = createDashboard(jarvis, monitor);
 dashboard.listen(config.dashboardPort, () => {
   console.log(`dashboard on port ${config.dashboardPort}${config.dashboardPassword ? " (password protected)" : ""}`);
 });
@@ -22,6 +25,7 @@ const bot = config.telegramBotToken ? createBot(config.telegramBotToken, config.
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
+    monitor.stop();
     dashboard.close();
     void bot?.stop();
     if (!bot) process.exit(0);
