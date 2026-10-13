@@ -30,5 +30,8 @@ if (config.telegramBotToken) {
   console.log("info telegram: off (TELEGRAM_BOT_TOKEN unset), dashboard only");
 }
 report(Boolean(config.routineId && config.routineToken), "routine", config.routineId ?? "ROUTINE_ID / ROUTINE_TOKEN unset");
+console.log(
+  `info reports endpoint: ${config.reportSecret ? `on, port ${config.reportsPort} (expose it with Tailscale Funnel)` : "off (REPORT_SECRET unset)"}`,
+);
 
 process.exit(failures ? 1 : 0);

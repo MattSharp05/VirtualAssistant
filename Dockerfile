@@ -31,5 +31,5 @@ COPY --from=build --chown=node:node /app/dist/src ./dist/src
 COPY --chown=node:node public ./public
 COPY --chown=node:node package.json ./
 VOLUME /data
-EXPOSE 8080
+EXPOSE 8080 8081
 CMD ["node", "dist/src/index.js"]

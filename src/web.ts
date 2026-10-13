@@ -6,12 +6,16 @@
 //   POST /api/jobs               { task }            start a cloud session
 //   POST /api/jobs/:id/messages  { message }         message a session
 //   POST /api/reports            { job, text }       a cloud session reporting back (Bearer REPORT_SECRET)
+//
+// createReportsServer() serves only POST /api/reports (and a GET / health line) on its own port,
+// for exposing to the internet without exposing the dashboard.
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
 import { JarvisError, type Jarvis } from "./jarvis.js";
 import { RoutineError } from "./routines.js";
+import type { Store } from "./store.js";
 import type { SystemMonitor } from "./system.js";
 
 const PAGE = new URL("../../public/index.html", import.meta.url) // dist/src/web.js → <app>/public;
@@ -54,6 +58,39 @@ function dashboardAllowed(req: IncomingMessage, password: string | undefined): b
   return safeEqual(decoded.slice(decoded.indexOf(":") + 1), password);
 }
 
+async function receiveReport(req: IncomingMessage, res: ServerResponse, store: Store, secret: string | undefined): Promise<void> {
+  const auth = req.headers.authorization ?? "";
+  if (!secret || !safeEqual(auth, `Bearer ${secret}`)) return send(res, 401, { error: "unauthorized" });
+  const body = await readJson(req);
+  const job = String(body.job ?? "").trim();
+  const text = String(body.text ?? "").trim();
+  if (!job || !text) return send(res, 400, { error: "job and text are required" });
+  send(res, 201, store.addReport(job, text.slice(0, 8000)));
+}
+
+/**
+ * The only thing exposed to the internet (through Tailscale Funnel, or a VPS's public address):
+ * it accepts reports carrying the secret and nothing else. The dashboard stays on its own port,
+ * reachable only from this machine or your tailnet.
+ */
+export function createReportsServer(store: Store, secret: string): Server {
+  return createServer(async (req, res) => {
+    const url = new URL(req.url ?? "/", "http://localhost");
+    try {
+      if (req.method === "POST" && url.pathname === "/api/reports") return await receiveReport(req, res, store, secret);
+      if (req.method === "GET" && url.pathname === "/") {
+        res.writeHead(200, { "content-type": "text/plain" });
+        return res.end("JARVIS reports endpoint is up.\n");
+      }
+      send(res, 404, { error: "not found" });
+    } catch (err) {
+      const known = err instanceof JarvisError;
+      if (!known) console.error("reports error:", err);
+      send(res, known ? 400 : 500, { error: known ? (err as Error).message : "internal error" });
+    }
+  });
+}
+
 export function createDashboard(jarvis: Jarvis, monitor?: SystemMonitor): Server {
   const { config, store } = jarvis;
 
@@ -61,16 +98,7 @@ export function createDashboard(jarvis: Jarvis, monitor?: SystemMonitor): Server
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
       // Reports authenticate with their own secret, so a cloud session never needs the dashboard password.
-      if (req.method === "POST" && url.pathname === "/api/reports") {
-        const secret = config.reportSecret;
-        const auth = req.headers.authorization ?? "";
-        if (!secret || !safeEqual(auth, `Bearer ${secret}`)) return send(res, 401, { error: "unauthorized" });
-        const body = await readJson(req);
-        const job = String(body.job ?? "").trim();
-        const text = String(body.text ?? "").trim();
-        if (!job || !text) return send(res, 400, { error: "job and text are required" });
-        return send(res, 201, store.addReport(job, text.slice(0, 8000)));
-      }
+      if (req.method === "POST" && url.pathname === "/api/reports") return await receiveReport(req, res, store, config.reportSecret);
 
       if (!dashboardAllowed(req, config.dashboardPassword)) {
         res.writeHead(401, { "www-authenticate": 'Basic realm="JARVIS"' });

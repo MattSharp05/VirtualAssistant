@@ -8,7 +8,7 @@ import type { Config } from "../src/config.js";
 import { Jarvis } from "../src/jarvis.js";
 import { Store } from "../src/store.js";
 import { parseUsageResponse } from "../src/usage.js";
-import { createDashboard } from "../src/web.js";
+import { createDashboard, createReportsServer } from "../src/web.js";
 
 const config: Config = {
   telegramBotToken: undefined,
@@ -20,6 +20,7 @@ const config: Config = {
   dashboardPort: 0,
   dashboardPassword: "pw",
   reportSecret: "s3cret",
+  reportsPort: 0,
 };
 const store = new Store(config.dataDir);
 const server = createDashboard(new Jarvis(config, store));
@@ -91,4 +92,29 @@ test("parseUsageResponse reads both windows and both spellings", () => {
   assert.equal(parsed.windows[1].percent, 100);
   assert.equal(parsed.windows[1].resetsAt, new Date(1792000000 * 1000).toISOString());
   assert.equal(parseUsageResponse({ rate_limits_available: false, rate_limits: null }).available, false);
+});
+
+test("the public reports server accepts reports and exposes nothing else", async () => {
+  const reports = createReportsServer(store, "s3cret");
+  await new Promise<void>((resolve) => reports.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(reports.address() as AddressInfo).port}`;
+  try {
+    assert.match(await (await fetch(`${url}/`)).text(), /reports endpoint is up/);
+    for (const path of ["/api/state", "/api/system", "/api/jobs"]) {
+      const res = await fetch(url + path, { headers: auth });
+      assert.equal(res.status, 404, `${path} must not be reachable from the internet`);
+    }
+    const post = (authorization: string) =>
+      fetch(`${url}/api/reports`, {
+        method: "POST",
+        headers: { authorization, "content-type": "application/json" },
+        body: JSON.stringify({ job: "j9", text: "via funnel" }),
+      });
+    assert.equal((await post("Bearer nope")).status, 401);
+    assert.equal((await post("Bearer s3cret")).status, 201);
+    assert.equal(store.recentReports(1)[0].text, "via funnel");
+  } finally {
+    reports.closeAllConnections();
+    reports.close();
+  }
 });
