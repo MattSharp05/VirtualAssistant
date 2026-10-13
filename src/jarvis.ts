@@ -4,7 +4,7 @@ import { authStatus, sendToSession, type AuthStatus } from "./cloud.js";
 import type { Config } from "./config.js";
 import { followUpText, newJobText } from "./prompts.js";
 import { fireRoutine } from "./routines.js";
-import type { Job, Store } from "./store.js";
+import { JOB_NAME, parseSessionId, sessionUrl, type Job, type Store } from "./store.js";
 import { UsageCache, type PlanUsage } from "./usage.js";
 
 /** Documented per-routine cap on API fires (shared with "Run now"). Each new job is one fire. */
@@ -54,9 +54,34 @@ export class Jarvis {
     const sentAt = new Date();
     const session = await fireRoutine(routineId, routineToken, newJobText(jobId, task, sentAt));
     this.store.recordFire(sentAt);
-    const job: Job = { id: jobId, ...session, task, createdAt: sentAt.toISOString() };
+    const job: Job = { id: jobId, ...session, task, createdAt: sentAt.toISOString(), kind: "started" };
     this.store.addJob(job);
     return { job, ms: Date.now() - sentAt.getTime(), fireNumber: recent.length + 1 };
+  }
+
+  /** Adds a session JARVIS didn't start (an orchestrator, say) so you can message it by name. */
+  attachSession(link: string, name: string, note?: string): Job {
+    const sessionId = parseSessionId(link);
+    if (!sessionId) throw new JarvisError("That isn't a session link. Paste the claude.ai/code/… address of the session.");
+    const id = name.trim().toLowerCase();
+    if (!JOB_NAME.test(id)) {
+      throw new JarvisError("Names are 1-24 lowercase letters, digits or dashes, starting with a letter (e.g. mk or mario-kart).");
+    }
+    if (this.store.getJob(id)) throw new JarvisError(`There's already a job called ${id}. Forget it first, or pick another name.`);
+    const job: Job = {
+      id,
+      sessionId,
+      url: sessionUrl(sessionId),
+      task: note?.trim() || "Attached session",
+      createdAt: new Date().toISOString(),
+      kind: "attached",
+    };
+    this.store.addJob(job);
+    return job;
+  }
+
+  forget(jobId: string): void {
+    if (!this.store.removeJob(jobId)) throw new JarvisError(`No job ${jobId}.`);
   }
 
   async sendMessage(jobId: string, message: string): Promise<{ job: Job; ms: number }> {
@@ -64,7 +89,7 @@ export class Jarvis {
     if (!job) throw new JarvisError(`No job ${jobId}.`);
     if (!message.trim()) throw new JarvisError("The message is empty.");
     const sentAt = new Date();
-    const result = await sendToSession(this.config.claudeBin, job.sessionId, followUpText(job.id, message, sentAt));
+    const result = await sendToSession(this.config.claudeBin, job.sessionId, followUpText(job.id, message, sentAt, job.kind !== "started" && job.kind !== undefined));
     if (!result.ok) throw new JarvisError(`Couldn't reach ${job.id}: ${result.error ?? "unknown error"}`);
     this.store.touch(job.id);
     return { job, ms: Date.now() - sentAt.getTime() };
