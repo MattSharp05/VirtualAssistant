@@ -162,6 +162,18 @@ test("the Notion chip's check: off, ok with a page count, rejected token, cached
   assert.equal(calls, 1, "a working token is re-checked every 5 minutes, not on every dashboard refresh");
   const bad = (async () => new Response(JSON.stringify({ message: "API token is invalid." }), { status: 401 })) as unknown as typeof fetch;
   assert.equal((await new NotionStatusCache("wrong", bad).get()).state, "rejected");
+  let shared = 0;
+  const sharing = (async () => new Response(JSON.stringify({ results: Array(shared).fill({}), has_more: false }))) as unknown as typeof fetch;
+  const fresh = new NotionStatusCache("secret", sharing);
+  assert.equal((await fresh.get()).shared, "0");
+  shared = 4;
+  const realNow = Date.now;
+  Date.now = () => realNow() + 61_000;
+  try {
+    assert.equal((await fresh.get()).shared, "4", "0 pages is re-checked after a minute, not five");
+  } finally {
+    Date.now = realNow;
+  }
   const many = (async () => new Response(JSON.stringify({ results: [{}], has_more: true }))) as unknown as typeof fetch;
   assert.equal((await new NotionStatusCache("secret", many).get()).shared, "100+");
 });
