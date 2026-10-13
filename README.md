@@ -119,12 +119,12 @@ A cloud session can't reach `localhost` on your machine, so the Tailscale contai
 permanent address, `https://jarvis.<your-tailnet>.ts.net`, with two separate doors:
 
 ```
- Cloud session ──report──► https://jarvis.<tailnet>.ts.net:8443  (Funnel: public, needs REPORT_SECRET,
+ Cloud session ──report──► https://jarvis.<tailnet>.ts.net       (Funnel: public, needs REPORT_SECRET,
                                         │                          accepts reports and nothing else)
                                         ▼
                               JARVIS container ──► dashboard
                                         ▲
- Your devices ─────────────► https://jarvis.<tailnet>.ts.net      (Serve: private, your tailnet only)
+ Your devices ─────────────► https://jarvis.<tailnet>.ts.net:8443 (Serve: private, your tailnet only)
 ```
 
 It works the same on a laptop and on a VPS: no ports opened, no domain, no certificates to manage.
@@ -150,7 +150,7 @@ REPORT_SECRET=<output of: openssl rand -hex 32>
 ```
 Then `docker compose up -d --build`. Find your address with
 `docker compose exec tailscale tailscale serve status`, and check the public door by opening
-`https://jarvis.<tailnet>.ts.net:8443` from any browser. It should say "JARVIS reports endpoint is
+`https://jarvis.<tailnet>.ts.net` from any browser. It should say "JARVIS reports endpoint is
 up." The first load can take a minute while the certificate is issued.
 
 **In the Tailscale admin console → Machines:** on `jarvis`, open the menu and **Disable key expiry**,
@@ -161,12 +161,12 @@ or it drops off the tailnet after about 180 days.
   `jarvis.<tailnet>.ts.net` in **Allowed domains** (plus `api.telegram.org` if you use Telegram).
 - Environment variables:
   ```
-  JARVIS_REPORT_URL=https://jarvis.<tailnet>.ts.net:8443
+  JARVIS_REPORT_URL=https://jarvis.<tailnet>.ts.net
   JARVIS_REPORT_SECRET=<same value as REPORT_SECRET>
   ```
 
 **Bonus:** install the Tailscale app on your phone, sign in with the same account, and open
-`https://jarvis.<tailnet>.ts.net` to use the dashboard from anywhere. Only your devices can.
+`https://jarvis.<tailnet>.ts.net:8443` to use the dashboard from anywhere. Only your devices can.
 
 ## Metrics
 
