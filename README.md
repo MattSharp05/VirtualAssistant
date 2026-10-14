@@ -230,6 +230,10 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
   conversation (the "worker", `WORKER_MODEL`, default haiku) reads today's calendar, unread mail
   worth reading and Slack mentions, and JARVIS adds tasks due and sessions waiting on you. It never
   writes anything and pauses when the plan's 5-hour window is 90% used.
+- **Voice notes:** send a Telegram voice message instead of typing. It's transcribed inside the
+  container (whisper.cpp, no cloud service), echoed back in italics, then answered like a typed
+  message. The first `docker compose up -d --build` after this takes a few minutes longer (it
+  compiles whisper.cpp and downloads its 142 MB model once).
 - **Files:** send JARVIS a PDF, text file or photo on Telegram (caption = what you want, e.g.
   "summarise this"). It's kept for 7 days in `data/uploads`; JARVIS can read those files and
   nothing else on disk.
