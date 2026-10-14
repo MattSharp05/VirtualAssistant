@@ -184,13 +184,16 @@ test("the Notion chip's check: off, ok with a page count, rejected token, cached
   assert.equal((await new NotionStatusCache("secret", many).get()).shared, "100+");
 });
 
-test("claude.ai connectors: read tools allowed, write tools blocked, strict MCP only without them", async () => {
+test("claude.ai connectors: calendar writes allowed, Gmail/Slack writes blocked, strict MCP only without them", async () => {
   const { allowed, blocked } = connectorTools(["google calendar", "Gmail", "Nope"]);
   assert.ok(allowed.includes("mcp__claude_ai_Google_Calendar__list_events"));
   assert.ok(allowed.includes("mcp__claude_ai_Gmail__search_threads"));
-  assert.ok(!allowed.some((t) => /send|reply|forward|trash|delete|create|update/.test(t)), "nothing that writes is allowed");
+  for (const t of ["create_event", "update_event", "delete_event", "respond_to_event"]) {
+    assert.ok(allowed.includes(`mcp__claude_ai_Google_Calendar__${t}`), `calendar ${t} allowed (no confirm tap, ADR 0008)`);
+  }
+  assert.ok(allowed.filter((t) => t.includes("Gmail")).every((t) => /__(search|get|list)_/.test(t)), "only Gmail reads are allowed");
   assert.ok(blocked.includes("mcp__claude_ai_Gmail__send_message"));
-  assert.ok(blocked.includes("mcp__claude_ai_Google_Calendar__delete_event"));
+  assert.ok(!blocked.some((t) => t.includes("Google_Calendar")), "nothing on the calendar is blocked");
   const slack = connectorTools(["Slack"]);
   assert.ok(slack.allowed.includes("mcp__claude_ai_Slack__slack_read_channel"));
   assert.ok(!slack.allowed.some((t) => /send|schedule|add_|create|update|upload/.test(t)), "nothing that posts is allowed");

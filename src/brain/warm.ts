@@ -22,7 +22,7 @@ import type { CliResult } from "./index.js";
 export interface TurnHandlers {
   onDelta(text: string): void;
   onToolCall(id: string, name: string, input: unknown): void;
-  onToolResult(id: string, summary: string, isError: boolean): void;
+  onToolResult(id: string, summary: string, isError: boolean, text: string): void;
 }
 
 interface PendingTurn {
@@ -122,7 +122,10 @@ export class WarmProcess {
       }
     } else if (msg.type === "user") {
       for (const block of blocks(msg)) {
-        if (block.type === "tool_result" && block.tool_use_id) turn.handlers.onToolResult(block.tool_use_id, summarize(block.content), block.is_error === true);
+        if (block.type === "tool_result" && block.tool_use_id) {
+          const text = resultText(block.content);
+          turn.handlers.onToolResult(block.tool_use_id, summarize(text), block.is_error === true, text.slice(0, 20_000));
+        }
       }
     } else if (msg.type === "result") {
       this.turn = undefined;
@@ -154,14 +157,17 @@ function blocks(msg: StreamLine): ContentBlock[] {
   return Array.isArray(content) ? content : [];
 }
 
+/** A tool result's text (string content, or the text parts of a content array). */
+function resultText(content: unknown): string {
+  return typeof content === "string"
+    ? content
+    : Array.isArray(content)
+      ? content.map((c) => (c && typeof c === "object" && "text" in c ? String((c as { text: unknown }).text) : "")).join("\n")
+      : "";
+}
+
 /** The first line of a tool result, short enough for a log line or a Desk chip. */
-function summarize(content: unknown): string {
-  const text =
-    typeof content === "string"
-      ? content
-      : Array.isArray(content)
-        ? content.map((c) => (c && typeof c === "object" && "text" in c ? String((c as { text: unknown }).text) : "")).join(" ")
-        : "";
+function summarize(text: string): string {
   const first = text.trim().split("\n")[0] ?? "";
   return first.length > 160 ? `${first.slice(0, 159)}…` : first;
 }

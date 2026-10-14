@@ -6,6 +6,7 @@ import { notifier, notify } from "./notify.js";
 import { Scheduler, useScheduler } from "./scheduler.js";
 import { ReportWatcher, useReportWatcher } from "./notifyRules.js";
 import { memory } from "./tools/memory.js";
+import { CalendarLog, useCalendarLog } from "./calendarLog.js";
 import { MEMORY_POLL_MS } from "./memory.js";
 import { DeviceStore } from "./desk/auth.js";
 import { DeskRpc } from "./desk/rpc.js";
@@ -46,6 +47,10 @@ const brain = new Brain(
   },
   jarvis.store,
 );
+// Every calendar write the brain makes is logged with its "before", for the change log and undo.
+const calendarLog = new CalendarLog(config.dataDir, bus);
+calendarLog.attach(brain);
+useCalendarLog(jarvis, calendarLog);
 const deskCtx: DeskContext = { jarvis, bus, devices: new DeviceStore(config.dataDir), hub: new SseHub(bus), rpc: new DeskRpc(bus), brain };
 const deskRouter = await DeskRouter.discover();
 const toolContext: ToolContext = { jarvis, config, desk: deskCtx };

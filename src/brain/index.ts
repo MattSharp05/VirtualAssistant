@@ -79,6 +79,8 @@ export interface BrainToolEvent {
   input: unknown;
   summary?: string;
   isError?: boolean;
+  /** The tool result's full text (results only; up to 20k characters). Not sent to the Desk. */
+  result?: string;
 }
 
 export interface ChatOptions {
@@ -243,9 +245,9 @@ export class Brain {
         tools.set(id, { name, input });
         this.toolEvent({ messageId, phase: "call", name, input });
       },
-      onToolResult: (id: string, summary: string, isError: boolean) => {
+      onToolResult: (id: string, summary: string, isError: boolean, result: string) => {
         const call = tools.get(id);
-        this.toolEvent({ messageId, phase: "result", name: call?.name ?? "unknown", input: call?.input, summary, isError });
+        this.toolEvent({ messageId, phase: "result", name: call?.name ?? "unknown", input: call?.input, summary, isError, result });
       },
     };
     for (let attempt = 0; ; attempt++) {
