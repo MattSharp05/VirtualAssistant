@@ -4,11 +4,22 @@ import { defineConfig } from "vite";
 
 const shared = fileURLToPath(new URL("../shared/src/protocol.ts", import.meta.url));
 
-export default defineConfig({
+// `vite build --mode web` is the browser preview (Vercel): it adds dev.html (every scenario × window)
+// and writes to renderer/dist-web. The plain build is what Electron loads.
+export default defineConfig(({ mode }) => ({
   root: "renderer",
   // Relative asset paths so the same build works inside Electron (file://) and on a web host.
   base: "./",
   plugins: [react()],
   resolve: { alias: { "@jarvis/shared": shared } },
-  build: { outDir: "dist", emptyOutDir: true },
-});
+  build: {
+    outDir: mode === "web" ? "dist-web" : "dist",
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        index: fileURLToPath(new URL("./renderer/index.html", import.meta.url)),
+        ...(mode === "web" ? { dev: fileURLToPath(new URL("./renderer/dev.html", import.meta.url)) } : {}),
+      },
+    },
+  },
+}));

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm ci",
+  "buildCommand": "npm run -w desk build:web",
+  "outputDirectory": "desk/renderer/dist-web",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- desk/ shared/ vercel.json",
+  "cleanUrls": true
+}
