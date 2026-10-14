@@ -1,7 +1,9 @@
 // The conversational brain: Matthew talks in plain language, Claude decides what to do with
 // JARVIS's tools (mcp.ts). Runs on the Claude subscription through the CLI in the container:
 //   claude -p --model <m> --system-prompt <JARVIS> --tools "" --strict-mcp-config --mcp-config <jarvis>
-// --tools "" removes every built-in tool (no shell, no files); the only tools are JARVIS's.
+// --tools "" removes every built-in tool (no shell, no files); the tools are JARVIS's own, plus the
+// read-only tools of the claude.ai connectors in BRAIN_CONNECTORS (Google Calendar, Gmail). Their
+// write tools are blocked outright, and in -p mode anything not allowed is refused anyway.
 // One conversation at a time, resumed across messages; "new conversation" starts a fresh one.
 
 import { spawn } from "node:child_process";
@@ -22,9 +24,48 @@ How to work:
 - When Matthew asks you to tell a session something, send it with send_to_session (clear, self-contained, in his voice), then confirm in one line what you sent. Its answer arrives later as a report.
 - You may start new cloud sessions with start_session when he asks for work to be done.
 - Notion is read-only for you: search, read pages, list database rows.
+- If you have Google Calendar and Gmail tools, they are read-only. "What's on today/this week" → list_events for that range. Email → search_threads with Gmail search syntax (e.g. "is:unread newer_than:1d", "from:alex"), then get_thread for the ones that matter. Summarise; don't paste whole emails. Give event times in the calendar's own time zone.
 - If a tool fails, say what failed in one line and what he can do.
 
 How to answer: short and plain, for a phone screen. Lead with the answer. No headings, minimal lists, no filler. Times in his messages are UTC.`;
+
+/**
+ * claude.ai connectors the brain can use, by the name claude.ai shows: the tools it may call (all
+ * read-only) and the write tools that stay blocked. In the CLI, "Google Calendar" becomes the
+ * server claude_ai_Google_Calendar.
+ */
+export const CONNECTORS: Record<string, { read: string[]; blocked: string[] }> = {
+  "Google Calendar": {
+    read: ["list_calendars", "list_events", "get_event", "search_events", "suggest_time"],
+    blocked: ["create_event", "update_event", "delete_event", "respond_to_event"],
+  },
+  Gmail: {
+    read: ["search_threads", "get_thread", "get_message", "list_labels", "list_drafts", "get_draft"],
+    blocked: [
+      "send_message", "reply", "forward", "create_draft", "update_draft", "delete_draft",
+      "trash_message", "trash_thread", "untrash_message", "untrash_thread",
+      "mark_message_spam", "mark_thread_spam", "unmark_message_spam", "unmark_thread_spam",
+      "label_message", "label_thread", "unlabel_message", "unlabel_thread", "update_message_labels",
+      "apply_sensitive_message_label", "apply_sensitive_thread_label",
+      "create_label", "update_label", "delete_label",
+    ],
+  },
+};
+
+const serverName = (connector: string) => `mcp__claude_ai_${connector.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+
+/** --allowedTools / --disallowedTools entries for the chosen connectors (unknown names are skipped). */
+export function connectorTools(names: string[]): { allowed: string[]; blocked: string[] } {
+  const allowed: string[] = [];
+  const blocked: string[] = [];
+  for (const name of names) {
+    const key = Object.keys(CONNECTORS).find((k) => k.toLowerCase() === name.toLowerCase());
+    if (!key) continue;
+    allowed.push(...CONNECTORS[key].read.map((t) => `${serverName(key)}__${t}`));
+    blocked.push(...CONNECTORS[key].blocked.map((t) => `${serverName(key)}__${t}`));
+  }
+  return { allowed, blocked };
+}
 
 export interface BrainConfig {
   claudeBin: string;
@@ -33,6 +74,8 @@ export interface BrainConfig {
   defaultModel: string;
   internalUrl: string;
   internalToken: string;
+  /** claude.ai connectors to allow read access to (CONNECTORS keys). */
+  connectors?: string[];
 }
 
 export interface BrainReply {
@@ -148,15 +191,18 @@ export class Brain {
         },
       },
     });
+    const connectors = connectorTools(this.config.connectors ?? []);
     const args = [
       "-p",
       "--output-format", "json",
       "--model", this.model,
       "--system-prompt", SYSTEM_PROMPT,
       "--tools", "",
-      "--strict-mcp-config",
+      // --strict-mcp-config also hides the claude.ai connectors, so it's only used when none are wanted.
+      ...(connectors.allowed.length ? [] : ["--strict-mcp-config"]),
       "--mcp-config", mcpConfig,
-      "--allowedTools", "mcp__jarvis",
+      "--allowedTools", ["mcp__jarvis", ...connectors.allowed].join(","),
+      ...(connectors.blocked.length ? ["--disallowedTools", connectors.blocked.join(",")] : []),
       ...(fresh ? ["--session-id", sessionId] : ["--resume", sessionId]),
     ];
     return new Promise((resolve) => {

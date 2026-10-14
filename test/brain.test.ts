@@ -8,7 +8,7 @@ import { createInterface } from "node:readline";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { describeEvent } from "../src/activity.js";
-import { Brain, formatMetrics, parseCliResult } from "../src/brain.js";
+import { Brain, connectorTools, formatMetrics, parseCliResult } from "../src/brain.js";
 import type { Config } from "../src/config.js";
 import { Jarvis } from "../src/jarvis.js";
 import { blockText, Notion, NotionStatusCache, propertyText } from "../src/notion.js";
@@ -22,7 +22,7 @@ function config(dataDir: string): Config {
   return {
     telegramBotToken: undefined, allowedChatId: undefined, routineId: undefined, routineToken: undefined,
     dataDir, claudeBin: "/bin/false", dashboardPort: 0, dashboardPassword: undefined, reportSecret: undefined,
-    reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5", "claude-haiku-5-5"], brainModel: "claude-sonnet-5-5",
+    reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5", "claude-haiku-5-5"], brainModel: "claude-sonnet-5-5", brainConnectors: [],
   };
 }
 
@@ -176,4 +176,29 @@ test("the Notion chip's check: off, ok with a page count, rejected token, cached
   }
   const many = (async () => new Response(JSON.stringify({ results: [{}], has_more: true }))) as unknown as typeof fetch;
   assert.equal((await new NotionStatusCache("secret", many).get()).shared, "100+");
+});
+
+test("claude.ai connectors: read tools allowed, write tools blocked, strict MCP only without them", async () => {
+  const { allowed, blocked } = connectorTools(["google calendar", "Gmail", "Nope"]);
+  assert.ok(allowed.includes("mcp__claude_ai_Google_Calendar__list_events"));
+  assert.ok(allowed.includes("mcp__claude_ai_Gmail__search_threads"));
+  assert.ok(!allowed.some((t) => /send|reply|forward|trash|delete|create|update/.test(t)), "nothing that writes is allowed");
+  assert.ok(blocked.includes("mcp__claude_ai_Gmail__send_message"));
+  assert.ok(blocked.includes("mcp__claude_ai_Google_Calendar__delete_event"));
+
+  const dir = tmp();
+  const log = join(dir, "argv.log");
+  const bin = join(dir, "claude");
+  writeFileSync(bin, `#!/bin/sh
+for a in "$@"; do printf '%s ' "$(printf '%s' "$a" | tr '\\n' ' ')"; done >> ${log}; echo >> ${log}
+cat >/dev/null
+echo '{"type":"result","result":"ok","usage":{}}'
+`);
+  chmodSync(bin, 0o755);
+  const base = { claudeBin: bin, dataDir: dir, models: ["claude-haiku-5-5"], defaultModel: "claude-haiku-5-5", internalUrl: "http://127.0.0.1:1", internalToken: "t" };
+  await new Brain({ ...base, connectors: ["Google Calendar", "Gmail"] }, new Store(dir)).chat("what's on today?", "telegram");
+  const call = readFileSync(log, "utf8").trim();
+  assert.doesNotMatch(call, /--strict-mcp-config/, "claude.ai connectors need the non-strict MCP mode");
+  assert.match(call, /--allowedTools mcp__jarvis,mcp__claude_ai_Google_Calendar__list_calendars,/);
+  assert.match(call, /--disallowedTools \S*mcp__claude_ai_Gmail__send_message/);
 });

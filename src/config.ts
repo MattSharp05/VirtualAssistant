@@ -20,6 +20,8 @@ export interface Config {
   /** Models the brain may use (first = default unless BRAIN_MODEL is set). */
   brainModels: string[];
   brainModel: string;
+  /** claude.ai connectors the brain may read (see CONNECTORS in brain.ts). Empty = none. */
+  brainConnectors: string[];
 }
 
 function optional(name: string): string | undefined {
@@ -47,7 +49,10 @@ export function loadConfig(): Config {
     .filter(Boolean);
   const brainModel = optional("BRAIN_MODEL") ?? brainModels[0];
   if (!brainModels.includes(brainModel)) brainModels.push(brainModel);
+  const connectors = optional("BRAIN_CONNECTORS") ?? "Google Calendar,Gmail";
+  const brainConnectors = /^none$/i.test(connectors) ? [] : connectors.split(",").map((c) => c.trim()).filter(Boolean);
   return {
+    brainConnectors,
     notionToken: optional("NOTION_TOKEN"),
     brainModels,
     brainModel,

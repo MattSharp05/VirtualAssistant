@@ -77,7 +77,7 @@ test("pickSession reuses a tracked session and dedupes new names", () => {
   const dataDir = tmp();
   const config = {
     telegramBotToken: undefined, allowedChatId: undefined, routineId: undefined, routineToken: undefined,
-    dataDir, claudeBin: "/bin/false", dashboardPort: 0, dashboardPassword: undefined, reportSecret: undefined, reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5"], brainModel: "claude-sonnet-5-5",
+    dataDir, claudeBin: "/bin/false", dashboardPort: 0, dashboardPassword: undefined, reportSecret: undefined, reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5"], brainModel: "claude-sonnet-5-5", brainConnectors: [],
   } satisfies Config;
   const jarvis = new Jarvis(config, new Store(dataDir));
   const a = jarvis.pickSession("cse_01A", "Mario Kart orchestrator");
