@@ -3,3 +3,4 @@ dist-electron
 renderer/dist
 node_modules
 release
+renderer/dist-web

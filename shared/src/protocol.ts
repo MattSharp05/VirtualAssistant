@@ -80,3 +80,23 @@ export interface DeviceInfo {
   createdAt: string;
   lastSeen?: string;
 }
+
+// ── The Desk bridge (window.desk): the renderer's only door to the rest of the app ──
+// In Electron, preload implements it over IPC and main talks to the server; in the web preview
+// (and e2e) a mock implements it from a scenario (desk/renderer/mock/). Features extend it.
+
+export interface DeskBridge {
+  protocolVersion: number;
+  /** Live events from the server's stream. Returns an unsubscribe function. */
+  subscribe(fn: (event: DeskEvent) => void): () => void;
+  /** A Desk API route under /api/desk, e.g. request("/me"); GET without a body, POST with one. */
+  request<T = unknown>(path: string, body?: unknown): Promise<T>;
+  /** Talk to JARVIS; the reply arrives through subscribe() as brain.* events with this messageId. */
+  chat(text: string, channel?: ChatRequest["channel"]): Promise<ChatResponse>;
+  /** Opens (or focuses) one of the Desk's windows by feature id. */
+  openWindow(id: string): void;
+  settings: {
+    get<T = unknown>(key: string): Promise<T | undefined>;
+    set(key: string, value: unknown): Promise<void>;
+  };
+}

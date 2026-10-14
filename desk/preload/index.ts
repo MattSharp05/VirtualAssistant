@@ -1,6 +1,22 @@
-// The only door between the renderer and the rest of the app: everything the UI needs is
-// exposed on window.desk. It starts empty; features add methods (docs/TDD.md → Architecture).
-import { contextBridge } from "electron";
-import { PROTOCOL_VERSION } from "@jarvis/shared";
+// The only door between the renderer and the rest of the app: window.desk implements DeskBridge
+// (shared/protocol.ts) over IPC; main talks to the server (docs/TDD.md → Architecture).
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+import { PROTOCOL_VERSION, type DeskBridge, type DeskEvent } from "@jarvis/shared";
 
-contextBridge.exposeInMainWorld("desk", { protocolVersion: PROTOCOL_VERSION });
+const bridge: DeskBridge = {
+  protocolVersion: PROTOCOL_VERSION,
+  subscribe(fn) {
+    const listener = (_e: IpcRendererEvent, event: DeskEvent) => fn(event);
+    ipcRenderer.on("desk:event", listener);
+    return () => ipcRenderer.removeListener("desk:event", listener);
+  },
+  request: (path, body) => ipcRenderer.invoke("desk:request", path, body),
+  chat: (text, channel = "desk-typed") => ipcRenderer.invoke("desk:request", "/chat", { text, channel }),
+  openWindow: (id) => ipcRenderer.send("desk:open-window", id),
+  settings: {
+    get: (key) => ipcRenderer.invoke("desk:settings-get", key),
+    set: (key, value) => ipcRenderer.invoke("desk:settings-set", key, value),
+  },
+};
+
+contextBridge.exposeInMainWorld("desk", bridge);
