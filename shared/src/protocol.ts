@@ -45,6 +45,8 @@ export type DeskEvent =
   | { type: "brain.error"; messageId: string; error: string }
   /** JARVIS Tasks changed (added, completed, edited); windows re-fetch /tasks. */
   | { type: "tasks.changed" }
+  /** The JARVIS Memory page changed (JARVIS wrote to it, or Matthew edited it in Notion). */
+  | { type: "memory.changed" }
   /** A card next to the orb (JD-8, rendered by JD-27). */
   | { type: "card.show"; card: ScreenCard }
   | { type: "card.dismiss"; id: string }
