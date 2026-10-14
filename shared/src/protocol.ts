@@ -40,8 +40,22 @@ export type DeskEvent =
   | { type: "brain.error"; messageId: string; error: string }
   /** JARVIS Tasks changed (added, completed, edited); windows re-fetch /tasks. */
   | { type: "tasks.changed" }
+  /** A card next to the orb (JD-8, rendered by JD-27). */
+  | { type: "card.show"; card: ScreenCard }
+  | { type: "card.dismiss"; id: string }
   /** The server asks the Mac for something (a file, the clipboard…); the Desk answers with POST /api/desk/rpc/:id. */
   | { type: "rpc"; id: string; kind: string; payload: unknown };
+
+/** What JARVIS puts on screen with show_on_screen. Body is short markdown. */
+export interface ScreenCard {
+  id: string;
+  createdAt: string;
+  title: string;
+  body: string;
+  kind: "text" | "list" | "agenda" | "session";
+  items?: { label: string; detail?: string }[];
+  link?: { label: string; url: string };
+}
 
 /** One event on the live stream, numbered so a reconnecting Desk can catch up (Last-Event-ID). */
 export interface StreamedEvent {
