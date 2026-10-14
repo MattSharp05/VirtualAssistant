@@ -1,7 +1,10 @@
+import { mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import { formatMetrics, type Brain } from "./brain/index.js";
 import { LiveReply } from "./liveReply.js";
 import { MAX_UPLOAD_BYTES, UploadStore, type Upload } from "./uploads.js";
+import { transcribe as whisperTranscribe, type Transcript } from "./voice/stt.js";
 import type { Jarvis } from "./jarvis.js";
 import type { Job } from "./store.js";
 
@@ -24,6 +27,8 @@ const HELP = [
   "Plain messages go to me, or straight to a session after /sessions or /use.",
 ].join("\n");
 
+const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 function describe(job: Job): string {
   const sent = job.messagesSent ? `, ${job.messagesSent} follow-up${job.messagesSent === 1 ? "" : "s"}` : "";
   return `${job.id}: ${job.task.slice(0, 60)}${job.task.length > 60 ? "…" : ""}\nstarted ${ago(job.createdAt)}${sent}\n${job.url}`;
@@ -42,8 +47,22 @@ function seconds(ms: number): string {
 
 const WINDOW_LABEL = { five_hour: "5-hour window", seven_day: "Weekly" } as const;
 
-export function createBot(token: string, allowedChatId: number | undefined, jarvis: Jarvis, brain?: Brain): Bot {
+/** What tests replace: downloading a Telegram file and speech-to-text. */
+export interface BotDeps {
+  download?: (filePath: string) => Promise<Uint8Array>;
+  transcribe?: (audioPath: string) => Promise<Transcript>;
+}
+
+export function createBot(token: string, allowedChatId: number | undefined, jarvis: Jarvis, brain?: Brain, deps: BotDeps = {}): Bot {
   const bot = new Bot(token);
+  const download =
+    deps.download ??
+    (async (filePath: string) => {
+      const res = await fetch(`https://api.telegram.org/file/bot${token}/${filePath}`);
+      if (!res.ok) throw new Error(`Telegram download failed (${res.status})`);
+      return new Uint8Array(await res.arrayBuffer());
+    });
+  const transcribe = deps.transcribe ?? ((path: string) => whisperTranscribe(path));
   const { store } = jarvis;
   const uploads = new UploadStore(jarvis.config.dataDir);
 
@@ -198,10 +217,38 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     await relay(ctx, jobId, ctx.match.trim().slice(jobId.length).trim());
   });
 
-  bot.on("message:text", async (ctx) => {
+  bot.on("message:text", (ctx) => handleText(ctx, ctx.message.text));
+
+  /** Typed text and voice transcripts go the same way: to the picked session, or to JARVIS. */
+  async function handleText(ctx: Context, text: string): Promise<void> {
     const target = store.brain().talkTo ?? "jarvis";
-    if (target !== "jarvis" && store.getJob(target)) return relay(ctx, target, ctx.message.text);
-    await askBrain(ctx, ctx.message.text);
+    if (target !== "jarvis" && store.getJob(target)) return relay(ctx, target, text);
+    await askBrain(ctx, text);
+  }
+
+  // Voice notes (and audio files): transcribed in the container (src/voice/stt.ts), echoed, then
+  // handled exactly like typed text.
+  bot.on(["message:voice", "message:audio"], async (ctx) => {
+    const audio = ctx.message.voice ?? ctx.message.audio;
+    if ((audio?.file_size ?? 0) > MAX_UPLOAD_BYTES) return ctx.reply("That recording is too long for me.");
+    let text: string;
+    const dir = join(jarvis.config.dataDir, "voice");
+    const path = join(dir, `${ctx.message.message_id}.ogg`);
+    try {
+      void ctx.replyWithChatAction("typing").catch(() => {});
+      const file = await ctx.getFile();
+      await mkdir(dir, { recursive: true });
+      await writeFile(path, await download(file.file_path!));
+      text = (await transcribe(path)).text;
+    } catch (err) {
+      console.warn("voice note:", (err as Error).message);
+      return ctx.reply("I couldn't transcribe that. Try again, or type it?");
+    } finally {
+      await rm(path, { force: true });
+    }
+    if (!text) return ctx.reply("I didn't catch anything in that recording.");
+    await ctx.reply(`🎙 <i>${escapeHtml(text)}</i>`, { parse_mode: "HTML" });
+    await handleText(ctx, text);
   });
 
   // Documents and photos: saved to the uploads folder (src/uploads.ts), then JARVIS reads them.
@@ -214,10 +261,8 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     let upload: Upload;
     try {
       const file = await ctx.getFile();
-      const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`);
-      if (!res.ok) throw new Error(`Telegram download failed (${res.status})`);
       const name = doc?.file_name ?? `photo-${ctx.message.message_id}.jpg`;
-      upload = uploads.save(name, new Uint8Array(await res.arrayBuffer()));
+      upload = uploads.save(name, await download(file.file_path!));
     } catch (err) {
       return ctx.reply(`I couldn't take that file: ${(err as Error).message.slice(0, 200)}`);
     }
