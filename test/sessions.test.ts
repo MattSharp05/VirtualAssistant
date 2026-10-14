@@ -15,7 +15,7 @@ function setup() {
   const config = {
     telegramBotToken: undefined, allowedChatId: undefined, routineId: undefined, routineToken: undefined,
     dataDir, claudeBin: "/bin/false", dashboardPort: 0, dashboardPassword: undefined,
-    reportSecret: "s3cret-s3cret-s3cret-s3cret", reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5"], brainModel: "claude-sonnet-5-5", brainConnectors: [],
+    reportSecret: "s3cret-s3cret-s3cret-s3cret", reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5"], brainModel: "claude-sonnet-5-5", brainWarm: false, brainConnectors: [],
   } satisfies Config;
   const store = new Store(dataDir);
   return { store, jarvis: new Jarvis(config, store), dataDir };

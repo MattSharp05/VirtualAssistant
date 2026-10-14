@@ -8,7 +8,7 @@ import type { AddressInfo } from "node:net";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import type { DeskEvent } from "@jarvis/shared";
-import { Brain } from "../src/brain.js";
+import { Brain } from "../src/brain/index.js";
 import type { Config } from "../src/config.js";
 import { EventBus } from "../src/events.js";
 import { Jarvis } from "../src/jarvis.js";
@@ -25,7 +25,7 @@ function config(dataDir: string): Config {
   return {
     telegramBotToken: undefined, allowedChatId: undefined, routineId: undefined, routineToken: undefined,
     dataDir, claudeBin: "/bin/false", dashboardPort: 0, dashboardPassword: undefined, reportSecret: undefined,
-    reportsPort: 0, notionToken: undefined, brainModels: ["claude-haiku-5-5"], brainModel: "claude-haiku-5-5", brainConnectors: [],
+    reportsPort: 0, notionToken: undefined, brainModels: ["claude-haiku-5-5"], brainModel: "claude-haiku-5-5", brainWarm: false, brainConnectors: [],
   };
 }
 
@@ -82,7 +82,7 @@ test("a registered tool group is listed and callable through MCP, and shapes the
   const bin = join(dir, "claude");
   writeFileSync(bin, `#!/bin/sh\nfor a in "$@"; do printf '%s ' "$(printf '%s' "$a" | tr '\\n' ' ')"; done >> ${log}; echo >> ${log}\ncat >/dev/null\necho '{"type":"result","result":"ok","usage":{}}'\n`, { mode: 0o755 });
   const brain = new Brain(
-    { claudeBin: bin, dataDir: dir, models: ["claude-haiku-5-5"], defaultModel: "claude-haiku-5-5", internalUrl: base, internalToken: "t", setup: () => registry.brainSetup({ jarvis, config: jarvis.config }) },
+    { claudeBin: bin, dataDir: dir, models: ["claude-haiku-5-5"], defaultModel: "claude-haiku-5-5", internalUrl: base, internalToken: "t", warm: false, setup: () => registry.brainSetup({ jarvis, config: jarvis.config }) },
     jarvis.store,
   );
   await brain.chat("hello", "telegram");

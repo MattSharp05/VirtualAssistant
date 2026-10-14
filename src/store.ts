@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import type { BrainChannel, BrainMetrics } from "@jarvis/shared";
 import { join } from "node:path";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -43,23 +44,12 @@ export interface Report {
 const MAX_REPORTS = 200;
 const MAX_BRAIN_MESSAGES = 300;
 
-/** Per-reply measurements for the brain, the same kind sessions report. */
-export interface BrainMetrics {
-  ms: number;
-  model: string;
-  inputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  outputTokens: number;
-  turns: number;
-  /** What the reply would cost on the API; on the subscription it's a guide to plan usage, not a bill. */
-  apiEquivalentUsd?: number;
-}
+export type { BrainMetrics };
 
 export interface BrainMessage {
   at: string;
   from: "you" | "jarvis";
-  channel: "dashboard" | "telegram";
+  channel: BrainChannel;
   text: string;
   metrics?: BrainMetrics;
 }

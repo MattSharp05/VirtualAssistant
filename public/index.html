@@ -482,7 +482,29 @@
     const tick = setInterval(() => { thinking.textContent = "thinking… " + Math.round((Date.now() - started) / 1000) + "s"; }, 1000);
     $("chat-send").disabled = true;
     try {
-      await api("/api/brain/chat", { message: text });
+      // The reply streams in as NDJSON lines ({delta} … {done} or {error}) and grows in the bubble.
+      const res = await fetch("/api/brain/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text, stream: true }) });
+      if (!res.ok || !res.body) { const data = await res.json().catch(() => ({})); throw new Error(data.error || "HTTP " + res.status); }
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let buffered = "", written = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffered += value;
+        const lines = buffered.split("\n");
+        buffered = lines.pop();
+        for (const l of lines) {
+          if (!l.trim()) continue;
+          const msg = JSON.parse(l);
+          if (msg.error) throw new Error(msg.error);
+          if (msg.delta) {
+            if (!written) clearInterval(tick);
+            written += msg.delta;
+            thinking.textContent = written;
+            log.scrollTop = log.scrollHeight;
+          }
+        }
+      }
       notice("chat-notice", "");
     } catch (err) { notice("chat-notice", err.message, true); }
     finally {

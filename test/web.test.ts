@@ -20,7 +20,7 @@ const config: Config = {
   dashboardPort: 0,
   dashboardPassword: "pw",
   reportSecret: "s3cret",
-  reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5"], brainModel: "claude-sonnet-5-5", brainConnectors: [],
+  reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5"], brainModel: "claude-sonnet-5-5", brainWarm: false, brainConnectors: [],
 };
 const store = new Store(config.dataDir);
 const server = createDashboard(new Jarvis(config, store));

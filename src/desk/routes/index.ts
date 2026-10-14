@@ -7,6 +7,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { DeviceInfo } from "@jarvis/shared";
+import type { Brain } from "../../brain/index.js";
 import type { EventBus } from "../../events.js";
 import type { Jarvis } from "../../jarvis.js";
 import type { DeviceStore } from "../auth.js";
@@ -19,6 +20,8 @@ export interface DeskContext {
   devices: DeviceStore;
   hub: SseHub;
   rpc: DeskRpc;
+  /** The conversational brain (POST /api/desk/chat); absent in tests that don't need it. */
+  brain?: Brain;
 }
 
 export interface DeskRequest {
