@@ -303,6 +303,13 @@ Anthropic changes it, the tiles say "not available" and nothing else breaks.
 | JARVIS says Notion isn't connected | `NOTION_TOKEN` is missing; see Part F. "Not found" for a page means it isn't shared with the integration. |
 | Plan tiles say "not available" | The login isn't a claude.ai subscription login, or the undocumented request changed. Everything else still works. |
 
+## JARVIS Desk (Mac app)
+
+JARVIS Desk is the Mac app: an orb on top of your screen that listens and speaks, plus windows for
+chat, sessions, today, calendar, to-dos and Notion. Install it from the
+[Releases page](https://github.com/MattSharp05/VirtualAssistant/releases): see
+[docs/desk-install.md](docs/desk-install.md). To publish a new version: push a tag `desk-vX.Y.Z`.
+
 ## Development
 
 The repo is an npm workspace: the server at the root, `shared/` (types used by the server and the
