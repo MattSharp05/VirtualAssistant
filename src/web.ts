@@ -15,6 +15,8 @@
 //   POST /api/jobs/:id/messages  { message }         message a session
 //   POST /api/jobs/:id/forget    {}                  stop tracking a session
 //   POST /api/reports            { job, text }       a cloud session reporting back (Bearer REPORT_SECRET)
+//   GET|POST /api/desk-devices, POST /api/desk-devices/:id/revoke   pair / list / revoke JARVIS Desk Macs
+//   /api/desk/*                                      the JARVIS Desk API (device key; src/desk/routes/)
 //
 // createReportsServer() serves only POST /api/reports (and a GET / health line) on its own port,
 // for exposing to the internet without exposing the dashboard.
@@ -28,6 +30,7 @@ import { parseSessionId, type Store } from "./store.js";
 import type { SystemMonitor } from "./system.js";
 import type { Brain } from "./brain.js";
 import { UnknownToolError, type ToolContext, type ToolRegistry } from "./tools/index.js";
+import type { DeskContext, DeskRouter } from "./desk/routes/index.js";
 
 export interface DashboardExtras {
   monitor?: SystemMonitor;
@@ -37,6 +40,8 @@ export interface DashboardExtras {
   toolContext?: ToolContext;
   /** The brain's tool server calls /internal/* with this token, from inside the container only. */
   internalToken?: string;
+  /** The JARVIS Desk API (/api/desk/*), authenticated with device keys instead of the dashboard password. */
+  desk?: { router: DeskRouter; ctx: DeskContext };
 }
 
 function isLoopback(req: IncomingMessage): boolean {
@@ -149,7 +154,7 @@ export function createReportsServer(store: Store, secret: string): Server {
 
 export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): Server {
   const { config, store } = jarvis;
-  const { monitor, brain, registry, toolContext, internalToken } = extras;
+  const { monitor, brain, registry, toolContext, internalToken, desk } = extras;
 
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -159,6 +164,12 @@ export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): S
           registry && toolContext && internalToken && isLoopback(req) && safeEqual(req.headers.authorization ?? "", `Bearer ${internalToken}`);
         if (!ok) return send(res, 403, { error: "forbidden" });
         return await internalRoute(req, res, url, registry, toolContext);
+      }
+
+      // The Desk authenticates with its device key (src/desk/auth.ts), never the dashboard password.
+      if (url.pathname.startsWith("/api/desk/")) {
+        if (!desk) return send(res, 404, { error: "Desk API not enabled" });
+        return await desk.router.handle(req, res, url, desk.ctx, readJson);
       }
 
       // Reports authenticate with their own secret, so a cloud session never needs the dashboard password.
@@ -176,6 +187,22 @@ export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): S
 
       if (req.method === "GET" && url.pathname === "/api/system") {
         return send(res, 200, monitor ? monitor.stats() : null);
+      }
+
+      // Pairing JARVIS Desk Macs (dashboard-password protected like the rest of the dashboard).
+      if (url.pathname === "/api/desk-devices" || url.pathname.startsWith("/api/desk-devices/")) {
+        if (!desk) return send(res, 404, { error: "Desk API not enabled" });
+        if (req.method === "GET" && url.pathname === "/api/desk-devices") return send(res, 200, { devices: desk.ctx.devices.list() });
+        if (req.method === "POST" && url.pathname === "/api/desk-devices") {
+          const body = await readJson(req);
+          return send(res, 201, await desk.ctx.devices.pair(String(body.name ?? "")));
+        }
+        const revoke = /^\/api\/desk-devices\/([^/]+)\/revoke$/.exec(url.pathname);
+        if (req.method === "POST" && revoke) {
+          const ok = await desk.ctx.devices.revoke(decodeURIComponent(revoke[1]));
+          return send(res, ok ? 200 : 404, ok ? { ok } : { error: "no such device" });
+        }
+        return send(res, 404, { error: "not found" });
       }
 
       if (req.method === "GET" && url.pathname === "/api/state") {
