@@ -21,6 +21,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       desk_native: ${{ steps.filter.outputs.desk_native }}
+      desk_ui: ${{ steps.filter.outputs.desk_ui }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -31,6 +32,12 @@ jobs:
               - "**"
               - "!docs/**"
               - "!**/*.md"
+            desk_ui:
+              - "desk/renderer/**"
+              - "desk/e2e/**"
+              - "desk/playwright.config.ts"
+              - "desk/vite.config.ts"
+              - "shared/**"
             desk_native:
               - "desk/main/**"
               - "desk/preload/**"
@@ -67,6 +74,51 @@ jobs:
       - run: npm run -w @jarvis/desk test
       - run: npm run -w @jarvis/desk build
 
+  # The Desk UI in Chromium against the web build + mock scenarios (desk/e2e/web), in Playwright's
+  # own image so browsers and fonts match the visual baselines.
+  desk-e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/playwright:v1.64.1-noble
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm ci
+      - run: npx playwright test --project=web-desktop --shard=${{ matrix.shard }}/2 --pass-with-no-tests
+        working-directory: desk
+        env: { HOME: /root }
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desk-e2e-report-${{ matrix.shard }}
+          path: desk/playwright-report
+          retention-days: 7
+
+  # Visual snapshots (0.2% tolerance) when the UI changes, and on main.
+  desk-visual:
+    needs: changes
+    if: needs.changes.outputs.desk_ui == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/playwright:v1.64.1-noble
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - run: npm ci
+      - run: npx playwright test --project=web-desktop
+        working-directory: desk
+        env: { HOME: /root, VISUAL: "1" }
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desk-visual-diff
+          path: desk/test-results
+          retention-days: 7
+
   desk-mac:
     needs: changes
     if: needs.changes.outputs.desk_native == 'true' || github.event_name == 'push'
@@ -74,6 +126,8 @@ jobs:
     timeout-minutes: 15
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      # The Electron smoke test needs the real binary here.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: ""
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -90,6 +144,16 @@ jobs:
         with:
           name: JARVIS-Desk-${{ github.sha }}-arm64
           path: desk/release/*.dmg
+          retention-days: 14
+      - name: Electron smoke test (demo-day scenario, idle RSS/CPU in the summary)
+        working-directory: desk
+        run: npx playwright test --project=electron
+      - name: Upload the smoke screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-smoke-${{ github.sha }}
+          path: desk/test-results
           retention-days: 14
       - name: Summary
         run: |

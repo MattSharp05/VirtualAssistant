@@ -27,6 +27,7 @@ Full design: `docs/TDD.md` + ADRs in `docs/decisions/`.
 - `npm test` — server typecheck + unit tests (fake claude binary, no network)
 - `npm run build` — compile the server to `dist/`
 - `docker compose up -d --build` — run the server locally
+- `npm -w desk run e2e` — Playwright on the web build (in a cloud session add `PW_CHROMIUM_PATH=/opt/pw-browsers/chromium`); `VISUAL=1` adds snapshots, whose baselines come from the `mcr.microsoft.com/playwright:v1.64.1-noble` image (`--update-snapshots` inside it)
 - Desk commands are added by JD Foundations tickets (`npm -w desk run …`); in cloud sessions install with `ELECTRON_SKIP_BINARY_DOWNLOAD=1` (GitHub release downloads are blocked there; Electron runs only on CI's macOS runner).
 
 ## Structure

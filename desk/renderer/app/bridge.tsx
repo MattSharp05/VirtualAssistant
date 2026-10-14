@@ -2,7 +2,7 @@
 // scenario (?scenario=<name> in the web preview; demo-day when a browser has no bridge at all).
 import { createContext, useContext, type ReactNode } from "react";
 import type { DeskBridge } from "@jarvis/shared";
-import { createMockBridge } from "../mock/bridge";
+import { createMockBridge, type MockBridge } from "../mock/bridge";
 import { findScenario, scenarios } from "../mock/scenarios";
 
 export interface BridgeChoice {
@@ -15,12 +15,14 @@ export function chooseBridge(search: string, native: DeskBridge | undefined): Br
   const wanted = new URLSearchParams(search).get("scenario");
   if (!wanted && native?.subscribe) return { bridge: native };
   const name = wanted ?? "demo-day";
-  const scenario = findScenario(name);
-  if (!scenario) {
+  let scenario = findScenario(name);
+  if (!scenario)
     console.warn(`Unknown scenario "${name}". Known: ${scenarios.map((s) => s.name).join(", ")}`);
-    return { bridge: createMockBridge(findScenario("empty")!), scenario: "empty" };
-  }
-  return { bridge: createMockBridge(scenario), scenario: name };
+  scenario ??= findScenario("empty")!;
+  const bridge = createMockBridge(scenario);
+  // e2e (desk/e2e/helpers.ts) waits on this until the scenario's timeline has played out.
+  (globalThis as { __deskMock?: MockBridge }).__deskMock = bridge;
+  return { bridge, scenario: scenario.name };
 }
 
 const BridgeContext = createContext<BridgeChoice | undefined>(undefined);

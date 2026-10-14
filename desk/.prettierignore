@@ -4,3 +4,5 @@ renderer/dist
 node_modules
 release
 renderer/dist-web
+test-results
+playwright-report
