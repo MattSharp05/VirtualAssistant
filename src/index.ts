@@ -25,10 +25,14 @@ const brain = new Brain(
     defaultModel: config.brainModel,
     internalUrl: `http://127.0.0.1:${config.dashboardPort}`,
     internalToken,
+    connectors: config.brainConnectors,
   },
   jarvis.store,
 );
-console.log(`brain: ${brain.model}${config.notionToken ? ", Notion connected" : ", no Notion (NOTION_TOKEN unset)"}`);
+console.log(
+  `brain: ${brain.model}${config.notionToken ? ", Notion connected" : ", no Notion (NOTION_TOKEN unset)"}` +
+    `, claude.ai connectors: ${config.brainConnectors.join(", ") || "none"}`,
+);
 
 const dashboard = createDashboard(jarvis, { monitor, brain, tools, internalToken });
 dashboard.listen(config.dashboardPort, () => {

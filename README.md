@@ -214,7 +214,8 @@ stops JARVIS tracking a session; the session itself keeps running.
 Nothing to set up for the chat itself: it uses the same Claude login as follow-ups (B4). Type in
 **Talk to JARVIS** on the dashboard, or send plain text to the bot.
 
-- **What it can do without asking:** read and summarise (reports, session history, Notion), send
+- **What it can do without asking:** read and summarise (reports, session history, Notion,
+  Calendar, Gmail), send
   a message to a session, start a new session. It can't run commands or touch files in the
   container: its only tools are JARVIS's own.
 - **Model:** the dropdown on the dashboard or `/model` in Telegram. The choices come from
@@ -237,6 +238,16 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 5. `docker compose up -d`. The dashboard's **Notion** chip turns green with the number of pages it can see
    (`/status` in Telegram says the same). "token rejected" means a wrong secret; "0 pages" means
    nothing is shared with it yet.
+
+**Google Calendar and Gmail (read-only), through your claude.ai connectors:**
+1. On claude.ai: click your name (bottom left) → **Settings** → **Connectors**. Click **Connect**
+   on **Google Calendar** and on **Gmail**, then sign in with Google and click **Allow**.
+2. Check the container sees them: `docker compose exec jarvis claude mcp list` should show both
+   as `✔ Connected`.
+3. That's it. Ask "what's on today?" or "anything important in my inbox?". JARVIS can only use
+   the reading tools: sending, replying, trashing, labelling and creating or changing events
+   are blocked (`CONNECTORS` in `src/brain.ts`). `BRAIN_CONNECTORS` in `.env` picks which
+   connectors it uses (default `Google Calendar,Gmail`; `none` turns them off).
 
 ## Metrics
 
