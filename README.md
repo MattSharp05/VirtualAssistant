@@ -308,7 +308,7 @@ Anthropic changes it, the tiles say "not available" and nothing else breaks.
 JARVIS Desk is the Mac app: an orb on top of your screen that listens and speaks, plus windows for
 chat, sessions, today, calendar, to-dos and Notion. Install it from the
 [Releases page](https://github.com/MattSharp05/VirtualAssistant/releases): see
-[docs/desk-install.md](docs/desk-install.md). To publish a new version: push a tag `desk-vX.Y.Z`.
+[docs/desk-install.md](docs/desk-install.md). To publish a new version: push a tag `desk-vX.Y.Z`, or run **Actions → Release JARVIS Desk → Run workflow** with a version.
 
 ## Development
 

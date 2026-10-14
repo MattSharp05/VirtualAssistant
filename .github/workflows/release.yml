@@ -1,10 +1,17 @@
-# Releases JARVIS Desk (ADR 0010): push a tag desk-vX.Y.Z and this builds the ad-hoc-signed arm64
-# .dmg on a macOS runner and publishes it as a GitHub Release. The repo is public, so no token setup.
+# Releases JARVIS Desk (ADR 0010): push a tag desk-vX.Y.Z, or run this workflow by hand with a version
+# (Actions → Release JARVIS Desk → Run workflow), and it builds the ad-hoc-signed arm64 .dmg on a macOS
+# runner and publishes it as a GitHub Release (creating the tag when run by hand). The repo is public,
+# so no token setup.
 name: Release JARVIS Desk
 
 on:
   push:
     tags: ["desk-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. 0.1.0 (creates the tag desk-v<version>)"
+        required: true
 
 permissions:
   contents: write
@@ -22,9 +29,12 @@ jobs:
       - run: npm ci
       - name: Version from the tag
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#desk-v}"
+          VERSION="${INPUT_VERSION:-${GITHUB_REF_NAME#desk-v}}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=desk-v$VERSION" >> "$GITHUB_OUTPUT"
           cd desk && npm version --no-git-tag-version "$VERSION" >/dev/null
       - name: Build the .dmg
         working-directory: desk
@@ -33,7 +43,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" desk/release/*.dmg \
+          gh release create "${{ steps.version.outputs.tag }}" desk/release/*.dmg \
+            --target "$GITHUB_SHA" \
             --title "JARVIS Desk ${{ steps.version.outputs.version }}" \
             --generate-notes \
             --notes "Install: download the .dmg, drag JARVIS Desk to Applications, then right-click it → Open the first time. Full guide: docs/desk-install.md"
