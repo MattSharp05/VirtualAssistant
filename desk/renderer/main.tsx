@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { DeskBridge } from "@jarvis/shared";
 import { App } from "./app/App";
 import { BridgeProvider, chooseBridge } from "./app/bridge";
+import "./app/fonts";
 import "./app/theme.css";
 
 const native = (window as unknown as { desk?: DeskBridge }).desk;

@@ -8,6 +8,8 @@ const WORD_MS = 60;
 export interface MockBridge extends DeskBridge {
   /** Stops pending timers (tests, scenario switches). */
   close(): void;
+  /** Events and chat chunks still waiting to be replayed (e2e waits for 0). */
+  pending(): number;
 }
 
 export function createMockBridge(scenario: Scenario): MockBridge {
@@ -84,6 +86,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
       get: async <T>(key: string) => settings.get(key) as T | undefined,
       set: async (key, value) => void settings.set(key, value),
     },
+    pending: () => timers.size,
     close() {
       for (const t of timers) clearTimeout(t);
       timers.clear();
