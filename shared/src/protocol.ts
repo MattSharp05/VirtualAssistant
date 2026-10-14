@@ -43,6 +43,10 @@ export type DeskEvent =
   /** A card next to the orb (JD-8, rendered by JD-27). */
   | { type: "card.show"; card: ScreenCard }
   | { type: "card.dismiss"; id: string }
+  /** Timers and reminders (JD-10). */
+  | { type: "timer.started"; id: string; endsAt: string; label?: string }
+  | { type: "timer.done"; id: string; label?: string }
+  | { type: "reminder.due"; id: string; text: string; late: boolean }
   /** The server asks the Mac for something (a file, the clipboard…); the Desk answers with POST /api/desk/rpc/:id. */
   | { type: "rpc"; id: string; kind: string; payload: unknown };
 

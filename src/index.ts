@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto";
 import { PROTOCOL_VERSION } from "@jarvis/shared";
 import { Brain } from "./brain/index.js";
 import { createBot } from "./bot.js";
-import { notifier } from "./notify.js";
+import { notifier, notify } from "./notify.js";
+import { Scheduler, useScheduler } from "./scheduler.js";
 import { DeviceStore } from "./desk/auth.js";
 import { DeskRpc } from "./desk/rpc.js";
 import { DeskRouter, type DeskContext } from "./desk/routes/index.js";
@@ -18,6 +19,10 @@ import { createDashboard, createReportsServer } from "./web.js";
 
 const config = loadConfig();
 const jarvis = new Jarvis(config, new Store(config.dataDir));
+
+// Timers and reminders (started below, once Telegram is attached, so missed ones reach the phone).
+const scheduler = new Scheduler(config.dataDir, { bus, notify });
+useScheduler(jarvis, scheduler);
 
 const monitor = new SystemMonitor();
 monitor.start();
@@ -66,10 +71,13 @@ if (bot && chatId !== undefined) {
     await bot.api.sendMessage(chatId, text);
   });
 }
+// Fires anything that came due while JARVIS was down (marked late), then ticks every second.
+scheduler.start();
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     monitor.stop();
+    scheduler.stop();
     brain.stop();
     deskCtx.hub.close();
     dashboard.close();

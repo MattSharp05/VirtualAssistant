@@ -30,7 +30,15 @@ export const BASE_PROMPT = `You are JARVIS, Matthew's personal assistant. You ru
 
 What you manage: Matthew builds software with Claude Code cloud sessions. Each project has an orchestrator session (named by ticket prefix, e.g. "mk" for Mario Kart) that runs builder sessions and reports progress; tickets, PRDs and docs live in Notion.`;
 
-const ANSWER_STYLE = `How to answer: short and plain, for a phone screen. Lead with the answer. No headings, minimal lists, no filler. Times in his messages are UTC.`;
+const ANSWER_STYLE = `How to answer: short and plain, for a phone screen. Lead with the answer. No headings, minimal lists, no filler. Each message starts with the date and time in his time zone; use it for "today", "Friday", "in an hour".`;
+
+/** "[Tue 14 Oct 2026 23:20 Europe/London (UTC+01:00), via telegram]": the brain's clock, in Matthew's zone. */
+export function stamp(at: Date, channel: string, timeZone = process.env.TZ || "UTC"): string {
+  const parts = new Intl.DateTimeFormat("en-GB", { timeZone, weekday: "short", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "longOffset" }).formatToParts(at);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const offset = get("timeZoneName").replace("GMT", "UTC") || "UTC";
+  return `[${get("weekday")} ${get("day")} ${get("month")} ${get("year")} ${get("hour")}:${get("minute")} ${timeZone} (${offset === "UTC" ? "UTC+00:00" : offset}), via ${channel}]`;
+}
 
 /** The full system prompt: base, every tool group's hints, any longer context, the answer style. */
 export function systemPrompt(setup: Pick<BrainSetup, "hints" | "parts">): string {
@@ -181,7 +189,7 @@ export class Brain {
     this.store.addBrainMessage({ at: sentAt.toISOString(), from: "you", channel, text });
     this.publish({ type: "brain.start", messageId, channel, text });
     this.publish({ type: "orb.state", state: "thinking" });
-    const stamped = `[${sentAt.toISOString().slice(0, 16).replace("T", " ")} UTC, via ${channel}] ${text}`;
+    const stamped = `${stamp(sentAt, channel)} ${text}`;
     const onDelta = (chunk: string) => {
       options.onDelta?.(chunk);
       this.publish({ type: "brain.delta", messageId, text: chunk });
