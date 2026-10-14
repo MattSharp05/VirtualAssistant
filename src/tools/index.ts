@@ -23,6 +23,8 @@ export interface BrainSetup {
   builtinTools?: string[];
   /** Permission allow rules for them. */
   allowRules?: string[];
+  /** Only these JARVIS tools (by name) instead of all of them (the worker brain). */
+  jarvisTools?: string[];
 }
 
 export interface ToolInfo {

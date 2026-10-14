@@ -226,6 +226,10 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 - **Streaming:** replies appear as they're written: on Telegram the message shows after the first
   sentence and grows (the metrics line is added at the end); on the dashboard the bubble grows. One
   chat process stays running between messages (`BRAIN_WARM=0` turns that off).
+- **Today digest (for the Desk):** every 30 minutes from 07:00 to 22:00 a separate background
+  conversation (the "worker", `WORKER_MODEL`, default haiku) reads today's calendar, unread mail
+  worth reading and Slack mentions, and JARVIS adds tasks due and sessions waiting on you. It never
+  writes anything and pauses when the plan's 5-hour window is 90% used.
 - **Files:** send JARVIS a PDF, text file or photo on Telegram (caption = what you want, e.g.
   "summarise this"). It's kept for 7 days in `data/uploads`; JARVIS can read those files and
   nothing else on disk.

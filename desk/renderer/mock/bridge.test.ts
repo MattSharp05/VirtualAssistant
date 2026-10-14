@@ -83,7 +83,9 @@ describe("scenarios", () => {
 
   it("demo-day is composed from every mock/data file", () => {
     const demo = findScenario("demo-day")!;
-    expect(Object.keys(demo.data).sort()).toEqual(["/calendar/today", "/inbox", "/sessions", "/tasks"]);
+    expect(Object.keys(demo.data)).toEqual(
+      expect.arrayContaining(["/calendar/today", "/inbox", "/sessions", "/tasks", "/today"]),
+    );
     expect(demo.events.length).toBeGreaterThan(0);
   });
 });

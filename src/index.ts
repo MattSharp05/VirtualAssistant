@@ -8,6 +8,8 @@ import { ReportWatcher, useReportWatcher } from "./notifyRules.js";
 import { memory } from "./tools/memory.js";
 import { CalendarLog, useCalendarLog } from "./calendarLog.js";
 import { UploadStore } from "./uploads.js";
+import { createWorker } from "./brain/worker.js";
+import { discoverJobs, JobRunner, useJobRunner } from "./jobs/index.js";
 import { MEMORY_POLL_MS } from "./memory.js";
 import { DeviceStore } from "./desk/auth.js";
 import { DeskRpc } from "./desk/rpc.js";
@@ -86,6 +88,24 @@ scheduler.start();
 const reportWatcher = new ReportWatcher(jarvis.store, bus, notifier, () => jarvis.status().then((st) => st.usage));
 useReportWatcher(jarvis, reportWatcher);
 reportWatcher.start();
+// The worker brain runs background jobs (Today digest…) in its own conversation (ADR 0007).
+const worker = createWorker(
+  {
+    claudeBin: config.claudeBin,
+    dataDir: config.dataDir,
+    models: config.brainModels,
+    defaultModel: config.brainModel,
+    model: process.env.WORKER_MODEL || undefined,
+    internalUrl: `http://127.0.0.1:${config.dashboardPort}`,
+    internalToken,
+  },
+  toolContext,
+  () => jobRunner.submitToolNames,
+);
+const jobRunner = new JobRunner(await discoverJobs(), worker, toolContext, { dataDir: config.dataDir, bus, usage: () => jarvis.status().then((st) => st.usage) });
+useJobRunner(jarvis, jobRunner);
+scheduler.every("jobs", 60_000, () => void jobRunner.tick());
+
 // Uploaded files are kept for 7 days.
 const uploads = new UploadStore(config.dataDir);
 uploads.cleanup();

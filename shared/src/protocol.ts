@@ -13,7 +13,7 @@ export type NoticeLevel = "info" | "warn" | "alert";
 export type Mood = "green" | "amber" | "red";
 
 /** Where a message to the brain came from. */
-export type BrainChannel = "dashboard" | "telegram" | "desk-voice" | "desk-typed";
+export type BrainChannel = "dashboard" | "telegram" | "desk-voice" | "desk-typed" | "worker";
 
 /** Per-reply measurements for the brain, the same kind sessions report. */
 export interface BrainMetrics {
@@ -47,6 +47,8 @@ export type DeskEvent =
   | { type: "tasks.changed" }
   /** JARVIS changed Matthew's calendar (JD-14); the Calendar window's "Changed by JARVIS" log. */
   | { type: "calendar.changed"; entry: CalendarChange }
+  /** A fresh Today digest is ready (JD-17); GET /api/desk/today. */
+  | { type: "today.updated"; generatedAt: string }
   /** The JARVIS Memory page changed (JARVIS wrote to it, or Matthew edited it in Notion). */
   | { type: "memory.changed" }
   /** A card next to the orb (JD-8, rendered by JD-27). */
@@ -176,6 +178,63 @@ export interface MoodResponse {
 export interface DndState {
   on: boolean;
   until?: string;
+}
+
+// ── Today digest (JD-17; made by the worker brain from Calendar, Gmail, Slack, tasks and reports) ──
+
+export interface DigestEvent {
+  start: string;
+  end: string;
+  title: string;
+  location?: string;
+  link?: string;
+  calendar: string;
+}
+
+export interface DigestMail {
+  from: string;
+  subject: string;
+  /** Why it's worth reading, in one line. */
+  line: string;
+  receivedAt: string;
+  link?: string;
+}
+
+export interface DigestSlack {
+  who: string;
+  where: string;
+  line: string;
+  at: string;
+  link?: string;
+}
+
+export interface DigestSession {
+  job: string;
+  status: "blocked" | "decision";
+  line: string;
+  at: string;
+  link?: string;
+}
+
+export interface Digest {
+  generatedAt: string;
+  events: DigestEvent[];
+  /** Only mail worth reading (max 6). */
+  inbox: DigestMail[];
+  /** Unread mail left out. */
+  skippedCount: number;
+  /** Mentions and DMs (max 6). */
+  slack: DigestSlack[];
+  tasksDue: TaskItem[];
+  sessionsWaiting: DigestSession[];
+}
+
+/** GET /api/desk/today */
+export interface TodayResponse {
+  digest?: Digest;
+  ageSeconds?: number;
+  running: boolean;
+  lastError?: string;
 }
 
 /** A paired Mac, as the dashboard lists it (never includes the key). */
