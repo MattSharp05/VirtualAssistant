@@ -1,10 +1,10 @@
-// What each brain tool does, as text the model can read. Served on the internal API
-// (/internal/*) and called by the MCP server (mcp.ts) that the brain's CLI process runs.
+// The implementations behind the sessions and Notion tool groups (sessions.ts, notion.ts):
+// what each tool does, as text the model can read.
 
-import { sessionActivity } from "./activity.js";
-import { JarvisError, type Jarvis } from "./jarvis.js";
-import { Notion } from "./notion.js";
-import { parseSessionId, type Job } from "./store.js";
+import { sessionActivity } from "../activity.js";
+import { JarvisError, type Jarvis } from "../jarvis.js";
+import { Notion } from "../notion.js";
+import { parseSessionId, type Job } from "../store.js";
 
 function ago(iso?: string): string {
   if (!iso) return "?";
@@ -15,7 +15,7 @@ function ago(iso?: string): string {
   return `${Math.floor(mins / 1440)}d ago`;
 }
 
-export class Tools {
+export class CoreTools {
   private readonly notion?: Notion;
 
   constructor(
