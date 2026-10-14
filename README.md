@@ -226,6 +226,9 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 - **Streaming:** replies appear as they're written: on Telegram the message shows after the first
   sentence and grows (the metrics line is added at the end); on the dashboard the bubble grows. One
   chat process stays running between messages (`BRAIN_WARM=0` turns that off).
+- **Calendar changes:** "add a call with Sam tomorrow at 3", "move it to 4", "decline the 5pm".
+  JARVIS does it straight away (no confirm tap), says what it did in one line, and logs it;
+  "undo that" reverses the last change.
 - **Memory:** "remember my sister is called Emma" adds a bullet to your **JARVIS Memory** page in
   Notion (made by `setup:notion`). JARVIS reads that page at the start of each conversation, and
   notices your own edits there within 10 minutes. It never stores passwords or keys.
@@ -254,7 +257,7 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
    It adds **JARVIS Tasks** (a database) and **JARVIS Memory** (a page) under it, once; running it
    again changes nothing. Then try "remind me to renew my passport on Friday".
 
-**Google Calendar, Gmail and Slack (read-only), through your claude.ai connectors:**
+**Google Calendar, Gmail and Slack, through your claude.ai connectors** (Gmail and Slack are read-only; the calendar JARVIS can change):
 1. On claude.ai: click your name (bottom left) → **Settings** → **Connectors**. Click **Connect**
    on **Google Calendar**, **Gmail** and **Slack**, then sign in and click **Allow**.
 2. Check the container sees them: `docker compose exec jarvis claude mcp list` should show them

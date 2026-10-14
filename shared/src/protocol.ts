@@ -45,6 +45,8 @@ export type DeskEvent =
   | { type: "brain.error"; messageId: string; error: string }
   /** JARVIS Tasks changed (added, completed, edited); windows re-fetch /tasks. */
   | { type: "tasks.changed" }
+  /** JARVIS changed Matthew's calendar (JD-14); the Calendar window's "Changed by JARVIS" log. */
+  | { type: "calendar.changed"; entry: CalendarChange }
   /** The JARVIS Memory page changed (JARVIS wrote to it, or Matthew edited it in Notion). */
   | { type: "memory.changed" }
   /** A card next to the orb (JD-8, rendered by JD-27). */
@@ -66,6 +68,24 @@ export interface ScreenCard {
   kind: "text" | "list" | "agenda" | "session";
   items?: { label: string; detail?: string }[];
   link?: { label: string; url: string };
+}
+
+/** One calendar write JARVIS made, with what the event looked like before (for undo). */
+export interface CalendarChange {
+  id: string;
+  at: string;
+  /** create_event, update_event, delete_event or respond_to_event. */
+  tool: string;
+  input: unknown;
+  /** The tool's answer (the event after the change, or a confirmation). */
+  result: string;
+  /** get_event's answer for the same event earlier in that turn (update/delete). */
+  before?: string;
+  /** One line for the log, e.g. "update_event: Booking call → 2026-10-17T14:00:00". */
+  summary: string;
+  undoneAt?: string;
+  /** Set on the change that undid another. */
+  undoOf?: string;
 }
 
 /** One event on the live stream, numbered so a reconnecting Desk can catch up (Last-Event-ID). */

@@ -1,17 +1,19 @@
 // claude.ai connectors (Google Calendar, Gmail, Slack). They aren't JARVIS's own tools: the CLI loads
 // them from Matthew's claude.ai account. This group only decides which of their tools the brain may
-// call (read-only for now; writes are blocked) and tells the brain how to use them.
+// call and tells the brain how to use them. Calendar writes are allowed without a confirm tap (ADR
+// 0008; logged with undo in src/calendarLog.ts); Gmail and Slack writes stay blocked.
 import type { ToolGroup } from "./types.js";
 
 /**
- * claude.ai connectors the brain can use, by the name claude.ai shows: the tools it may call (all
- * read-only) and the write tools that stay blocked. In the CLI, "Google Calendar" becomes the
- * server claude_ai_Google_Calendar.
+ * claude.ai connectors the brain can use, by the name claude.ai shows: the read tools it may call,
+ * the write tools it may call (calendar only), and the write tools that stay blocked. In the CLI,
+ * "Google Calendar" becomes the server claude_ai_Google_Calendar.
  */
-export const CONNECTORS: Record<string, { read: string[]; blocked: string[] }> = {
+export const CONNECTORS: Record<string, { read: string[]; write?: string[]; blocked: string[] }> = {
   "Google Calendar": {
     read: ["list_calendars", "list_events", "get_event", "search_events", "suggest_time"],
-    blocked: ["create_event", "update_event", "delete_event", "respond_to_event"],
+    write: ["create_event", "update_event", "delete_event", "respond_to_event"],
+    blocked: [],
   },
   Gmail: {
     read: ["search_threads", "get_thread", "get_message", "list_labels", "list_drafts", "get_draft"],
@@ -39,7 +41,10 @@ export const CONNECTORS: Record<string, { read: string[]; blocked: string[] }> =
   },
 };
 
-const serverName = (connector: string) => `mcp__claude_ai_${connector.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+export const serverName = (connector: string) => `mcp__claude_ai_${connector.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+
+/** The calendar write tools as the CLI names them (calendarLog.ts watches these). */
+export const CALENDAR_WRITES = (CONNECTORS["Google Calendar"].write ?? []).map((t) => `${serverName("Google Calendar")}__${t}`);
 
 /** --allowedTools / --disallowedTools entries for the chosen connectors (unknown names are skipped). */
 export function connectorTools(names: string[]): { allowed: string[]; blocked: string[] } {
@@ -48,7 +53,7 @@ export function connectorTools(names: string[]): { allowed: string[]; blocked: s
   for (const name of names) {
     const key = Object.keys(CONNECTORS).find((k) => k.toLowerCase() === name.toLowerCase());
     if (!key) continue;
-    allowed.push(...CONNECTORS[key].read.map((t) => `${serverName(key)}__${t}`));
+    allowed.push(...[...CONNECTORS[key].read, ...(CONNECTORS[key].write ?? [])].map((t) => `${serverName(key)}__${t}`));
     blocked.push(...CONNECTORS[key].blocked.map((t) => `${serverName(key)}__${t}`));
   }
   return { allowed, blocked };
@@ -58,7 +63,8 @@ const group: ToolGroup = {
   name: "connectors",
   tools: [],
   promptHint: [
-    "- If you have Google Calendar and Gmail tools, they are read-only. \"What's on today/this week\" → list_events for that range. Email → search_threads with Gmail search syntax (e.g. \"is:unread newer_than:1d\", \"from:alex\"), then get_thread for the ones that matter. Summarise; don't paste whole emails. Give event times in the calendar's own time zone.",
+    "- Calendar: \"What's on today/this week\" → list_events for that range. You may create, move, edit, delete and RSVP to events without asking first: before update_event or delete_event, call get_event for that event (so it can be undone); only add guests Matthew names; leave time zones to the calendar (no UTC offset unless he gives one). After a change, say it in one line (\"Moved Booking call to Fri 14:00\"). \"Undo that\" → undo_calendar_change, then do what it says.",
+    "- Gmail is read-only. Email → search_threads with Gmail search syntax (e.g. \"is:unread newer_than:1d\", \"from:alex\"), then get_thread for the ones that matter. Summarise; don't paste whole emails.",
     "- If you have Slack tools, they are read-only too. \"What did I miss / anything on Slack\" → slack_search_public_and_private (e.g. \"to:me after:yesterday\", \"in:#channel\") or slack_read_channel, then slack_read_thread for threads that matter. Say who said what, briefly.",
   ].join("\n"),
   cli: (ctx) => {
