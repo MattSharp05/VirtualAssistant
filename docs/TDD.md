@@ -1,5 +1,5 @@
 # Technical Design — JARVIS Desk
-Status: Draft · PRD: https://app.notion.com/p/3f924983f3ca810daa8ac980d7d4fab7 · Mockups: https://claude.ai/artifact/CdmCZuqgXrtboVyw2MbcR4
+Status: Approved (2026-10-14) · PRD: https://app.notion.com/p/3f924983f3ca810daa8ac980d7d4fab7 · Mockups: https://claude.ai/artifact/CdmCZuqgXrtboVyw2MbcR4
 
 Two halves that ship together:
 - **JARVIS server** (exists, `src/`): Node 22 + TypeScript in Docker. Gains a streaming brain, memory, tasks, a Desk API and background jobs.
