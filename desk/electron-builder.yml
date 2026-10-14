@@ -1,0 +1,25 @@
+# JARVIS Desk packaging (ADR 0010): an ad-hoc-signed arm64 .dmg, no Apple developer account.
+appId: ai.jarvis.desk
+productName: JARVIS Desk
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist-electron/**
+  - renderer/dist/**
+  - package.json
+asar: true
+mac:
+  target:
+    - target: dmg
+      arch: arm64
+  category: public.app-category.productivity
+  # "-" = ad-hoc signature: required for arm64 apps to launch; Gatekeeper still asks once (right-click → Open).
+  identity: "-"
+  hardenedRuntime: false
+  extendInfo:
+    LSUIElement: true
+    NSMicrophoneUsageDescription: JARVIS listens when you say "Jarvis" or double-tap the right Option key.
+    NSCameraUsageDescription: JARVIS uses the camera only when Camera hands is on, to track your hands.
+dmg:
+  artifactName: JARVIS-Desk-${version}-${arch}.${ext}

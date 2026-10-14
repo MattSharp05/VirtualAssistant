@@ -2,3 +2,4 @@ dist
 dist-electron
 renderer/dist
 node_modules
+release

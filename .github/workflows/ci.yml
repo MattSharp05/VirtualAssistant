@@ -1,0 +1,98 @@
+# Two levels (docs/TDD.md → Testing strategy): a fast PR gate (every job ≤ 5 min) and the full
+# suite on main. The macOS .dmg build runs on PRs only when the Desk's native code changes.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Electron is only needed on the macOS job; everywhere else skip the ~100 MB binary.
+  ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      desk_native: ${{ steps.filter.outputs.desk_native }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - "**"
+              - "!docs/**"
+              - "!**/*.md"
+            desk_native:
+              - "desk/main/**"
+              - "desk/preload/**"
+              - "desk/package.json"
+              - "desk/electron-builder.yml"
+              - "desk/build/**"
+              - "package-lock.json"
+              - ".github/workflows/ci.yml"
+
+  server:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+
+  desk-check:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run -w @jarvis/desk lint
+      - run: npm run -w @jarvis/desk typecheck
+      - run: npm run -w @jarvis/desk test
+      - run: npm run -w @jarvis/desk build
+
+  desk-mac:
+    needs: changes
+    if: needs.changes.outputs.desk_native == 'true' || github.event_name == 'push'
+    runs-on: macos-14
+    timeout-minutes: 15
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Build the .dmg
+        working-directory: desk
+        run: |
+          npm version --no-git-tag-version "0.0.0-ci.${GITHUB_RUN_NUMBER}" >/dev/null
+          npm run dist:mac
+      - name: Upload the .dmg
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: JARVIS-Desk-${{ github.sha }}-arm64
+          path: desk/release/*.dmg
+          retention-days: 14
+      - name: Summary
+        run: |
+          echo "### JARVIS Desk .dmg" >> "$GITHUB_STEP_SUMMARY"
+          echo "Download: ${{ steps.upload.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "First launch: right-click the app → Open (it isn't notarised)." >> "$GITHUB_STEP_SUMMARY"
