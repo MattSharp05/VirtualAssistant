@@ -1,0 +1,17 @@
+{
+  "name": "@jarvis/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Types and constants shared by the JARVIS server and JARVIS Desk",
+  "exports": {
+    ".": {
+      "types": "./src/protocol.ts",
+      "default": "./dist/protocol.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

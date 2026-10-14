@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { PROTOCOL_VERSION } from "@jarvis/shared";
 import { Brain } from "./brain.js";
 import { createBot } from "./bot.js";
 import { authStatus } from "./cloud.js";
@@ -36,7 +37,7 @@ console.log(
 
 const dashboard = createDashboard(jarvis, { monitor, brain, tools, internalToken });
 dashboard.listen(config.dashboardPort, () => {
-  console.log(`dashboard on port ${config.dashboardPort}${config.dashboardPassword ? " (password protected)" : ""}`);
+  console.log(`dashboard on port ${config.dashboardPort} (Desk protocol v${PROTOCOL_VERSION})${config.dashboardPassword ? " (password protected)" : ""}`);
 });
 
 const reports = config.reportSecret ? createReportsServer(jarvis.store, config.reportSecret) : undefined;
