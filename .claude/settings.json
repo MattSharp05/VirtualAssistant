@@ -1,0 +1,33 @@
+{
+  "extraKnownMarketplaces": {
+    "claude-workflow": {
+      "source": {
+        "source": "github",
+        "repo": "MattSharp05/claude-workflow"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "workflow@claude-workflow": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git push)",
+      "Bash(git push:*)",
+      "Bash(git push *)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run watch:*)",
+      "mcp__Notion",
+      "mcp__96d91051-5e99-498c-9c78-8e4e620902d2",
+      "mcp__github",
+      "mcp__Claude_Code_Remote",
+      "mcp__claude-code-remote"
+    ]
+  }
+}
