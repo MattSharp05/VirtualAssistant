@@ -204,4 +204,11 @@ export interface DeskBridge {
     get<T = unknown>(key: string): Promise<T | undefined>;
     set(key: string, value: unknown): Promise<void>;
   };
+  /** The overlay window (JD-19): click-through except where the renderer says it's interactive. */
+  overlay?: {
+    /** True while the pointer is over the orb (or another interactive region): clicks land on JARVIS. */
+    setInteractive(on: boolean): void;
+    /** The orb was clicked (the launcher ring arrives in JD-20). */
+    orbClicked(): void;
+  };
 }

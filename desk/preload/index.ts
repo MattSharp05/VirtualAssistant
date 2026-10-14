@@ -17,6 +17,10 @@ const bridge: DeskBridge = {
     get: (key) => ipcRenderer.invoke("desk:settings-get", key),
     set: (key, value) => ipcRenderer.invoke("desk:settings-set", key, value),
   },
+  overlay: {
+    setInteractive: (on) => ipcRenderer.send("desk:hit", on),
+    orbClicked: () => ipcRenderer.send("desk:orb-click"),
+  },
 };
 
 contextBridge.exposeInMainWorld("desk", bridge);

@@ -10,6 +10,9 @@ export interface MockBridge extends DeskBridge {
   close(): void;
   /** Events and chat chunks still waiting to be replayed (e2e waits for 0). */
   pending(): number;
+  /** What the overlay last reported (click-through off while true) and how often the orb was clicked. */
+  readonly interactive: boolean;
+  readonly orbClicks: number;
 }
 
 export function createMockBridge(scenario: Scenario): MockBridge {
@@ -17,6 +20,8 @@ export function createMockBridge(scenario: Scenario): MockBridge {
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const settings = new Map<string, unknown>();
   let chats = 0;
+  let interactive = false;
+  let orbClicks = 0;
 
   const emit = (event: DeskEvent) => {
     for (const fn of listeners) fn(event);
@@ -87,6 +92,16 @@ export function createMockBridge(scenario: Scenario): MockBridge {
       set: async (key, value) => void settings.set(key, value),
     },
     pending: () => timers.size,
+    get interactive() {
+      return interactive;
+    },
+    get orbClicks() {
+      return orbClicks;
+    },
+    overlay: {
+      setInteractive: (on) => void (interactive = on),
+      orbClicked: () => void orbClicks++,
+    },
     close() {
       for (const t of timers) clearTimeout(t);
       timers.clear();
