@@ -1,0 +1,53 @@
+/* Design tokens from the JARVIS Desk mockups: dark glass, cyan orb, Space Grotesk + IBM Plex. */
+:root {
+  --bg: #11161c;
+  --bg-deep: #0e1318;
+  --glass: rgba(18, 25, 33, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --ink: #e8eef2;
+  --ink-2: #c9d3db;
+  --ink-3: #9aa7b2;
+  --accent: #5fd4e6;
+  --accent-ink: #7fe3f0;
+  --listen: #6eaaff;
+  --amber: #f2b24c;
+  --red: #f2685c;
+  --green: #5fd49a;
+  --radius: 16px;
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+.placeholder {
+  display: grid;
+  place-content: center;
+  height: 100%;
+  text-align: center;
+}
+
+.placeholder h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  margin: 0 0 8px;
+}
+
+.placeholder p {
+  color: var(--ink-3);
+  margin: 0;
+}

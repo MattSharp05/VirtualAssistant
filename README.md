@@ -305,9 +305,18 @@ Anthropic changes it, the tiles say "not available" and nothing else breaks.
 
 ## Development
 
+The repo is an npm workspace: the server at the root, `shared/` (types used by the server and the
+Desk app) and `desk/` (JARVIS Desk, the Electron app).
+
 ```bash
-npm install
-npm test        # typecheck + unit tests (fake claude binary and fake fetch, no network)
+npm install                      # in cloud sessions: ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm install
+npm test                         # server: typecheck + unit tests (fake claude binary, no network)
+npm run check                    # everything: server tests + desk lint, typecheck, tests, build
+npm run -w @jarvis/desk lint     # ESLint + Prettier for the Desk app (format: npm run -w @jarvis/desk format)
+npm run -w @jarvis/desk test     # Desk unit tests (Vitest)
+npm run -w @jarvis/desk build    # main + preload (esbuild) and renderer (Vite)
+npm run -w @jarvis/desk dev      # renderer in a browser with hot reload
+npm run -w @jarvis/desk start    # build and launch the app (needs the Electron binary, i.e. a Mac)
 ```
 
 Layout: `src/jarvis.ts` (what JARVIS can do), `src/web.ts` + `public/index.html` (dashboard),

@@ -3,11 +3,16 @@
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+# npm workspaces: install only the server (root) and the shared package; never the desk app,
+# which pulls in Electron and the UI toolchain.
 COPY package.json package-lock.json tsconfig.json ./
-RUN npm ci
+COPY shared/package.json ./shared/package.json
+COPY desk/package.json ./desk/package.json
+RUN npm ci --workspace=@jarvis/shared --include-workspace-root
+COPY shared ./shared
 COPY src ./src
 COPY test ./test
-RUN npm run build && npm prune --omit=dev
+RUN npm run build && npm prune --omit=dev --workspace=@jarvis/shared --include-workspace-root
 
 FROM node:22-bookworm-slim
 # Pin with --build-arg CLAUDE_CODE_VERSION=2.1.296 if an update ever breaks `--cloud`.
@@ -28,6 +33,8 @@ USER node
 WORKDIR /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist/src ./dist/src
+COPY --from=build --chown=node:node /app/shared/package.json ./shared/package.json
+COPY --from=build --chown=node:node /app/shared/dist ./shared/dist
 COPY --chown=node:node public ./public
 COPY --chown=node:node package.json ./
 VOLUME /data
