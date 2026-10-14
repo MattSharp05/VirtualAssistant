@@ -4,7 +4,7 @@ import { int, schema, str, type ToolGroup } from "./types.js";
 
 const group: ToolGroup = {
   name: "notion",
-  promptHint: "- Notion is read-only for you: search, read pages, list database rows.",
+  promptHint: "- Notion pages are read-only for you: search, read pages, list database rows (the to-do list has its own task tools).",
   tools: [
     {
       name: "notion_search",

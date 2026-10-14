@@ -38,6 +38,8 @@ export type DeskEvent =
   | { type: "brain.tool"; messageId: string; phase: "call" | "result"; name: string; input?: unknown; summary?: string; isError?: boolean }
   | { type: "brain.done"; messageId: string; text: string; metrics: BrainMetrics }
   | { type: "brain.error"; messageId: string; error: string }
+  /** JARVIS Tasks changed (added, completed, edited); windows re-fetch /tasks. */
+  | { type: "tasks.changed" }
   /** The server asks the Mac for something (a file, the clipboard…); the Desk answers with POST /api/desk/rpc/:id. */
   | { type: "rpc"; id: string; kind: string; payload: unknown };
 
@@ -71,6 +73,42 @@ export interface ChatRequest {
 }
 export interface ChatResponse {
   messageId: string;
+}
+
+// ── JARVIS Tasks (a Notion database Matthew can see and edit; ADR 0006) ──
+
+export type TaskStatus = "Suggested" | "Open" | "Done" | "Dismissed";
+export type TaskSource = "You" | "Slack" | "Email" | "Session" | "Notion QA";
+export type TaskPriority = "P1" | "P2" | "P3";
+
+export interface TaskItem {
+  id: string;
+  name: string;
+  status: TaskStatus;
+  /** YYYY-MM-DD (or an ISO date-time). */
+  due?: string;
+  project?: string;
+  priority?: TaskPriority;
+  source: TaskSource;
+  sourceLink?: string;
+  createdAt: string;
+  /** The row in Notion. */
+  url?: string;
+}
+
+/** GET /api/desk/tasks?view=… */
+export type TaskView = "today" | "upcoming" | "project" | "done" | "suggested";
+export interface TasksResponse {
+  view: TaskView;
+  tasks: TaskItem[];
+}
+
+/** POST /api/desk/tasks */
+export interface NewTask {
+  name: string;
+  due?: string;
+  project?: string;
+  priority?: TaskPriority;
 }
 
 /** A paired Mac, as the dashboard lists it (never includes the key). */

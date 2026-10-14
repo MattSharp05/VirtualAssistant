@@ -14,7 +14,8 @@
     "doctor": "node dist/src/doctor.js",
     "test": "npm run -w @jarvis/shared build && tsc -p tsconfig.json && node --test dist/test/*.test.js",
     "sessions": "node dist/src/list-sessions.js",
-    "check": "npm test && npm run -w @jarvis/shared typecheck && npm run -w @jarvis/desk lint && npm run -w @jarvis/desk typecheck && npm run -w @jarvis/desk test && npm run -w @jarvis/desk build"
+    "check": "npm test && npm run -w @jarvis/shared typecheck && npm run -w @jarvis/desk lint && npm run -w @jarvis/desk typecheck && npm run -w @jarvis/desk test && npm run -w @jarvis/desk build",
+    "setup:notion": "node dist/src/setupNotion.js"
   },
   "dependencies": {
     "grammy": "^1.46.0"
