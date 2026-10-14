@@ -8,7 +8,7 @@ import { createInterface } from "node:readline";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { describeEvent } from "../src/activity.js";
-import { Brain, formatMetrics, parseCliResult } from "../src/brain.js";
+import { Brain, formatMetrics, parseCliResult } from "../src/brain/index.js";
 import { connectorTools } from "../src/tools/connectors.js";
 import { ToolRegistry } from "../src/tools/index.js";
 import type { Config } from "../src/config.js";
@@ -23,7 +23,7 @@ function config(dataDir: string): Config {
   return {
     telegramBotToken: undefined, allowedChatId: undefined, routineId: undefined, routineToken: undefined,
     dataDir, claudeBin: "/bin/false", dashboardPort: 0, dashboardPassword: undefined, reportSecret: undefined,
-    reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5", "claude-haiku-5-5"], brainModel: "claude-sonnet-5-5", brainConnectors: [],
+    reportsPort: 0, notionToken: undefined, brainWarm: false, brainModels: ["claude-sonnet-5-5", "claude-haiku-5-5"], brainModel: "claude-sonnet-5-5", brainConnectors: [],
   };
 }
 
@@ -100,7 +100,7 @@ JSON
   chmodSync(bin, 0o755);
   const store = new Store(dir);
   const brain = new Brain(
-    { claudeBin: bin, dataDir: dir, models: ["claude-sonnet-5-5", "claude-haiku-5-5"], defaultModel: "claude-sonnet-5-5", internalUrl: "http://127.0.0.1:1", internalToken: "t" },
+    { claudeBin: bin, dataDir: dir, models: ["claude-sonnet-5-5", "claude-haiku-5-5"], defaultModel: "claude-sonnet-5-5", internalUrl: "http://127.0.0.1:1", internalToken: "t", warm: false },
     store,
   );
   const first = await brain.chat("what's mk up to?", "telegram");
@@ -201,7 +201,7 @@ cat >/dev/null
 echo '{"type":"result","result":"ok","usage":{}}'
 `);
   chmodSync(bin, 0o755);
-  const base = { claudeBin: bin, dataDir: dir, models: ["claude-haiku-5-5"], defaultModel: "claude-haiku-5-5", internalUrl: "http://127.0.0.1:1", internalToken: "t" };
+  const base = { claudeBin: bin, dataDir: dir, models: ["claude-haiku-5-5"], defaultModel: "claude-haiku-5-5", internalUrl: "http://127.0.0.1:1", internalToken: "t", warm: false };
   const store = new Store(dir);
   const registry = await ToolRegistry.discover();
   const toolContext = { jarvis: new Jarvis({ ...config(dir), brainConnectors: ["Google Calendar", "Gmail"] }, store), config: { ...config(dir), brainConnectors: ["Google Calendar", "Gmail"] } };

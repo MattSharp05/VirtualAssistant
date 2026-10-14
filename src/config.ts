@@ -20,6 +20,8 @@ export interface Config {
   /** Models the brain may use (first = default unless BRAIN_MODEL is set). */
   brainModels: string[];
   brainModel: string;
+  /** Keep one streaming CLI process for the conversation (BRAIN_WARM, default on; 0 = one process per message). */
+  brainWarm: boolean;
   /** claude.ai connectors the brain may read (see CONNECTORS in src/tools/connectors.ts). Empty = none. */
   brainConnectors: string[];
 }
@@ -56,6 +58,7 @@ export function loadConfig(): Config {
     notionToken: optional("NOTION_TOKEN"),
     brainModels,
     brainModel,
+    brainWarm: !/^(0|false|off|no)$/i.test(optional("BRAIN_WARM") ?? "1"),
     telegramBotToken: optional("TELEGRAM_BOT_TOKEN"),
     allowedChatId: chatId === undefined ? undefined : Number(chatId),
     routineId: optional("ROUTINE_ID"),

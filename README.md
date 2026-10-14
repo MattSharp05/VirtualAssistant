@@ -223,6 +223,9 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
   fine for status questions.
 - **Conversation:** it remembers the conversation across messages, on both the dashboard and Telegram.
   "new conversation" or `/newchat` starts over, which also keeps each reply cheaper.
+- **Streaming:** replies appear as they're written: on Telegram the message shows after the first
+  sentence and grows (the metrics line is added at the end); on the dashboard the bubble grows. One
+  chat process stays running between messages (`BRAIN_WARM=0` turns that off).
 - **Metrics** under every reply: `⏱ 4.2s · 🔢 18k in (16k cached) · 212 out · sonnet · 3 steps`.
   Steps are model turns; each tool call adds one. The dashboard shows running totals.
 

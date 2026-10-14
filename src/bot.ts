@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
-import { formatMetrics, type Brain } from "./brain.js";
+import { formatMetrics, type Brain } from "./brain/index.js";
+import { LiveReply } from "./liveReply.js";
 import type { Jarvis } from "./jarvis.js";
 import type { Job } from "./store.js";
 
@@ -21,13 +22,6 @@ const HELP = [
   "",
   "Plain messages go to me, or straight to a session after /sessions or /use.",
 ].join("\n");
-
-/** Telegram caps messages at 4096 characters. */
-function chunks(text: string, size = 4000): string[] {
-  const out: string[] = [];
-  for (let i = 0; i < text.length; i += size) out.push(text.slice(i, i + size));
-  return out.length ? out : [""];
-}
 
 function describe(job: Job): string {
   const sent = job.messagesSent ? `, ${job.messagesSent} follow-up${job.messagesSent === 1 ? "" : "s"}` : "";
@@ -206,13 +200,18 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     const target = store.brain().talkTo ?? "jarvis";
     if (target !== "jarvis" && store.getJob(target)) return relay(ctx, target, ctx.message.text);
     if (!brain) return ctx.reply("The brain isn't running. Use /sessions to message a session directly.");
-    // "typing…" while the brain works (Telegram shows it for ~5s per call).
-    const typing = setInterval(() => void ctx.replyWithChatAction("typing").catch(() => {}), 4500);
+    // "typing…" until the first sentence shows, then the reply grows in place (src/liveReply.ts).
+    const chatId = ctx.chat.id;
+    const live = new LiveReply({
+      send: async (text) => (await ctx.api.sendMessage(chatId, text)).message_id,
+      edit: async (id, text) => void (await ctx.api.editMessageText(chatId, id, text)),
+    });
+    const typing = setInterval(() => void (live.started || ctx.replyWithChatAction("typing").catch(() => {})), 4500);
     void ctx.replyWithChatAction("typing").catch(() => {});
     try {
-      const { reply, metrics } = await brain.chat(ctx.message.text, "telegram");
-      const parts = chunks(`${reply}\n\n${formatMetrics(metrics)}`);
-      for (const part of parts) await ctx.reply(part);
+      const { reply, metrics } = await brain.chat(ctx.message.text, "telegram", { onDelta: (chunk) => live.push(chunk) });
+      clearInterval(typing);
+      await live.finish(`${reply}\n\n${formatMetrics(metrics)}`);
     } catch (err) {
       await ctx.reply(`I couldn't answer that: ${(err as Error).message.slice(0, 300)}`);
     } finally {

@@ -5,7 +5,7 @@
 //   GET  /api/system             container memory, CPU, claude processes, last hour of history
 //   POST /api/jobs               { task }            start a cloud session
 //   GET  /api/brain                                  the conversation, model, totals
-//   POST /api/brain/chat         { message }         talk to JARVIS (plain language)
+//   POST /api/brain/chat         { message, stream? } talk to JARVIS; stream: true → NDJSON {delta} lines, then {done}
 //   POST /api/brain/model        { model }           switch the brain's model
 //   POST /api/brain/reset        {}                  start a new conversation
 //   /internal/*                                      the brain's tools (loopback + internal token)
@@ -28,7 +28,7 @@ import { JarvisError, type Jarvis } from "./jarvis.js";
 import { RoutineError } from "./routines.js";
 import { parseSessionId, type Store } from "./store.js";
 import type { SystemMonitor } from "./system.js";
-import type { Brain } from "./brain.js";
+import type { Brain } from "./brain/index.js";
 import { UnknownToolError, type ToolContext, type ToolRegistry } from "./tools/index.js";
 import type { DeskContext, DeskRouter } from "./desk/routes/index.js";
 
@@ -230,7 +230,17 @@ export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): S
           const body = await readJson(req);
           const message = String(body.message ?? "").trim();
           if (!message) throw new JarvisError("The message is empty.");
-          return send(res, 200, await brain.chat(message, "dashboard"));
+          if (body.stream !== true) return send(res, 200, await brain.chat(message, "dashboard"));
+          // Streamed: one JSON object per line as the reply is written, so the bubble grows live.
+          res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" });
+          const line = (obj: unknown) => res.write(JSON.stringify(obj) + "\n");
+          try {
+            const reply = await brain.chat(message, "dashboard", { onDelta: (delta) => line({ delta }) });
+            line({ done: reply });
+          } catch (err) {
+            line({ error: (err as Error).message });
+          }
+          return res.end();
         }
         if (req.method === "POST" && url.pathname === "/api/brain/model") {
           const body = await readJson(req);

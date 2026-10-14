@@ -22,7 +22,7 @@ function config(dataDir: string): Config {
   return {
     telegramBotToken: undefined, allowedChatId: undefined, routineId: undefined, routineToken: undefined,
     dataDir, claudeBin: "/bin/false", dashboardPort: 0, dashboardPassword: undefined, reportSecret: undefined,
-    reportsPort: 0, notionToken: undefined, brainModels: ["claude-haiku-5-5"], brainModel: "claude-haiku-5-5", brainConnectors: [],
+    reportsPort: 0, notionToken: undefined, brainModels: ["claude-haiku-5-5"], brainModel: "claude-haiku-5-5", brainWarm: false, brainConnectors: [],
   };
 }
 
