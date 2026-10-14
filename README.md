@@ -229,11 +229,12 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 - **Metrics** under every reply: `⏱ 4.2s · 🔢 18k in (16k cached) · 212 out · sonnet · 3 steps`.
   Steps are model turns; each tool call adds one. The dashboard shows running totals.
 
-**Connect Notion (read-only):**
+**Connect Notion:**
 1. Go to [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration**.
    Name it `JARVIS`, pick your workspace, type **Internal**, then **Save**.
-2. On the integration's **Configuration** tab, under **Capabilities**, leave only **Read content**
-   ticked, then **Save**. Copy the **Internal Integration Secret**.
+2. On the integration's **Configuration** tab, under **Capabilities**, tick **Read content**,
+   **Insert content** and **Update content**, then **Save**. Copy the **Internal Integration Secret**.
+   (JARVIS only ever writes to the two places step 6 creates; everything else stays read-only.)
 3. Paste it into `.env` as `NOTION_TOKEN=` (in your editor; don't paste it into chats).
 4. Share pages with it. JARVIS sees only what you share. Open a top-level page (for example your
    projects page) → **•••** (top right) → **Connections** → **Connect to** → `JARVIS`. Child
@@ -241,6 +242,11 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 5. `docker compose up -d`. The dashboard's **Notion** chip turns green with the number of pages it can see
    (`/status` in Telegram says the same). "token rejected" means a wrong secret; "0 pages" means
    nothing is shared with it yet.
+6. Create JARVIS's own space in Notion (your to-do list and what it remembers about you). Pick a
+   page shared with the integration (e.g. your "JARVIS" page), copy its link, then run:
+   `docker compose exec jarvis npm run setup:notion -- --parent <page link>`.
+   It adds **JARVIS Tasks** (a database) and **JARVIS Memory** (a page) under it, once; running it
+   again changes nothing. Then try "remind me to renew my passport on Friday".
 
 **Google Calendar, Gmail and Slack (read-only), through your claude.ai connectors:**
 1. On claude.ai: click your name (bottom left) → **Settings** → **Connectors**. Click **Connect**
