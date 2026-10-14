@@ -1,6 +1,7 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import { formatMetrics, type Brain } from "./brain/index.js";
 import { LiveReply } from "./liveReply.js";
+import { MAX_UPLOAD_BYTES, UploadStore, type Upload } from "./uploads.js";
 import type { Jarvis } from "./jarvis.js";
 import type { Job } from "./store.js";
 
@@ -44,6 +45,7 @@ const WINDOW_LABEL = { five_hour: "5-hour window", seven_day: "Weekly" } as cons
 export function createBot(token: string, allowedChatId: number | undefined, jarvis: Jarvis, brain?: Brain): Bot {
   const bot = new Bot(token);
   const { store } = jarvis;
+  const uploads = new UploadStore(jarvis.config.dataDir);
 
   // Only Matthew's chat gets through. Before TELEGRAM_ALLOWED_CHAT_ID is set, the bot just reports
   // the chat ID so it can be configured.
@@ -199,17 +201,45 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
   bot.on("message:text", async (ctx) => {
     const target = store.brain().talkTo ?? "jarvis";
     if (target !== "jarvis" && store.getJob(target)) return relay(ctx, target, ctx.message.text);
-    if (!brain) return ctx.reply("The brain isn't running. Use /sessions to message a session directly.");
-    // "typing…" until the first sentence shows, then the reply grows in place (src/liveReply.ts).
-    const chatId = ctx.chat.id;
+    await askBrain(ctx, ctx.message.text);
+  });
+
+  // Documents and photos: saved to the uploads folder (src/uploads.ts), then JARVIS reads them.
+  bot.on(["message:document", "message:photo"], async (ctx) => {
+    if (!brain) return ctx.reply("The brain isn't running.");
+    const doc = ctx.message.document;
+    const photo = ctx.message.photo?.at(-1); // the largest size
+    const size = doc?.file_size ?? photo?.file_size ?? 0;
+    if (size > MAX_UPLOAD_BYTES) return ctx.reply(`That's over ${MAX_UPLOAD_BYTES / 1024 / 1024} MB; I can't take it.`);
+    let upload: Upload;
+    try {
+      const file = await ctx.getFile();
+      const res = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`);
+      if (!res.ok) throw new Error(`Telegram download failed (${res.status})`);
+      const name = doc?.file_name ?? `photo-${ctx.message.message_id}.jpg`;
+      upload = uploads.save(name, new Uint8Array(await res.arrayBuffer()));
+    } catch (err) {
+      return ctx.reply(`I couldn't take that file: ${(err as Error).message.slice(0, 200)}`);
+    }
+    await askBrain(ctx, ctx.message.caption?.trim() || "Here's a file.", [upload]);
+  });
+
+  /** One message to the brain, with the reply growing in place (src/liveReply.ts). */
+  async function askBrain(ctx: Context, text: string, attachments: Upload[] = []): Promise<void> {
+    if (!brain) {
+      await ctx.reply("The brain isn't running. Use /sessions to message a session directly.");
+      return;
+    }
+    // "typing…" until the first sentence shows, then the reply grows in place.
+    const chatId = ctx.chat!.id;
     const live = new LiveReply({
-      send: async (text) => (await ctx.api.sendMessage(chatId, text)).message_id,
-      edit: async (id, text) => void (await ctx.api.editMessageText(chatId, id, text)),
+      send: async (t) => (await ctx.api.sendMessage(chatId, t)).message_id,
+      edit: async (id, t) => void (await ctx.api.editMessageText(chatId, id, t)),
     });
     const typing = setInterval(() => void (live.started || ctx.replyWithChatAction("typing").catch(() => {})), 4500);
     void ctx.replyWithChatAction("typing").catch(() => {});
     try {
-      const { reply, metrics } = await brain.chat(ctx.message.text, "telegram", { onDelta: (chunk) => live.push(chunk) });
+      const { reply, metrics } = await brain.chat(text, "telegram", { onDelta: (chunk) => live.push(chunk), attachments });
       clearInterval(typing);
       await live.finish(`${reply}\n\n${formatMetrics(metrics)}`);
     } catch (err) {
@@ -217,7 +247,7 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     } finally {
       clearInterval(typing);
     }
-  });
+  }
 
   function talkTo(target: string): void {
     store.updateBrain({ talkTo: target });

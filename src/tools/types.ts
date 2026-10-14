@@ -31,6 +31,10 @@ export interface CliContribution {
   disallowedTools?: string[];
   /** Any other CLI arguments. */
   extraArgs?: string[];
+  /** Claude Code built-in tools to enable (--tools); everything else built in stays off. */
+  builtinTools?: string[];
+  /** Permission allow rules (--settings permissions.allow), e.g. "Read(//data/uploads/**)". */
+  allowRules?: string[];
 }
 
 export interface ToolGroup {

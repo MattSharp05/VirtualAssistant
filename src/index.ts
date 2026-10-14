@@ -7,6 +7,7 @@ import { Scheduler, useScheduler } from "./scheduler.js";
 import { ReportWatcher, useReportWatcher } from "./notifyRules.js";
 import { memory } from "./tools/memory.js";
 import { CalendarLog, useCalendarLog } from "./calendarLog.js";
+import { UploadStore } from "./uploads.js";
 import { MEMORY_POLL_MS } from "./memory.js";
 import { DeviceStore } from "./desk/auth.js";
 import { DeskRpc } from "./desk/rpc.js";
@@ -85,6 +86,10 @@ scheduler.start();
 const reportWatcher = new ReportWatcher(jarvis.store, bus, notifier, () => jarvis.status().then((st) => st.usage));
 useReportWatcher(jarvis, reportWatcher);
 reportWatcher.start();
+// Uploaded files are kept for 7 days.
+const uploads = new UploadStore(config.dataDir);
+uploads.cleanup();
+scheduler.every("uploads-cleanup", 24 * 60 * 60_000, () => void uploads.cleanup());
 // Matthew's edits to JARVIS Memory in Notion reach the brain within 10 minutes.
 scheduler.every("memory-poll", MEMORY_POLL_MS, async () => void (await memory(toolContext).poll()));
 
