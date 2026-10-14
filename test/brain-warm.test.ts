@@ -21,7 +21,7 @@ const tmp = () => mkdtempSync(join(tmpdir(), "jarvis-warm-"));
  * A stand-in for `claude -p --input-format stream-json --output-format stream-json`: logs its argv
  * (one JSON line per spawn), then answers each stdin turn with deltas 80 ms apart and a result.
  * "TOOL" in a turn adds a tool call + result; "CRASH" exits mid-turn (only in the first process);
- * "BYE" exits after answering.
+ * "BYE" exits after answering; "GATE" holds the result until the test creates <dir>/release.
  */
 function fakeCli(dir: string): { bin: string; spawns: () => string[][] } {
   const log = join(dir, "argv.jsonl");
@@ -51,6 +51,8 @@ require("node:readline").createInterface({ input: process.stdin }).on("line", (l
       out({ type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: word } }, parent_tool_use_id: null });
       await sleep(80);
     }
+    // GATE: hold the result until the test has seen a delta (proves streaming without timing).
+    if (text.includes("GATE")) while (!fs.existsSync(${JSON.stringify(join(dir, "release"))})) await sleep(10);
     out({ type: "rate_limit_event" });
     out({ type: "result", subtype: "success", is_error: false, result: "All good. Two builders.", duration_ms: 1234, num_turns: text.includes("TOOL") ? 2 : 1, total_cost_usd: 0.01, usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 5000, output_tokens: 42 } });
     if (text.includes("BYE")) process.exit(0);
@@ -90,14 +92,19 @@ test("warm brain: streams deltas before the reply finishes, reuses one process, 
   brain.onTool((e) => tools.push(e));
 
   const chunks: string[] = [];
-  const first = await brain.chat("what's mk up to? TOOL", "telegram", { onDelta: (c) => chunks.push(c) });
+  const first = await brain.chat("what's mk up to? TOOL GATE", "telegram", {
+    onDelta: (c) => {
+      chunks.push(c);
+      writeFileSync(join(dir, "release"), ""); // the fake answers only after a delta got through
+    },
+  });
   assert.equal(first.reply, "All good. Two builders.");
   assert.deepEqual(first.metrics, { ms: 1234, model: "claude-sonnet-5-5", inputTokens: 10, cacheReadTokens: 5000, cacheWriteTokens: 100, outputTokens: 42, turns: 2, apiEquivalentUsd: 0.01 });
   assert.equal(chunks.join(""), "All good. Two builders.", "subagent deltas are skipped; no break before the first text");
 
-  const firstDelta = events.find((e) => e.event.type === "brain.delta")!;
+  const types = events.map((e) => e.event.type);
+  assert.ok(types.indexOf("brain.delta") < types.indexOf("brain.done"), "deltas are published before the reply is done");
   const done = events.find((e) => e.event.type === "brain.done")!;
-  assert.ok(done.at - firstDelta.at >= 150, `first delta ${done.at - firstDelta.at}ms before done`);
   assert.equal((done.event as { messageId: string }).messageId, first.messageId);
   assert.deepEqual(
     events.filter((e) => e.event.type === "orb.state").map((e) => (e.event as { state: string }).state),
