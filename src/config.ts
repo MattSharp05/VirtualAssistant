@@ -49,7 +49,7 @@ export function loadConfig(): Config {
     .filter(Boolean);
   const brainModel = optional("BRAIN_MODEL") ?? brainModels[0];
   if (!brainModels.includes(brainModel)) brainModels.push(brainModel);
-  const connectors = optional("BRAIN_CONNECTORS") ?? "Google Calendar,Gmail";
+  const connectors = optional("BRAIN_CONNECTORS") ?? "Google Calendar,Gmail,Slack";
   const brainConnectors = /^none$/i.test(connectors) ? [] : connectors.split(",").map((c) => c.trim()).filter(Boolean);
   return {
     brainConnectors,

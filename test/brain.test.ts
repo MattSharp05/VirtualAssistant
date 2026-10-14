@@ -185,6 +185,10 @@ test("claude.ai connectors: read tools allowed, write tools blocked, strict MCP 
   assert.ok(!allowed.some((t) => /send|reply|forward|trash|delete|create|update/.test(t)), "nothing that writes is allowed");
   assert.ok(blocked.includes("mcp__claude_ai_Gmail__send_message"));
   assert.ok(blocked.includes("mcp__claude_ai_Google_Calendar__delete_event"));
+  const slack = connectorTools(["Slack"]);
+  assert.ok(slack.allowed.includes("mcp__claude_ai_Slack__slack_read_channel"));
+  assert.ok(!slack.allowed.some((t) => /send|schedule|add_|create|update|upload/.test(t)), "nothing that posts is allowed");
+  assert.ok(slack.blocked.includes("mcp__claude_ai_Slack__slack_send_message"));
 
   const dir = tmp();
   const log = join(dir, "argv.log");
