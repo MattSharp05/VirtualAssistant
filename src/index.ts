@@ -3,6 +3,11 @@ import { PROTOCOL_VERSION } from "@jarvis/shared";
 import { Brain } from "./brain.js";
 import { createBot } from "./bot.js";
 import { notifier } from "./notify.js";
+import { DeviceStore } from "./desk/auth.js";
+import { DeskRpc } from "./desk/rpc.js";
+import { DeskRouter, type DeskContext } from "./desk/routes/index.js";
+import { SseHub } from "./desk/sse.js";
+import { bus } from "./events.js";
 import { authStatus } from "./cloud.js";
 import { loadConfig } from "./config.js";
 import { Jarvis } from "./jarvis.js";
@@ -19,7 +24,9 @@ monitor.start();
 // The brain's tool server reaches JARVIS on loopback with a token that lives only in this process.
 const internalToken = randomBytes(32).toString("hex");
 const registry = await ToolRegistry.discover();
-const toolContext: ToolContext = { jarvis, config };
+const deskCtx: DeskContext = { jarvis, bus, devices: new DeviceStore(config.dataDir), hub: new SseHub(bus), rpc: new DeskRpc(bus) };
+const deskRouter = await DeskRouter.discover();
+const toolContext: ToolContext = { jarvis, config, desk: deskCtx };
 const brain = new Brain(
   {
     claudeBin: config.claudeBin,
@@ -37,7 +44,7 @@ console.log(
     `, claude.ai connectors: ${config.brainConnectors.join(", ") || "none"}`,
 );
 
-const dashboard = createDashboard(jarvis, { monitor, brain, registry, toolContext, internalToken });
+const dashboard = createDashboard(jarvis, { monitor, brain, registry, toolContext, internalToken, desk: { router: deskRouter, ctx: deskCtx } });
 dashboard.listen(config.dashboardPort, () => {
   console.log(`dashboard on port ${config.dashboardPort} (Desk protocol v${PROTOCOL_VERSION})${config.dashboardPassword ? " (password protected)" : ""}`);
 });
@@ -61,6 +68,7 @@ if (bot && chatId !== undefined) {
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     monitor.stop();
+    deskCtx.hub.close();
     dashboard.close();
     reports?.close();
     void bot?.stop();

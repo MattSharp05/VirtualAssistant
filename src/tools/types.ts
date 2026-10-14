@@ -2,12 +2,15 @@
 // a ToolGroup and is picked up automatically by the registry (index.ts): adding tools = adding a file.
 
 import type { Config } from "../config.js";
+import type { DeskContext } from "../desk/routes/index.js";
 import type { Jarvis } from "../jarvis.js";
 
 /** What a tool handler can use. One per process; built in index.ts. */
 export interface ToolContext {
   jarvis: Jarvis;
   config: Config;
+  /** The Desk API: its live stream and server→Mac requests (absent in some tests). */
+  desk?: DeskContext;
 }
 
 export type JsonSchema = Record<string, unknown>;

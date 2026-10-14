@@ -166,6 +166,22 @@
 
     <div class="card" id="detail"><span class="meta">Loading…</span></div>
   </section>
+
+  <section class="card" style="margin-top:12px" aria-label="Desk devices">
+    <h2>Desk devices</h2>
+    <p class="meta">Macs running JARVIS Desk. Pair one, then paste its key into the app's Settings.</p>
+    <form id="pair-form" class="row">
+      <label for="pair-name" class="meta">Name</label>
+      <input id="pair-name" placeholder="e.g. MacBook Pro" autocomplete="off" required style="flex:1">
+      <button id="pair">Pair a Mac</button>
+    </form>
+    <div id="pair-key" hidden>
+      <p class="meta">Copy this key now: it's shown only once.</p>
+      <div class="row"><code id="pair-key-text" style="flex:1;word-break:break-all"></code><button type="button" id="pair-copy">Copy</button></div>
+    </div>
+    <div class="notice" id="pair-notice" role="status"></div>
+    <ul class="jobs" id="devices"><li class="meta">Loading…</li></ul>
+  </section>
 </main>
 
 <script>
@@ -556,6 +572,48 @@
     finally { const b = $("send"); if (b) b.disabled = false; }
   }
 
+  // ---- Desk devices ---------------------------------------------------------------------------
+  async function loadDevices() {
+    try {
+      const { devices } = await api("/api/desk-devices");
+      $("devices").replaceChildren(...(devices.length
+        ? devices.map((d) => el("li", {},
+            el("strong", {}, d.name), " ",
+            el("span", { class: "meta" }, "paired " + ago(d.createdAt) + (d.lastSeen ? " · seen " + ago(d.lastSeen) : " · never connected") + " · "),
+            el("button", { class: "link-button", type: "button", onclick: () => revokeDevice(d) }, "revoke")))
+        : [el("li", { class: "meta" }, "No Macs paired yet.")]));
+    } catch (err) {
+      $("devices").replaceChildren(el("li", { class: "meta" }, "Couldn't load devices: " + err.message));
+    }
+  }
+
+  async function revokeDevice(d) {
+    if (!confirm("Revoke " + d.name + "? That Mac will stop connecting until it's paired again.")) return;
+    try {
+      await api("/api/desk-devices/" + encodeURIComponent(d.id) + "/revoke", {});
+      notice("pair-notice", "Revoked " + d.name + ".");
+      loadDevices();
+    } catch (err) {
+      notice("pair-notice", err.message, true);
+    }
+  }
+
+  $("pair-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const { device, key } = await api("/api/desk-devices", { name: $("pair-name").value });
+      $("pair-key-text").textContent = key;
+      $("pair-key").hidden = false;
+      $("pair-name").value = "";
+      notice("pair-notice", "Paired " + device.name + ".");
+      loadDevices();
+    } catch (err) {
+      notice("pair-notice", err.message, true);
+    }
+  });
+  $("pair-copy").addEventListener("click", () => navigator.clipboard.writeText($("pair-key-text").textContent));
+
+  loadDevices();
   refresh().then(() => loadSessions(false));
   loadBrain(true);
   setInterval(() => { if (document.activeElement?.id !== "chat-input") loadBrain(false); }, 10000);
