@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { BrainChannel, BrainMetrics } from "@jarvis/shared";
 import type { EventBus } from "../events.js";
-import type { Store } from "../store.js";
+import type { BrainMessage, BrainState } from "../store.js";
 import type { BrainSetup } from "../tools/index.js";
 import { WarmExitError, WarmProcess } from "./warm.js";
 
@@ -59,8 +59,19 @@ export interface BrainConfig {
   setup?: () => Promise<BrainSetup>;
   /** Keep one streaming CLI process per conversation (default true; BRAIN_WARM=0 turns it off). */
   warm?: boolean;
-  /** Where brain.* and orb.state events go (the Desk's live stream). */
+  /** Where brain.* and orb.state events go (the Desk's live stream). The worker has none. */
   bus?: EventBus;
+  /** Folder name under dataDir (its own CLI project, so conversations never mix). Default "brain". */
+  name?: string;
+  /** The system prompt from the registry's setup (default: JARVIS's chat prompt). */
+  prompt?: (setup: BrainSetup) => string;
+}
+
+/** Where a brain keeps its conversation id, model, messages and usage totals (Store for the chat). */
+export interface BrainStateStore {
+  brain(): BrainState;
+  updateBrain(patch: Partial<Omit<BrainState, "messages" | "totals">>): void;
+  addBrainMessage(message: BrainMessage): void;
 }
 
 export type { BrainChannel };
@@ -130,10 +141,10 @@ export class Brain {
 
   constructor(
     private readonly config: BrainConfig,
-    private readonly store: Store,
+    private readonly store: BrainStateStore,
   ) {
     // An empty working directory: no CLAUDE.md or project settings leak into the brain.
-    this.cwd = join(config.dataDir, "brain");
+    this.cwd = join(config.dataDir, config.name ?? "brain");
     mkdirSync(this.cwd, { recursive: true });
     // Memory is part of the system prompt, which a warm process reads once: restart to pick changes up.
     config.bus?.subscribe((e) => {
@@ -370,14 +381,15 @@ export class Brain {
     return [
       "-p",
       "--model", this.model,
-      "--system-prompt", systemPrompt(setup),
+      "--system-prompt", (this.config.prompt ?? systemPrompt)(setup),
       // Built-in tools stay off except what a group asks for (uploads: Read, limited by allowRules).
       "--tools", (setup.builtinTools ?? []).join(","),
       ...(setup.allowRules?.length ? ["--settings", JSON.stringify({ permissions: { allow: setup.allowRules } })] : []),
       // --strict-mcp-config also hides the claude.ai connectors, so it's only used when none are wanted.
       ...(setup.allowedTools.length ? [] : ["--strict-mcp-config"]),
       "--mcp-config", mcpConfig,
-      "--allowedTools", ["mcp__jarvis", ...setup.allowedTools].join(","),
+      // Every JARVIS tool, or just the named ones (the worker).
+      "--allowedTools", [...(setup.jarvisTools ? setup.jarvisTools.map((t) => `mcp__jarvis__${t}`) : ["mcp__jarvis"]), ...setup.allowedTools].join(","),
       ...(setup.disallowedTools.length ? ["--disallowedTools", setup.disallowedTools.join(",")] : []),
       ...setup.extraArgs,
       ...(fresh ? ["--session-id", sessionId] : ["--resume", sessionId]),
