@@ -22,6 +22,8 @@ export interface Config {
   brainModel: string;
   /** Keep one streaming CLI process for the conversation (BRAIN_WARM, default on; 0 = one process per message). */
   brainWarm: boolean;
+  /** Matthew's time zone (TZ, default Europe/London): reminders, "today", the brain's clock. */
+  timeZone?: string;
   /** claude.ai connectors the brain may read (see CONNECTORS in src/tools/connectors.ts). Empty = none. */
   brainConnectors: string[];
 }
@@ -51,6 +53,9 @@ export function loadConfig(): Config {
     .filter(Boolean);
   const brainModel = optional("BRAIN_MODEL") ?? brainModels[0];
   if (!brainModels.includes(brainModel)) brainModels.push(brainModel);
+  // Node reads TZ for local dates; setting it here makes "today" and reminder times Matthew's.
+  const timeZone = optional("TZ") ?? "Europe/London";
+  process.env.TZ = timeZone;
   const connectors = optional("BRAIN_CONNECTORS") ?? "Google Calendar,Gmail,Slack";
   const brainConnectors = /^none$/i.test(connectors) ? [] : connectors.split(",").map((c) => c.trim()).filter(Boolean);
   return {
@@ -58,6 +63,7 @@ export function loadConfig(): Config {
     notionToken: optional("NOTION_TOKEN"),
     brainModels,
     brainModel,
+    timeZone,
     brainWarm: !/^(0|false|off|no)$/i.test(optional("BRAIN_WARM") ?? "1"),
     telegramBotToken: optional("TELEGRAM_BOT_TOKEN"),
     allowedChatId: chatId === undefined ? undefined : Number(chatId),

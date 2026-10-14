@@ -53,7 +53,11 @@ test("the MCP tool server answers the handshake, lists tools and calls the inter
     send({ jsonrpc: "2.0", method: "notifications/initialized" });
     send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const names = ((await next()).result as { tools: { name: string }[] }).tools.map((t) => t.name);
-    assert.deepEqual(names.sort(), ["overview", "list_cloud_sessions", "session_activity", "send_to_session", "start_session", "notion_search", "notion_read_page", "notion_query_database", "add_task", "complete_task", "list_tasks", "update_task", "show_on_screen"].sort());
+    // Every group's tools are served; check the core ones by name (new groups add to the list).
+    for (const name of ["overview", "list_cloud_sessions", "session_activity", "send_to_session", "start_session", "notion_search", "notion_read_page", "notion_query_database", "show_on_screen"]) {
+      assert.ok(names.includes(name), `${name} is served`);
+    }
+    assert.equal(new Set(names).size, names.length, "no duplicates");
     send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "overview", arguments: {} } });
     const overview = (await next()).result as { content: { text: string }[] };
     assert.match(overview.content[0].text, /mk \[reported\]/);

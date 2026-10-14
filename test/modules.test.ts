@@ -99,7 +99,8 @@ test("duplicate tool names across groups are refused", () => {
 test("discovery finds the built-in groups and skips helper modules", async () => {
   const registry = await ToolRegistry.discover();
   const names = registry.groups.map((g) => g.name).sort();
-  assert.deepEqual(names, ["connectors", "notion", "sessions", "show", "tasks"]);
+  for (const g of ["connectors", "notion", "sessions", "show", "tasks", "timers"]) assert.ok(names.includes(g), `group ${g} discovered`);
+  assert.ok(!names.includes("core") && !names.includes("types"), "helper modules are skipped");
 });
 
 test("JsonFile keeps the previous file when a write dies before the rename, and serialises writes", async () => {
