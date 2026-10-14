@@ -1,7 +1,7 @@
 // The real app on CI's Mac: launches on the demo-day scenario, checks the window renders, saves a
 // screenshot and writes idle memory/CPU to the job summary. Needs Electron's binary (macOS job only).
 import { appendFileSync } from "node:fs";
-import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test } from "@playwright/test";
 
 // Playwright needs the fixtures argument destructured, even when empty.
@@ -13,7 +13,7 @@ test("JARVIS Desk launches and renders its window", async ({}, testInfo) => {
   );
   const app = await electron.launch({
     args: ["."],
-    cwd: join(__dirname, "../.."),
+    cwd: fileURLToPath(new URL("../..", import.meta.url)),
     env: { ...process.env, JARVIS_DESK_SCENARIO: "demo-day" },
   });
   try {

@@ -19,5 +19,6 @@ export async function waitForBridgeIdle(page: Page, timeout = 15_000): Promise<v
 /** A screenshot compared with e2e/__snapshots__ (0.2% tolerance), only in the visual job. */
 export async function expectWindowSnapshot(page: Page, name: string): Promise<void> {
   if (process.env.VISUAL !== "1") return;
+  await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot(`${name}.png`, { animations: "disabled" });
 }
