@@ -2,12 +2,13 @@ import { randomBytes } from "node:crypto";
 import { PROTOCOL_VERSION } from "@jarvis/shared";
 import { Brain } from "./brain.js";
 import { createBot } from "./bot.js";
+import { notifier } from "./notify.js";
 import { authStatus } from "./cloud.js";
 import { loadConfig } from "./config.js";
 import { Jarvis } from "./jarvis.js";
 import { Store } from "./store.js";
 import { SystemMonitor } from "./system.js";
-import { Tools } from "./tools.js";
+import { ToolRegistry, type ToolContext } from "./tools/index.js";
 import { createDashboard, createReportsServer } from "./web.js";
 
 const config = loadConfig();
@@ -17,7 +18,8 @@ const monitor = new SystemMonitor();
 monitor.start();
 // The brain's tool server reaches JARVIS on loopback with a token that lives only in this process.
 const internalToken = randomBytes(32).toString("hex");
-const tools = new Tools(jarvis, config.notionToken);
+const registry = await ToolRegistry.discover();
+const toolContext: ToolContext = { jarvis, config };
 const brain = new Brain(
   {
     claudeBin: config.claudeBin,
@@ -26,16 +28,16 @@ const brain = new Brain(
     defaultModel: config.brainModel,
     internalUrl: `http://127.0.0.1:${config.dashboardPort}`,
     internalToken,
-    connectors: config.brainConnectors,
+    setup: () => registry.brainSetup(toolContext),
   },
   jarvis.store,
 );
 console.log(
-  `brain: ${brain.model}${config.notionToken ? ", Notion connected" : ", no Notion (NOTION_TOKEN unset)"}` +
+  `brain: ${brain.model}, tools: ${registry.list().length} in ${registry.groups.length} groups${config.notionToken ? ", Notion connected" : ", no Notion (NOTION_TOKEN unset)"}` +
     `, claude.ai connectors: ${config.brainConnectors.join(", ") || "none"}`,
 );
 
-const dashboard = createDashboard(jarvis, { monitor, brain, tools, internalToken });
+const dashboard = createDashboard(jarvis, { monitor, brain, registry, toolContext, internalToken });
 dashboard.listen(config.dashboardPort, () => {
   console.log(`dashboard on port ${config.dashboardPort} (Desk protocol v${PROTOCOL_VERSION})${config.dashboardPassword ? " (password protected)" : ""}`);
 });
@@ -49,6 +51,12 @@ if (auth.warning) console.warn(auth.warning);
 if (!auth.loggedIn) console.warn("Run: docker compose run --rm jarvis claude auth login");
 
 const bot = config.telegramBotToken ? createBot(config.telegramBotToken, config.allowedChatId, jarvis, brain) : undefined;
+const chatId = config.allowedChatId;
+if (bot && chatId !== undefined) {
+  notifier.attachTelegram(async (text) => {
+    await bot.api.sendMessage(chatId, text);
+  });
+}
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {

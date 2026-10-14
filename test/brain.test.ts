@@ -8,12 +8,13 @@ import { createInterface } from "node:readline";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { describeEvent } from "../src/activity.js";
-import { Brain, connectorTools, formatMetrics, parseCliResult } from "../src/brain.js";
+import { Brain, formatMetrics, parseCliResult } from "../src/brain.js";
+import { connectorTools } from "../src/tools/connectors.js";
+import { ToolRegistry } from "../src/tools/index.js";
 import type { Config } from "../src/config.js";
 import { Jarvis } from "../src/jarvis.js";
 import { blockText, Notion, NotionStatusCache, propertyText } from "../src/notion.js";
 import { Store } from "../src/store.js";
-import { Tools } from "../src/tools.js";
 import { createDashboard } from "../src/web.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jarvis-brain-"));
@@ -31,7 +32,8 @@ test("the MCP tool server answers the handshake, lists tools and calls the inter
   const store = new Store(dir);
   const jarvis = new Jarvis(config(dir), store);
   store.addReport("mk", "MK-74 merged ✅ — 3/5", "cse_01MK");
-  const server = createDashboard(jarvis, { tools: new Tools(jarvis), internalToken: "itok" });
+  const registry = await ToolRegistry.discover();
+  const server = createDashboard(jarvis, { registry, toolContext: { jarvis, config: jarvis.config }, internalToken: "itok" });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   const mcpPath = fileURLToPath(new URL("../src/mcp.js", import.meta.url));
@@ -51,7 +53,7 @@ test("the MCP tool server answers the handshake, lists tools and calls the inter
     send({ jsonrpc: "2.0", method: "notifications/initialized" });
     send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
     const names = ((await next()).result as { tools: { name: string }[] }).tools.map((t) => t.name);
-    assert.deepEqual(names, ["overview", "list_cloud_sessions", "session_activity", "send_to_session", "start_session", "notion_search", "notion_read_page", "notion_query_database"]);
+    assert.deepEqual(names.sort(), ["overview", "list_cloud_sessions", "session_activity", "send_to_session", "start_session", "notion_search", "notion_read_page", "notion_query_database"].sort());
     send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "overview", arguments: {} } });
     const overview = (await next()).result as { content: { text: string }[] };
     assert.match(overview.content[0].text, /mk \[reported\]/);
@@ -70,9 +72,9 @@ test("the MCP tool server answers the handshake, lists tools and calls the inter
 test("the internal API needs its token (and loopback)", async () => {
   const dir = tmp();
   const jarvis = new Jarvis(config(dir), new Store(dir));
-  const server = createDashboard(jarvis, { tools: new Tools(jarvis), internalToken: "itok" });
+  const server = createDashboard(jarvis, { registry: await ToolRegistry.discover(), toolContext: { jarvis, config: jarvis.config }, internalToken: "itok" });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/internal/overview`;
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/internal/tools`;
   try {
     assert.equal((await fetch(url)).status, 403);
     assert.equal((await fetch(url, { headers: { authorization: "Bearer wrong" } })).status, 403);
@@ -200,7 +202,10 @@ echo '{"type":"result","result":"ok","usage":{}}'
 `);
   chmodSync(bin, 0o755);
   const base = { claudeBin: bin, dataDir: dir, models: ["claude-haiku-5-5"], defaultModel: "claude-haiku-5-5", internalUrl: "http://127.0.0.1:1", internalToken: "t" };
-  await new Brain({ ...base, connectors: ["Google Calendar", "Gmail"] }, new Store(dir)).chat("what's on today?", "telegram");
+  const store = new Store(dir);
+  const registry = await ToolRegistry.discover();
+  const toolContext = { jarvis: new Jarvis({ ...config(dir), brainConnectors: ["Google Calendar", "Gmail"] }, store), config: { ...config(dir), brainConnectors: ["Google Calendar", "Gmail"] } };
+  await new Brain({ ...base, setup: () => registry.brainSetup(toolContext) }, store).chat("what's on today?", "telegram");
   const call = readFileSync(log, "utf8").trim();
   assert.doesNotMatch(call, /--strict-mcp-config/, "claude.ai connectors need the non-strict MCP mode");
   assert.match(call, /--allowedTools mcp__jarvis,mcp__claude_ai_Google_Calendar__list_calendars,/);

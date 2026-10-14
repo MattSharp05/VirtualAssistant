@@ -27,13 +27,15 @@ import { RoutineError } from "./routines.js";
 import { parseSessionId, type Store } from "./store.js";
 import type { SystemMonitor } from "./system.js";
 import type { Brain } from "./brain.js";
-import type { Tools } from "./tools.js";
+import { UnknownToolError, type ToolContext, type ToolRegistry } from "./tools/index.js";
 
 export interface DashboardExtras {
   monitor?: SystemMonitor;
   brain?: Brain;
+  /** The brain's tools (src/tools/), served to its MCP server on /internal/*. */
+  registry?: ToolRegistry;
+  toolContext?: ToolContext;
   /** The brain's tool server calls /internal/* with this token, from inside the container only. */
-  tools?: Tools;
   internalToken?: string;
 }
 
@@ -42,31 +44,31 @@ function isLoopback(req: IncomingMessage): boolean {
   return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
 }
 
-/** The brain's tools (mcp.ts → here). Loopback + token only: never reachable through Tailscale. */
-async function internalRoute(req: IncomingMessage, res: ServerResponse, url: URL, tools: Tools): Promise<void> {
-  const q = (name: string) => url.searchParams.get(name) ?? "";
-  const text = (t: string) => send(res, 200, { text: t });
-  const post = req.method === "POST" ? await readJson(req) : {};
-  switch (url.pathname) {
-    case "/internal/overview":
-      return text(await tools.overview());
-    case "/internal/sessions":
-      return text(await tools.sessions());
-    case "/internal/activity":
-      return text(await tools.activity(q("target"), Number(q("limit") || 15)));
-    case "/internal/send":
-      return text(await tools.send(String(post.target ?? ""), String(post.message ?? "")));
-    case "/internal/start":
-      return text(await tools.start(String(post.task ?? "")));
-    case "/internal/notion/search":
-      return text(await tools.notionSearch(q("q")));
-    case "/internal/notion/page":
-      return text(await tools.notionPage(q("id")));
-    case "/internal/notion/query":
-      return text(await tools.notionQuery(String(post.database_id ?? ""), Number(post.limit ?? 25)));
-    default:
-      return send(res, 404, { error: "not found" });
+/** The brain's tools (mcp.ts → here). Loopback + token only: never reachable through Tailscale.
+ *   GET  /internal/tools              the registry's tool list
+ *   POST /internal/tool/:name {args}  call one tool → { text } (errors → { error } for the model to read)
+ */
+async function internalRoute(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  registry: ToolRegistry,
+  ctx: ToolContext,
+): Promise<void> {
+  if (req.method === "GET" && url.pathname === "/internal/tools") return send(res, 200, { tools: registry.list() });
+  const m = /^\/internal\/tool\/([^/]+)$/.exec(url.pathname);
+  if (req.method === "POST" && m) {
+    const body = await readJson(req);
+    const args = (body.args && typeof body.args === "object" ? body.args : {}) as Record<string, unknown>;
+    try {
+      return send(res, 200, { text: await registry.call(decodeURIComponent(m[1]), args, ctx) });
+    } catch (err) {
+      if (err instanceof UnknownToolError) return send(res, 404, { error: err.message });
+      if (!(err instanceof JarvisError)) console.error(`tool ${m[1]} failed:`, err);
+      return send(res, 400, { error: (err as Error).message });
+    }
   }
+  return send(res, 404, { error: "not found" });
 }
 
 const PAGE = new URL("../../public/index.html", import.meta.url) // dist/src/web.js → <app>/public;
@@ -147,15 +149,16 @@ export function createReportsServer(store: Store, secret: string): Server {
 
 export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): Server {
   const { config, store } = jarvis;
-  const { monitor, brain, tools, internalToken } = extras;
+  const { monitor, brain, registry, toolContext, internalToken } = extras;
 
   return createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     try {
       if (url.pathname.startsWith("/internal/")) {
-        const ok = tools && internalToken && isLoopback(req) && safeEqual(req.headers.authorization ?? "", `Bearer ${internalToken}`);
+        const ok =
+          registry && toolContext && internalToken && isLoopback(req) && safeEqual(req.headers.authorization ?? "", `Bearer ${internalToken}`);
         if (!ok) return send(res, 403, { error: "forbidden" });
-        return await internalRoute(req, res, url, tools);
+        return await internalRoute(req, res, url, registry, toolContext);
       }
 
       // Reports authenticate with their own secret, so a cloud session never needs the dashboard password.

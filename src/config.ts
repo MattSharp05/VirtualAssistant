@@ -20,7 +20,7 @@ export interface Config {
   /** Models the brain may use (first = default unless BRAIN_MODEL is set). */
   brainModels: string[];
   brainModel: string;
-  /** claude.ai connectors the brain may read (see CONNECTORS in brain.ts). Empty = none. */
+  /** claude.ai connectors the brain may read (see CONNECTORS in src/tools/connectors.ts). Empty = none. */
   brainConnectors: string[];
 }
 
