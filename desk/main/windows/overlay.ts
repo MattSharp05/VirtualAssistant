@@ -1,0 +1,42 @@
+// The overlay (PRD: overlay + orb; ADR 0001): one transparent, frameless, always-on-top window over
+// the primary display's work area, on every Space and over full-screen apps. Clicks pass through to
+// the apps underneath, except while the renderer reports the pointer over the orb (desk:hit).
+import { join } from "node:path";
+import { BrowserWindow, ipcMain, screen } from "electron";
+
+export function createOverlay(rendererIndex: string, scenario?: string): BrowserWindow {
+  const { workArea } = screen.getPrimaryDisplay();
+  const win = new BrowserWindow({
+    ...workArea,
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    backgroundColor: "#00000000",
+    title: "JARVIS Desk",
+    webPreferences: { preload: join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true },
+  });
+  win.setAlwaysOnTop(true, "screen-saver");
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Click-through by default; `forward` keeps mouse-move events coming so hover can be detected.
+  win.setIgnoreMouseEvents(true, { forward: true });
+
+  const onHit = (e: Electron.IpcMainEvent, interactive: boolean) => {
+    if (e.sender === win.webContents) win.setIgnoreMouseEvents(!interactive, { forward: true });
+  };
+  ipcMain.on("desk:hit", onHit);
+  win.on("closed", () => ipcMain.off("desk:hit", onHit));
+
+  // Follow the display if its size or the Dock/menu bar changes.
+  screen.on("display-metrics-changed", () => {
+    if (!win.isDestroyed()) win.setBounds(screen.getPrimaryDisplay().workArea);
+  });
+
+  void win.loadFile(rendererIndex, { hash: "/overlay", ...(scenario ? { query: { scenario } } : {}) });
+  return win;
+}
