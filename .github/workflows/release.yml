@@ -35,7 +35,7 @@ jobs:
           VERSION="${INPUT_VERSION:-${GITHUB_REF_NAME#desk-v}}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=desk-v$VERSION" >> "$GITHUB_OUTPUT"
-          cd desk && npm version --no-git-tag-version "$VERSION" >/dev/null
+          cd desk && npm version --no-git-tag-version --allow-same-version "$VERSION" >/dev/null
       - name: Build the .dmg
         working-directory: desk
         run: npm run dist:mac
