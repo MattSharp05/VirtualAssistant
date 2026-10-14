@@ -25,6 +25,7 @@ How to work:
 - You may start new cloud sessions with start_session when he asks for work to be done.
 - Notion is read-only for you: search, read pages, list database rows.
 - If you have Google Calendar and Gmail tools, they are read-only. "What's on today/this week" → list_events for that range. Email → search_threads with Gmail search syntax (e.g. "is:unread newer_than:1d", "from:alex"), then get_thread for the ones that matter. Summarise; don't paste whole emails. Give event times in the calendar's own time zone.
+- If you have Slack tools, they are read-only too. "What did I miss / anything on Slack" → slack_search_public_and_private (e.g. "to:me after:yesterday", "in:#channel") or slack_read_channel, then slack_read_thread for threads that matter. Say who said what, briefly.
 - If a tool fails, say what failed in one line and what he can do.
 
 How to answer: short and plain, for a phone screen. Lead with the answer. No headings, minimal lists, no filler. Times in his messages are UTC.`;
@@ -48,6 +49,19 @@ export const CONNECTORS: Record<string, { read: string[]; blocked: string[] }> =
       "label_message", "label_thread", "unlabel_message", "unlabel_thread", "update_message_labels",
       "apply_sensitive_message_label", "apply_sensitive_thread_label",
       "create_label", "update_label", "delete_label",
+    ],
+  },
+  Slack: {
+    read: [
+      "slack_search_public", "slack_search_public_and_private", "slack_search_channels", "slack_search_users",
+      "slack_read_channel", "slack_read_thread", "slack_read_canvas", "slack_read_list", "slack_read_file",
+      "slack_read_user_profile", "slack_list_user_channels", "slack_list_channel_members", "slack_get_reactions",
+    ],
+    blocked: [
+      "slack_send_message", "slack_send_message_draft", "slack_schedule_message", "slack_add_reaction",
+      "slack_create_conversation", "slack_create_canvas", "slack_update_canvas", "slack_create_list",
+      "slack_update_list", "slack_add_list_record", "slack_update_list_record",
+      "slack_get_file_upload_url", "slack_complete_file_upload",
     ],
   },
 };
