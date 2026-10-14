@@ -9,6 +9,9 @@ export type OrbState = "idle" | "listening" | "thinking" | "speaking";
 
 export type NoticeLevel = "info" | "warn" | "alert";
 
+/** red: a session is blocked · amber: something waits on Matthew or plan usage is high · green: all fine. */
+export type Mood = "green" | "amber" | "red";
+
 /** Where a message to the brain came from. */
 export type BrainChannel = "dashboard" | "telegram" | "desk-voice" | "desk-typed";
 
@@ -31,7 +34,9 @@ export interface BrainMetrics {
  */
 export type DeskEvent =
   | { type: "orb.state"; state: OrbState; amplitude?: number }
-  | { type: "notice"; at: string; level: NoticeLevel; title: string; body?: string }
+  | { type: "notice"; at: string; level: NoticeLevel; title: string; body?: string; link?: string }
+  /** How things are, for the orb's colour (JD-11). */
+  | { type: "mood.changed"; mood: Mood; reason: string }
   // The brain's reply as it's written (JD-6). One messageId per user turn; deltas are chunks to append.
   | { type: "brain.start"; messageId: string; channel: BrainChannel; text: string }
   | { type: "brain.delta"; messageId: string; text: string }
@@ -127,6 +132,19 @@ export interface NewTask {
   due?: string;
   project?: string;
   priority?: TaskPriority;
+}
+
+/** GET /api/desk/mood */
+export interface MoodResponse {
+  mood: Mood;
+  reason: string;
+  dnd: DndState;
+}
+
+/** POST /api/desk/dnd { on, until? } → DndState. While on, notices aren't sent to Telegram. */
+export interface DndState {
+  on: boolean;
+  until?: string;
 }
 
 /** A paired Mac, as the dashboard lists it (never includes the key). */

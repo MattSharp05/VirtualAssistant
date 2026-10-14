@@ -4,6 +4,7 @@ import { Brain } from "./brain/index.js";
 import { createBot } from "./bot.js";
 import { notifier, notify } from "./notify.js";
 import { Scheduler, useScheduler } from "./scheduler.js";
+import { ReportWatcher, useReportWatcher } from "./notifyRules.js";
 import { DeviceStore } from "./desk/auth.js";
 import { DeskRpc } from "./desk/rpc.js";
 import { DeskRouter, type DeskContext } from "./desk/routes/index.js";
@@ -73,11 +74,16 @@ if (bot && chatId !== undefined) {
 }
 // Fires anything that came due while JARVIS was down (marked late), then ticks every second.
 scheduler.start();
+// Session reports → Telegram alerts (blocked, waiting on you, finished, failed) and the orb's mood.
+const reportWatcher = new ReportWatcher(jarvis.store, bus, notifier, () => jarvis.status().then((st) => st.usage));
+useReportWatcher(jarvis, reportWatcher);
+reportWatcher.start();
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
     monitor.stop();
     scheduler.stop();
+    reportWatcher.stop();
     brain.stop();
     deskCtx.hub.close();
     dashboard.close();

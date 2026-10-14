@@ -148,6 +148,14 @@ export class Store {
    * name becomes a new "reported" job, and a known one moves to the newer session, so messages
    * reach whichever orchestrator is current.
    */
+  private readonly reportListeners = new Set<(report: Report) => void>();
+
+  /** Called after every incoming report (notifications and mood, src/notifyRules.ts). */
+  onReport(fn: (report: Report) => void): () => void {
+    this.reportListeners.add(fn);
+    return () => this.reportListeners.delete(fn);
+  }
+
   addReport(jobId: string, text: string, sessionId?: string): Report {
     const id = jobId.toLowerCase();
     const now = new Date().toISOString();
@@ -164,6 +172,13 @@ export class Store {
     const report = { jobId: id, text, receivedAt: now };
     this.state.reports = [...(this.state.reports ?? []), report].slice(-MAX_REPORTS);
     this.save();
+    for (const fn of this.reportListeners) {
+      try {
+        fn(report);
+      } catch (err) {
+        console.error("report listener failed:", err);
+      }
+    }
     return report;
   }
 
