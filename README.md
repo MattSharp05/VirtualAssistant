@@ -226,6 +226,9 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 - **Streaming:** replies appear as they're written: on Telegram the message shows after the first
   sentence and grows (the metrics line is added at the end); on the dashboard the bubble grows. One
   chat process stays running between messages (`BRAIN_WARM=0` turns that off).
+- **Files:** send JARVIS a PDF, text file or photo on Telegram (caption = what you want, e.g.
+  "summarise this"). It's kept for 7 days in `data/uploads`; JARVIS can read those files and
+  nothing else on disk.
 - **Calendar changes:** "add a call with Sam tomorrow at 3", "move it to 4", "decline the 5pm".
   JARVIS does it straight away (no confirm tap), says what it did in one line, and logs it;
   "undo that" reverses the last change.

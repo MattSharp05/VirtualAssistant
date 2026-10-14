@@ -41,6 +41,8 @@ export interface DeskRoute {
   /** Path under /api/desk, with `:name` parameters, e.g. "/rpc/:id". */
   path: string;
   public?: boolean;
+  /** Don't parse a JSON body; the handler reads `req` itself (file uploads). */
+  rawBody?: boolean;
   /** Return a value to send it as JSON (200), or write to `res` yourself and return undefined. */
   handler: (r: DeskRequest) => Promise<unknown> | unknown;
 }
@@ -115,7 +117,7 @@ export class DeskRouter {
       const params = Object.fromEntries(route.names.map((n, i) => [n, decodeURIComponent(m[i + 1])]));
       try {
         let body: Record<string, unknown> = {};
-        if (req.method !== "GET") {
+        if (req.method !== "GET" && !route.rawBody) {
           try {
             body = await readJson(req);
           } catch (err) {

@@ -115,6 +115,15 @@ export type RpcAnswer = { ok: true; result: unknown } | { ok: false; error: stri
 export interface ChatRequest {
   text: string;
   channel: "desk-voice" | "desk-typed";
+  /** Upload ids from POST /api/desk/files. */
+  attachments?: string[];
+}
+
+/** POST /api/desk/files (multipart, field "file", ≤ 20 MB) */
+export interface UploadResponse {
+  id: string;
+  path: string;
+  name: string;
 }
 export interface ChatResponse {
   messageId: string;

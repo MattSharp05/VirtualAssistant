@@ -19,6 +19,10 @@ export interface BrainSetup {
   allowedTools: string[];
   disallowedTools: string[];
   extraArgs: string[];
+  /** Built-in tools to enable (default none). */
+  builtinTools?: string[];
+  /** Permission allow rules for them. */
+  allowRules?: string[];
 }
 
 export interface ToolInfo {
@@ -69,7 +73,7 @@ export class ToolRegistry {
   }
 
   async brainSetup(ctx: ToolContext): Promise<BrainSetup> {
-    const setup: BrainSetup = { hints: [], parts: [], allowedTools: [], disallowedTools: [], extraArgs: [] };
+    const setup: BrainSetup = { hints: [], parts: [], allowedTools: [], disallowedTools: [], extraArgs: [], builtinTools: [], allowRules: [] };
     for (const g of this.groups) {
       const hint = typeof g.promptHint === "function" ? g.promptHint(ctx) : g.promptHint;
       if (hint) setup.hints.push(hint);
@@ -79,6 +83,8 @@ export class ToolRegistry {
       setup.allowedTools.push(...(cli.allowedTools ?? []));
       setup.disallowedTools.push(...(cli.disallowedTools ?? []));
       setup.extraArgs.push(...(cli.extraArgs ?? []));
+      setup.builtinTools!.push(...(cli.builtinTools ?? []));
+      setup.allowRules!.push(...(cli.allowRules ?? []));
     }
     return setup;
   }

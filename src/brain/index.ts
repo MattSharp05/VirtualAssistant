@@ -86,6 +86,8 @@ export interface BrainToolEvent {
 export interface ChatOptions {
   /** Each chunk of reply text as it's written. */
   onDelta?: (text: string) => void;
+  /** Files that came with the message (src/uploads.ts); the brain can Read them. */
+  attachments?: { path: string; name: string }[];
 }
 
 export interface CliResult {
@@ -205,7 +207,8 @@ export class Brain {
     this.store.addBrainMessage({ at: sentAt.toISOString(), from: "you", channel, text });
     this.publish({ type: "brain.start", messageId, channel, text });
     this.publish({ type: "orb.state", state: "thinking" });
-    const stamped = `${stamp(sentAt, channel)} ${text}`;
+    const attached = (options.attachments ?? []).map((a) => `\nAttached: ${a.path} (${a.name})`).join("");
+    const stamped = `${stamp(sentAt, channel)} ${text}${attached}`;
     const onDelta = (chunk: string) => {
       options.onDelta?.(chunk);
       this.publish({ type: "brain.delta", messageId, text: chunk });
@@ -368,7 +371,9 @@ export class Brain {
       "-p",
       "--model", this.model,
       "--system-prompt", systemPrompt(setup),
-      "--tools", "",
+      // Built-in tools stay off except what a group asks for (uploads: Read, limited by allowRules).
+      "--tools", (setup.builtinTools ?? []).join(","),
+      ...(setup.allowRules?.length ? ["--settings", JSON.stringify({ permissions: { allow: setup.allowRules } })] : []),
       // --strict-mcp-config also hides the claude.ai connectors, so it's only used when none are wanted.
       ...(setup.allowedTools.length ? [] : ["--strict-mcp-config"]),
       "--mcp-config", mcpConfig,
