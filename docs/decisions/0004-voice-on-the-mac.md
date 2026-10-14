@@ -1,0 +1,5 @@
+# 0004 — Voice on the Mac: Porcupine, ⌥⌥, Silero VAD, whisper.cpp, `say`
+**Context.** Hands-free "Jarvis", a push-to-talk key, offline transcription and free speech output, all on Matthew's Mac.
+**Decision.** Main process records 16 kHz PCM with PvRecorder. Frames feed Porcupine (built-in "jarvis", AccessKey from a free Picovoice account, entered in Settings) while idle; after the wake word or a ⌥⌥ double-tap (uiohook-napi global key hook, 350 ms window), frames go to Silero VAD until 700 ms of silence (max 30 s), then to whisper.cpp `base.en` (Metal). Replies are split into sentences as they stream; each is rendered with `say -v <voice> -o x.aiff` and played in the renderer (WebAudio analyser drives the orb). Pressing ⌥⌥ while speaking interrupts.
+**Alternatives.** openWakeWord ("hey jarvis" only); macOS SFSpeechRecognizer (needs a Swift helper, weaker accuracy); ElevenLabs (paid; Later).
+**Consequences.** macOS permissions: Microphone, Input Monitoring. Picovoice free tier is personal-use and checks the key online. Models (~160 MB) download on first run.

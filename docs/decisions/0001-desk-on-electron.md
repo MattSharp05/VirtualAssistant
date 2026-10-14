@@ -1,0 +1,5 @@
+# 0001 — JARVIS Desk is an Electron app (React + Vite renderer)
+**Context.** The desktop app needs transparent, click-through, always-on-top windows on every Space and over full-screen apps, many regular windows, a camera-based hand tracker and embedded web pages (claude.ai, notion.so). The team (Claude) writes TypeScript daily; the server is TypeScript.
+**Decision.** Electron with a React 18 + Vite renderer. One renderer bundle, one route per window. Overlay: a frameless transparent BrowserWindow at `screen-saver` level, `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`, `setIgnoreMouseEvents(true, { forward: true })` toggled off while the pointer is over the orb or a card. Embedded sites use `WebContentsView` with a persistent partition.
+**Alternatives.** Swift/SwiftUI (best native feel, but a second language and no shared UI with the web preview); Tauri (lighter, but transparent overlays on macOS need private APIs and the WebKit view can't run MediaPipe WASM as reliably).
+**Consequences.** ~150 MB app; ~150–250 MB RAM at rest (budget 400 MB). The same renderer builds for the web preview used in QA.
