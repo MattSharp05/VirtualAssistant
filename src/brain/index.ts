@@ -118,6 +118,9 @@ export class Brain {
   private readonly toolListeners = new Set<(e: BrainToolEvent) => void>();
   private proc?: WarmProcess;
   private idleTimer?: NodeJS.Timeout;
+  /** Turns in flight (warm mode); a restart waits for 0. */
+  private busy = 0;
+  private restartPending = false;
   /** How many CLI processes this brain has started (tests and the dashboard read it). */
   spawns = 0;
 
@@ -128,6 +131,17 @@ export class Brain {
     // An empty working directory: no CLAUDE.md or project settings leak into the brain.
     this.cwd = join(config.dataDir, "brain");
     mkdirSync(this.cwd, { recursive: true });
+    // Memory is part of the system prompt, which a warm process reads once: restart to pick changes up.
+    config.bus?.subscribe((e) => {
+      if (e.type === "memory.changed") this.restartWhenIdle();
+    });
+  }
+
+  /** Stops the warm process now if idle, else right after the current turn; the next message starts a fresh one. */
+  restartWhenIdle(): void {
+    if (!this.proc) return;
+    if (this.busy === 0) this.stop();
+    else this.restartPending = true;
   }
 
   get model(): string {
@@ -236,6 +250,7 @@ export class Brain {
     };
     for (let attempt = 0; ; attempt++) {
       const proc = await this.process();
+      this.busy++;
       try {
         const result = await withTimeout(proc.send(prompt, handlers), TIMEOUT_MS, () => proc.kill());
         if (!this.store.brain().sessionId) this.store.updateBrain({ sessionId: proc.sessionId });
@@ -250,6 +265,12 @@ export class Brain {
         // The conversation it tried to resume is gone (volume reset, CLI cleanup): start over.
         if (GONE.test(err.stderr)) this.store.updateBrain({ sessionId: undefined });
         // Otherwise it crashed: the retry resumes the same conversation in a new process.
+      } finally {
+        this.busy--;
+        if (this.restartPending && this.busy === 0) {
+          this.restartPending = false;
+          this.stop();
+        }
       }
     }
   }

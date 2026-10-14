@@ -5,6 +5,8 @@ import { createBot } from "./bot.js";
 import { notifier, notify } from "./notify.js";
 import { Scheduler, useScheduler } from "./scheduler.js";
 import { ReportWatcher, useReportWatcher } from "./notifyRules.js";
+import { memory } from "./tools/memory.js";
+import { MEMORY_POLL_MS } from "./memory.js";
 import { DeviceStore } from "./desk/auth.js";
 import { DeskRpc } from "./desk/rpc.js";
 import { DeskRouter, type DeskContext } from "./desk/routes/index.js";
@@ -78,6 +80,8 @@ scheduler.start();
 const reportWatcher = new ReportWatcher(jarvis.store, bus, notifier, () => jarvis.status().then((st) => st.usage));
 useReportWatcher(jarvis, reportWatcher);
 reportWatcher.start();
+// Matthew's edits to JARVIS Memory in Notion reach the brain within 10 minutes.
+scheduler.every("memory-poll", MEMORY_POLL_MS, async () => void (await memory(toolContext).poll()));
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {

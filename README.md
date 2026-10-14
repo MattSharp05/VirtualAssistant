@@ -226,6 +226,9 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 - **Streaming:** replies appear as they're written: on Telegram the message shows after the first
   sentence and grows (the metrics line is added at the end); on the dashboard the bubble grows. One
   chat process stays running between messages (`BRAIN_WARM=0` turns that off).
+- **Memory:** "remember my sister is called Emma" adds a bullet to your **JARVIS Memory** page in
+  Notion (made by `setup:notion`). JARVIS reads that page at the start of each conversation, and
+  notices your own edits there within 10 minutes. It never stores passwords or keys.
 - **Timers and reminders:** "25-minute timer", "remind me to call Sam on Friday at 9". When one is
   due you get a Telegram message (and a Desk alert). They survive restarts; anything missed while
   JARVIS was down arrives on start, marked late. Times are in `TZ` (default Europe/London).

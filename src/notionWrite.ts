@@ -104,6 +104,10 @@ export class NotionWriter {
 
   // ── Memory page ──
 
+  async getPage(pageId: string): Promise<Json> {
+    return this.api.call("GET", `/pages/${this.memoryPage(pageId)}`);
+  }
+
   async listBlocks(pageId: string): Promise<Json[]> {
     const id = this.memoryPage(pageId);
     const out: Json[] = [];
@@ -116,9 +120,10 @@ export class NotionWriter {
     return out;
   }
 
-  async appendBlocks(pageId: string, children: Json[]): Promise<Json[]> {
+  /** Appends at the end, or right after block `after` (which must be on the page). */
+  async appendBlocks(pageId: string, children: Json[], after?: string): Promise<Json[]> {
     const id = this.memoryPage(pageId);
-    const res = await this.api.call("PATCH", `/blocks/${id}/children`, { children });
+    const res = await this.api.call("PATCH", `/blocks/${id}/children`, { children, ...(after ? { after: normalizeId(after) } : {}) });
     return (res.results as Json[]) ?? [];
   }
 
