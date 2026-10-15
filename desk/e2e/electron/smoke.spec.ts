@@ -34,6 +34,31 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
     expect(await window.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(
       "rgba(0, 0, 0, 0)",
     );
+    // JD-20: the ring's buttons open framed windows, and a window reopens where it was left.
+    const openHello = () => app.evaluate(({ ipcMain }) => void ipcMain.emit("desk:open-window", {}, "hello"));
+    const helloWindow = () =>
+      app.evaluate(({ BrowserWindow }) => {
+        const w = BrowserWindow.getAllWindows().find((w) => w.getTitle().startsWith("Hello"));
+        return w ? { bounds: w.getBounds(), visible: w.isVisible() } : undefined;
+      });
+    await openHello();
+    await expect.poll(async () => (await helloWindow())?.visible, { timeout: 10_000 }).toBe(true);
+    const moved = { x: 140, y: 160, width: 520, height: 360 };
+    await app.evaluate(({ BrowserWindow }, b) => {
+      const w = BrowserWindow.getAllWindows().find((w) => w.getTitle().startsWith("Hello"))!;
+      w.setBounds(b);
+      w.emit("moved");
+      w.close();
+    }, moved);
+    await expect.poll(helloWindow).toBeUndefined();
+    await openHello();
+    await expect.poll(async () => (await helloWindow())?.bounds, { timeout: 10_000 }).toEqual(moved);
+    await app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()
+        .find((w) => w.getTitle().startsWith("Hello"))
+        ?.close(),
+    );
+
     const shot = testInfo.outputPath("electron-smoke.png");
     await window.screenshot({ path: shot });
     await testInfo.attach("app", { path: shot, contentType: "image/png" });

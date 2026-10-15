@@ -58,10 +58,49 @@ describe("Overlay + orb", () => {
     expect(bridge.interactive).toBe(false);
     fireEvent.mouseEnter(orb());
     expect(bridge.interactive).toBe(true);
-    fireEvent.click(orb());
-    expect(bridge.orbClicks).toBe(1);
     fireEvent.mouseLeave(orb());
     expect(bridge.interactive).toBe(false);
+  });
+
+  it("opens the launcher ring on click; Esc, a click elsewhere or the orb close it", () => {
+    const { orb, bridge } = renderOn("orb-idle");
+    const ring = () => screen.queryAllByRole("button").filter((b) => b.dataset.launcherId);
+    fireEvent.click(orb());
+    expect(bridge.orbClicks).toBe(1);
+    expect(ring().map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Chat",
+      "Sessions",
+      "Today",
+      "To-do",
+      "Notion",
+      "System",
+    ]);
+    // The whole overlay takes clicks while the ring is open, so "elsewhere" can close it.
+    expect(bridge.interactive).toBe(true);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(ring()).toHaveLength(0);
+    expect(bridge.interactive).toBe(false);
+
+    fireEvent.click(orb());
+    fireEvent.click(screen.getByTestId("launcher-backdrop"));
+    expect(ring()).toHaveLength(0);
+    fireEvent.click(orb());
+    fireEvent.click(orb());
+    expect(ring()).toHaveLength(0);
+  });
+
+  it("opens a window from the ring, the placeholder until that window exists", () => {
+    vi.spyOn(window, "open").mockImplementation(() => null);
+    const { orb, bridge } = renderOn("orb-idle");
+    fireEvent.click(orb());
+    fireEvent.click(screen.getByRole("button", { name: "Chat" }));
+    expect(bridge.opened).toEqual(["hello"]);
+    expect(screen.queryByRole("button", { name: "Chat" })).toBeNull();
+  });
+
+  it("starts with the ring open in the launcher-open scenario", () => {
+    renderOn("launcher-open");
+    expect(screen.getByRole("navigation", { name: "Open a window" })).toBeTruthy();
   });
 
   it("stays large for 10 s after going idle, then shrinks to the dot", async () => {

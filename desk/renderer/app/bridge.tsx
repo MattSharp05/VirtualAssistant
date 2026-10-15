@@ -4,11 +4,14 @@ import { createContext, useContext, type ReactNode } from "react";
 import type { DeskBridge } from "@jarvis/shared";
 import { createMockBridge, type MockBridge } from "../mock/bridge";
 import { findScenario, scenarios } from "../mock/scenarios";
+import type { ScenarioUi } from "../mock/types";
 
 export interface BridgeChoice {
   bridge: DeskBridge;
   /** The scenario name when the mock is in use. */
   scenario?: string;
+  /** The scenario's starting UI state, if it sets one. */
+  ui?: ScenarioUi;
 }
 
 export function chooseBridge(search: string, native: DeskBridge | undefined): BridgeChoice {
@@ -22,7 +25,7 @@ export function chooseBridge(search: string, native: DeskBridge | undefined): Br
   const bridge = createMockBridge(scenario);
   // e2e (desk/e2e/helpers.ts) waits on this until the scenario's timeline has played out.
   (globalThis as { __deskMock?: MockBridge }).__deskMock = bridge;
-  return { bridge, scenario: scenario.name };
+  return { bridge, scenario: scenario.name, ...(scenario.ui ? { ui: scenario.ui } : {}) };
 }
 
 const BridgeContext = createContext<BridgeChoice | undefined>(undefined);

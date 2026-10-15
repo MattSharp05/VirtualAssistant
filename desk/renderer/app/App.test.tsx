@@ -1,7 +1,8 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeskBridge } from "@jarvis/shared";
 import { App } from "./App";
+import type { MockBridge } from "../mock/bridge";
 import { BridgeProvider, chooseBridge } from "./bridge";
 
 describe("App", () => {
@@ -18,6 +19,23 @@ describe("App", () => {
       </BridgeProvider>,
     );
     expect(screen.getByRole("heading", { name: "JARVIS Desk" })).toBeTruthy();
+  });
+
+  it("puts framed windows in the glass frame with working minimise and close buttons", () => {
+    window.location.hash = "";
+    const choice = chooseBridge("?scenario=empty&window=hello", undefined);
+    window.history.replaceState(null, "", "/index.html?scenario=empty&window=hello");
+    render(
+      <BridgeProvider value={choice}>
+        <App />
+      </BridgeProvider>,
+    );
+    expect(screen.getByRole("heading", { name: "Hello" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Minimise" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect((choice.bridge as MockBridge).frameActions).toEqual(["minimize", "close"]);
+    expect(document.documentElement.classList.contains("framed-window")).toBe(true);
+    window.history.replaceState(null, "", "/");
   });
 
   it("shows the preview scenario and the events it replays", () => {

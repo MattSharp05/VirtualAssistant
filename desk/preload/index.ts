@@ -21,6 +21,10 @@ const bridge: DeskBridge = {
     setInteractive: (on) => ipcRenderer.send("desk:hit", on),
     orbClicked: () => ipcRenderer.send("desk:orb-click"),
   },
+  frame: {
+    minimize: () => ipcRenderer.send("desk:frame-minimize"),
+    close: () => ipcRenderer.send("desk:frame-close"),
+  },
 };
 
 contextBridge.exposeInMainWorld("desk", bridge);

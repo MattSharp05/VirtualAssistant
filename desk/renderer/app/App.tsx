@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { DeskEvent } from "@jarvis/shared";
-import { features } from "../features/registry";
+import { findFeature, type Feature } from "../features/registry";
+import { DEFAULT_SIZE } from "../features/types";
 import { useBridgeChoice } from "./bridge";
 import { windowIdFromLocation } from "./router";
+import { WindowFrame } from "./WindowFrame";
 
 function describe(event: DeskEvent): string {
   return event.type === "notice" ? `${event.type}: ${event.title}` : event.type;
@@ -33,6 +35,28 @@ export function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-  const feature = features.find((f) => f.id === windowId);
-  return feature ? <feature.component /> : <Placeholder />;
+  const feature = findFeature(windowId);
+  if (!feature) return <Placeholder />;
+  return feature.framed === false ? <feature.component /> : <Framed feature={feature} />;
+}
+
+/** A feature in the glass frame; the page itself is see-through (the preview fakes a desktop). */
+function Framed({ feature }: { feature: Feature }) {
+  const { scenario } = useBridgeChoice();
+  useEffect(() => {
+    const root = document.documentElement;
+    const classes = ["framed-window", ...(scenario ? ["preview"] : [])];
+    root.classList.add(...classes);
+    // The preview shows the window at its default size on a fake desktop.
+    const size = feature.defaultSize ?? DEFAULT_SIZE;
+    root.style.setProperty("--window-width", `${size.width}px`);
+    root.style.setProperty("--window-height", `${size.height}px`);
+    document.title = `${feature.title} · JARVIS`;
+    return () => root.classList.remove(...classes);
+  }, [feature, scenario]);
+  return (
+    <WindowFrame title={feature.title} icon={feature.icon}>
+      <feature.component />
+    </WindowFrame>
+  );
 }

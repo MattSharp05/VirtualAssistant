@@ -13,6 +13,9 @@ export interface MockBridge extends DeskBridge {
   /** What the overlay last reported (click-through off while true) and how often the orb was clicked. */
   readonly interactive: boolean;
   readonly orbClicks: number;
+  /** Windows asked for with openWindow, and the frame buttons pressed ("minimize" | "close"), in order. */
+  readonly opened: string[];
+  readonly frameActions: string[];
 }
 
 export function createMockBridge(scenario: Scenario): MockBridge {
@@ -22,6 +25,8 @@ export function createMockBridge(scenario: Scenario): MockBridge {
   let chats = 0;
   let interactive = false;
   let orbClicks = 0;
+  const opened: string[] = [];
+  const frameActions: string[] = [];
 
   const emit = (event: DeskEvent) => {
     for (const fn of listeners) fn(event);
@@ -83,6 +88,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
       return { messageId };
     },
     openWindow(id) {
+      opened.push(id);
       const url = new URL(window.location.href);
       url.searchParams.set("window", id);
       window.open(url.toString(), `desk-${id}`);
@@ -98,9 +104,15 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     get orbClicks() {
       return orbClicks;
     },
+    opened,
+    frameActions,
     overlay: {
       setInteractive: (on) => void (interactive = on),
       orbClicked: () => void orbClicks++,
+    },
+    frame: {
+      minimize: () => void frameActions.push("minimize"),
+      close: () => void frameActions.push("close"),
     },
     close() {
       for (const t of timers) clearTimeout(t);
