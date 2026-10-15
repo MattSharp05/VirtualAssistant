@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useBridgeChoice } from "../../app/bridge";
+import { CardsLayer } from "./cards/CardsLayer";
 import { HitRegions } from "./hitRegions";
 import { Launcher } from "./Launcher";
 import { Orb } from "./Orb";
 import { useOrb } from "./useOrb";
 import "./overlay.css";
 
-/** The see-through layer over every app, with the orb in the top-right corner and its launcher ring. */
+/**
+ * The see-through layer over every app, with the orb in the top-right corner, its launcher ring and
+ * the cards beside it (JD-27).
+ */
 export function Overlay() {
   const { bridge, scenario, ui } = useBridgeChoice();
   const orb = useOrb(bridge);
@@ -50,6 +54,7 @@ export function Overlay() {
           }}
         />
       </div>
+      <CardsLayer bridge={bridge} hits={hits} />
     </main>
   );
 }
