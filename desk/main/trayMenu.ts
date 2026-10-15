@@ -2,6 +2,7 @@
 // Menu.buildFromTemplate. The shape is a subset of Electron's MenuItemConstructorOptions.
 import type { DeskConnection, UsageResponse } from "@jarvis/shared";
 import type { DeskSettings, Face } from "./settingsSchema";
+import { menuLabel } from "./windows/layouts";
 
 export interface TrayItem {
   label?: string;
@@ -17,7 +18,10 @@ export interface TrayItem {
 }
 
 export interface TrayState {
-  settings: Pick<DeskSettings, "face" | "wakeWordEnabled" | "cameraHands" | "dnd" | "layouts">;
+  settings: Pick<DeskSettings, "face" | "wakeWordEnabled" | "cameraHands" | "dnd">;
+  /** Layout names (JD-37): the built-ins, then Matthew's own; the one the windows are in is ticked. */
+  layouts: string[];
+  activeLayout?: string;
   connection: DeskConnection;
   usage?: UsageResponse;
 }
@@ -26,6 +30,7 @@ export interface TrayActions {
   talk(): void;
   commandBar(): void;
   layout(name: string): void;
+  saveLayout(): void;
   setFace(face: Face): void;
   setWakeWord(on: boolean): void;
   setCameraHands(on: boolean): void;
@@ -65,8 +70,6 @@ const heading = (label: string): TrayItem => ({ label, enabled: false });
 
 export function trayMenu(state: TrayState, act: TrayActions): TrayItem[] {
   const { settings } = state;
-  // JD-37 fills layouts; until then the section shows what's coming.
-  const layoutNames = Object.keys(settings.layouts);
   const plan = planLine(state.usage);
   return [
     // ⌥⌥ (a double-tap) can't be a menu accelerator, so the label carries it.
@@ -79,8 +82,13 @@ export function trayMenu(state: TrayState, act: TrayActions): TrayItem[] {
     },
     separator,
     heading("Layout"),
-    ...layoutNames.map((name): TrayItem => ({ label: name, click: () => act.layout(name) })),
-    { label: "Save current layout…", enabled: false },
+    ...state.layouts.map((name): TrayItem => ({
+      label: menuLabel(name),
+      type: "checkbox",
+      checked: name === state.activeLayout,
+      click: () => act.layout(name),
+    })),
+    { label: "Save current layout…", click: act.saveLayout },
     separator,
     heading("Face"),
     {

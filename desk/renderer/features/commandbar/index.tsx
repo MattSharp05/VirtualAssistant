@@ -86,7 +86,9 @@ export default function CommandBar() {
           bridge.openWindow("notion", { page: r.id });
           break;
         case "layout":
-          for (const id of r.windows) bridge.openWindow(id);
+          // The app opens, moves and closes windows to match (JD-37); the preview just opens them.
+          if (bridge.layouts) void bridge.layouts.apply(r.label).catch(() => {});
+          else for (const id of r.windows) bridge.openWindow(id);
           break;
         case "ask":
           return void ask(r.text);

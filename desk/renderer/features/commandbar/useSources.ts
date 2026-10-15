@@ -37,9 +37,9 @@ export function useSources(bridge: DeskBridge, text: string): Sources {
       .request<DeskSession[]>("/sessions")
       .then((list) => live && Array.isArray(list) && setSessions(list))
       .catch(() => {});
-    bridge.settings
-      .get("layouts")
-      .then((value) => live && setLayouts(layoutHits(value)))
+    // The app lists every layout, built-ins too (JD-37); the preview reads the saved ones.
+    (bridge.layouts ? bridge.layouts.list() : bridge.settings.get("layouts").then(layoutHits))
+      .then((hits) => live && setLayouts(hits))
       .catch(() => {});
     return () => {
       live = false;

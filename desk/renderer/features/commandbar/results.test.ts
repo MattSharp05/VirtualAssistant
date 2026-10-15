@@ -100,6 +100,10 @@ describe("source parsing", () => {
       { name: "Bare", windows: ["todo"] },
     ]);
     expect(layoutHits({ Odd: 3 })).toEqual([{ name: "Odd", windows: [] }]);
+    const saved = { windowId: "todo", bounds: { x: 0, y: 0, width: 600, height: 500 }, displayId: 1 };
+    expect(layoutHits({ Mine: { windows: [saved], displays: {} } })).toEqual([
+      { name: "Mine", windows: ["todo"] },
+    ]);
     expect(layoutHits(undefined)).toEqual([]);
   });
 });

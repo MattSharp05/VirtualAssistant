@@ -30,6 +30,10 @@ const bridge: DeskBridge = {
     setInteractive: (on) => ipcRenderer.send("desk:hit", on),
     orbClicked: () => ipcRenderer.send("desk:orb-click"),
   },
+  layouts: {
+    list: () => ipcRenderer.invoke("desk:layouts-list"),
+    apply: (name) => ipcRenderer.invoke("desk:layouts-apply", name),
+  },
   frame: {
     minimize: () => ipcRenderer.send("desk:frame-minimize"),
     close: () => ipcRenderer.send("desk:frame-close"),
