@@ -244,6 +244,62 @@ export interface BriefResponse {
   messageId: string;
 }
 
+// ── Calendar (JD-21; any range up to 42 days, fetched by the worker brain, cached 10 min) ──
+
+/** focus: focus time / blocks · work: from his work calendar · personal: everything else. */
+export type CalendarEventKind = "work" | "personal" | "focus";
+
+export interface CalendarAttendee {
+  name: string;
+  email: string;
+  response: "accepted" | "declined" | "tentative" | "needsAction";
+}
+
+export interface CalendarEvent {
+  id: string;
+  calendarId: string;
+  /** ISO time; a date (YYYY-MM-DD) for all-day events, whose end is the day after the last day. */
+  start: string;
+  end: string;
+  allDay: boolean;
+  title: string;
+  location?: string;
+  attendees?: CalendarAttendee[];
+  description?: string;
+  /** Meeting link, or the event's page in Google Calendar. */
+  link?: string;
+  kind: CalendarEventKind;
+}
+
+export interface FreeSlot {
+  start: string;
+  end: string;
+}
+
+export interface CalendarRange {
+  range: { start: string; end: string };
+  events: CalendarEvent[];
+  /** Free slots of ≥ 30 min inside working hours (09:00–18:00, weekdays). */
+  free?: FreeSlot[];
+}
+
+/** GET /api/desk/calendar?start=&end= (dates or ISO times; a date `end` includes that day). */
+export interface CalendarResponse extends CalendarRange {
+  ageSeconds: number;
+  /** The refresh failed; this is the last good copy. */
+  stale?: boolean;
+  lastError?: string;
+}
+
+/** GET /api/desk/calendar/free?days=7&minMinutes=30 */
+export interface CalendarFreeResponse {
+  from: string;
+  to: string;
+  minMinutes: number;
+  slots: FreeSlot[];
+  ageSeconds: number;
+}
+
 /** A paired Mac, as the dashboard lists it (never includes the key). */
 export interface DeviceInfo {
   id: string;
