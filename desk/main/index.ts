@@ -94,6 +94,9 @@ app.whenReady().then(() => {
     publish: broadcast,
     pttKey: () => settings.get("pttKey"),
     chat: (text) => connection.request<ChatResponse>("/chat", { text, channel: "desk-voice" }),
+    voice: () => settings.get("voice"),
+    speechRate: () => settings.get("speechRate"),
+    speakReplies: () => settings.get("speakReplies"),
   });
   // Push-to-talk (JD-31): the hotkey from any app, once macOS allows it (a card says how until then);
   // ⌘⌥L does the same without that permission. Not on a scenario (e.g. the smoke test).
@@ -101,6 +104,10 @@ app.whenReady().then(() => {
   globalShortcut.register("CommandOrControl+Alt+L", talk);
   ipcMain.on("desk:voice-ptt", talk);
   settings.onChange((key) => key === "pttKey" && voice.hotkey.setKey(settings.get("pttKey")));
+  // Turning spoken replies off (JD-38) also stops the one being said.
+  settings.onChange(
+    (key) => key === "speakReplies" && !settings.get("speakReplies") && voice.speaker.interrupt(),
+  );
   if (!scenario)
     startHotkeyWithAccess({
       start: () => voice.hotkey.start(),
@@ -108,7 +115,10 @@ app.whenReady().then(() => {
       publish: broadcast,
       hint: () => pttHint(settings.get("pttKey")),
     });
-  app.on("will-quit", () => voice.hotkey.stop());
+  app.on("will-quit", () => {
+    voice.hotkey.stop();
+    voice.speaker.interrupt(); // afplay would otherwise finish the sentence after JARVIS quits
+  });
   // First run downloads the models now, with a progress card (not on a scenario, e.g. the smoke test).
   if (!scenario) voice.session.warmUp().catch((err) => console.error("voice models:", err));
   // Saved layouts (JD-37): the tray, the command bar and the server's apply_layout tool.
@@ -146,7 +156,7 @@ app.whenReady().then(() => {
         return;
       }
       broadcast(event);
-      voice.ptt.onEvent(event);
+      voice.onEvent(event);
     },
     onStatus: (status) => {
       if (status.state === "connected") {

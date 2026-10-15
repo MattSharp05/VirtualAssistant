@@ -2,9 +2,10 @@
 // once (VoiceSession.listen), shows what was heard in the "You said" bubble (voice.transcript, published
 // locally like a server event) and asks JARVIS over the Desk API (channel desk-voice). The orb goes
 // listening (with the mic level, from the session) → thinking (transcribing, then waiting for the reply)
-// → idle on the reply's brain.done. Spoken replies (JD-38) take over at the first brain.delta. A second
-// toggle while listening cancels; nothing heard shows "didn't catch that". Dependencies are injected:
-// tested with a fake session and server.
+// → idle on the reply's brain.done. Spoken replies (JD-38, speaker.ts) take over at the first sentence:
+// the orb then rests once the last one has been said, and a press while JARVIS talks (⌥⌥) stops it at
+// once and listens again. A second toggle while listening cancels; nothing heard shows "didn't catch
+// that". Dependencies are injected: tested with a fake session, server and speaker.
 import type { ChatResponse, DeskEvent, ScreenCard } from "@jarvis/shared";
 import { missedCard, TRANSCRIPT_CARD_ID, voiceErrorCard } from "./cards";
 import type { PttSignal } from "./hotkey";
@@ -26,9 +27,18 @@ export interface PushToTalkDeps {
   publish(event: DeskEvent): void;
   /** How push-to-talk is started, for the "didn't catch that" card ("double-tap right ⌥"). */
   hint(): string;
+  /** The Speaker (JD-38), when replies are spoken. */
+  speech?: SpeechLike;
   now?: () => Date;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
+}
+
+/** The parts of the Speaker push-to-talk uses. */
+export interface SpeechLike {
+  readonly busy: boolean;
+  drained(): Promise<void>;
+  interrupt(): void;
 }
 
 export class PushToTalk {
@@ -75,7 +85,7 @@ export class PushToTalk {
       )
         this.messageId = e.messageId;
     } else if (e.type === "brain.delta") {
-      if (e.messageId === this.messageId && this.stateNow === "thinking") this.stateNow = "replying"; // JD-38: speaking
+      if (e.messageId === this.messageId && this.stateNow === "thinking") this.stateNow = "replying"; // the speaker reads the same deltas
     } else if (e.type === "brain.done" || e.type === "brain.error") {
       if (this.stateNow !== "thinking" && this.stateNow !== "replying") return;
       if (!this.messageId) {
@@ -85,12 +95,14 @@ export class PushToTalk {
       if (e.messageId !== this.messageId) return;
       if (e.type === "brain.error")
         this.card(voiceErrorCard(new Error(e.error), this.now(), "JARVIS couldn't answer"));
-      this.finish();
+      this.replied();
     }
   }
 
   private async start(): Promise<void> {
     const turn = ++this.turn;
+    // Talking over JARVIS: it stops mid-sentence and listens.
+    if (this.deps.speech?.busy) this.deps.speech.interrupt();
     this.clearReply();
     this.stateNow = "listening";
     this.deps.publish({ type: "card.dismiss", id: TRANSCRIPT_CARD_ID });
@@ -141,7 +153,7 @@ export class PushToTalk {
     }
     if (turn !== this.turn || (this.stateNow !== "thinking" && this.stateNow !== "replying")) return;
     this.messageId ??= messageId;
-    if (this.finished.has(this.messageId)) return this.finish();
+    if (this.finished.has(this.messageId)) return this.replied();
     this.finished.clear();
     const set = this.deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
     this.timeout = set(() => this.finish(), REPLY_TIMEOUT_MS);
@@ -153,11 +165,24 @@ export class PushToTalk {
     this.stateNow = "idle";
   }
 
+  /** The reply has streamed to its end: done now, or once the speaker has said all of it. */
+  private replied(): void {
+    const speech = this.deps.speech;
+    if (!speech?.busy) return this.finish();
+    const turn = this.turn;
+    this.clearReply();
+    this.stateNow = "replying";
+    void speech.drained().then(() => {
+      // The speaker rests the orb itself; a new press (turn) or an interrupt has moved on already.
+      if (turn === this.turn && this.stateNow === "replying") this.finish(false);
+    });
+  }
+
   /** The reply is done (or failed): the orb rests. */
-  private finish(): void {
+  private finish(rest = true): void {
     this.clearReply();
     this.stateNow = "idle";
-    this.deps.publish({ type: "orb.state", state: "idle" });
+    if (rest) this.deps.publish({ type: "orb.state", state: "idle" });
   }
 
   private clearReply(): void {

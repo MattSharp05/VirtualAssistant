@@ -347,6 +347,12 @@ function VoiceSection({
 
   return (
     <Section id="voice" title="Voice">
+      <Switch
+        label="Speak replies"
+        hint="Answers to voice questions are read aloud, sentence by sentence. ⌥⌥ stops them."
+        checked={values.speakReplies}
+        onChange={(on) => void update("speakReplies", on)}
+      />
       <Row label="Voice" htmlFor="settings-voice" hint="Any voice from System Settings → Spoken Content.">
         <div className="settings-inline">
           <select
