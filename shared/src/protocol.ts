@@ -60,6 +60,8 @@ export type DeskEvent =
   | { type: "timer.started"; id: string; endsAt: string; label?: string }
   | { type: "timer.done"; id: string; label?: string }
   | { type: "reminder.due"; id: string; text: string; late: boolean }
+  /** A session reported in or was messaged (JD-32); the Sessions window re-fetches /sessions. */
+  | { type: "sessions.changed" }
   /** The server asks the Mac for something (a file, the clipboard…); the Desk answers with POST /api/desk/rpc/:id. */
   | { type: "rpc"; id: string; kind: string; payload: unknown };
 
@@ -351,6 +353,62 @@ export interface CalendarFreeResponse {
   ageSeconds: number;
 }
 
+// ── Sessions window (JD-32): cloud sessions merged with the ones JARVIS tracks ──
+
+/** needs-you: the latest report is blocked, needs a decision or hands a batch to QA · working: active in the last 30 min · idle: the rest. */
+export type SessionGroup = "needs-you" | "working" | "idle";
+
+/** What a session report says (src/notifyRules.ts classifies them). */
+export type ReportKind = "blocked" | "decision" | "finished" | "failed" | "info";
+
+export interface DeskSession {
+  /** What the other routes take: the tracked name, or the cloud session id for untracked ones. */
+  id: string;
+  /** The name JARVIS tracks it under (e.g. "mk"); absent for sessions it doesn't track yet. */
+  name?: string;
+  sessionId: string;
+  title: string;
+  /** The cloud session's own status (running, idle…), when the list says. */
+  status?: string;
+  /** The newest of: the session's last event, its last report, the last message sent to it. */
+  lastActivity?: string;
+  group: SessionGroup;
+  /** First line of the latest report, and what kind of report it was. */
+  latestReport?: string;
+  latestKind?: ReportKind;
+  url: string;
+}
+
+export interface SessionReport {
+  text: string;
+  at: string;
+  kind: ReportKind;
+}
+
+export interface SessionActivityItem {
+  at?: string;
+  role: "user" | "assistant" | "tool" | "other";
+  text: string;
+}
+
+/** GET /api/desk/sessions/:id */
+export interface SessionDetail {
+  session: DeskSession;
+  /** What the session has been doing (oldest first); unavailable when its history can't be read. */
+  activity: { available: boolean; items: SessionActivityItem[]; reason?: string };
+  /** The last 5 reports, newest first. */
+  reports: SessionReport[];
+  link: string;
+}
+
+/** POST /api/desk/sessions/:id/send { text } */
+export interface SessionSendResponse {
+  ok: true;
+  /** The tracked name it went to (an untracked session gets one from its title). */
+  name: string;
+  ms: number;
+}
+
 /** A paired Mac, as the dashboard lists it (never includes the key). */
 export interface DeviceInfo {
   id: string;
@@ -371,8 +429,11 @@ export interface DeskBridge {
   request<T = unknown>(path: string, body?: unknown): Promise<T>;
   /** Talk to JARVIS; the reply arrives through subscribe() as brain.* events with this messageId. */
   chat(text: string, channel?: ChatRequest["channel"]): Promise<ChatResponse>;
-  /** Opens (or focuses) one of the Desk's windows by feature id. */
-  openWindow(id: string): void;
+  /**
+   * Opens (or focuses) one of the Desk's windows by feature id. Params reach the window as its hash
+   * query (`#/sessions?id=mk`), e.g. which session the Sessions window selects (JD-32).
+   */
+  openWindow(id: string, params?: Record<string, string>): void;
   settings: {
     get<T = unknown>(key: string): Promise<T | undefined>;
     set(key: string, value: unknown): Promise<void>;

@@ -12,7 +12,7 @@ const bridge: DeskBridge = {
   },
   request: (path, body) => ipcRenderer.invoke("desk:request", path, body),
   chat: (text, channel = "desk-typed") => ipcRenderer.invoke("desk:request", "/chat", { text, channel }),
-  openWindow: (id) => ipcRenderer.send("desk:open-window", id),
+  openWindow: (id, params) => ipcRenderer.send("desk:open-window", id, params),
   settings: {
     get: (key) => ipcRenderer.invoke("desk:settings-get", key),
     set: (key, value) => ipcRenderer.invoke("desk:settings-set", key, value),

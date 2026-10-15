@@ -75,6 +75,8 @@ export class ReportWatcher {
   }
 
   async onReport(report: Report): Promise<void> {
+    // The Sessions window (JD-32) re-fetches its list.
+    this.bus.publish({ type: "sessions.changed" });
     const cls = classify(report.text);
     if (cls !== "info") {
       const n = NOTICE[cls];

@@ -25,7 +25,9 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("desk:settings-get", (_e, key: string) => settings.get(key));
   ipcMain.handle("desk:settings-set", (_e, key: string, value: unknown) => settings.set(key, value));
-  ipcMain.on("desk:open-window", (_e, id: string) => windows.openWindow(id));
+  ipcMain.on("desk:open-window", (_e, id: string, params?: Record<string, string>) =>
+    windows.openWindow(id, params),
+  );
   // A window's own frame buttons. Minimise hides it (an agent app has no Dock to minimise to); the
   // launcher brings it back where it was.
   ipcMain.on("desk:frame-minimize", (e) => BrowserWindow.fromWebContents(e.sender)?.hide());

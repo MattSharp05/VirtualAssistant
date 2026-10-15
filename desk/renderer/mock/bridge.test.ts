@@ -43,7 +43,14 @@ describe("mock bridge", () => {
   it("answers requests from scenario data and refuses unknown paths", async () => {
     const bridge = createMockBridge(findScenario("demo-day")!);
     const sessions = await bridge.request<{ id: string }[]>("/sessions");
-    expect(sessions.map((s) => s.id)).toEqual(["mk", "trip", "shapemint"]);
+    expect(sessions.map((s) => s.id)).toEqual([
+      "mk",
+      "trip",
+      "mk-80-builder",
+      "session_01SM",
+      "virtual-assistant",
+      "notes-cleanup",
+    ]);
     await expect(bridge.request("/nope")).rejects.toThrow(/No mock data for \/nope/);
     bridge.close();
   });

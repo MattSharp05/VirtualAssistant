@@ -4,6 +4,7 @@
 import { join } from "node:path";
 import { BrowserWindow, screen, shell } from "electron";
 import { DEFAULT_MIN_SIZE, DEFAULT_SIZE, type FeatureMeta } from "../../renderer/features/types";
+import { windowHash } from "../../renderer/app/router";
 import type { Settings } from "../settings";
 import { centred, restoreBounds, type Rect } from "./bounds";
 import { isExternalLink, parseWindowId } from "./target";
@@ -32,11 +33,14 @@ export class WindowManager {
 
   /**
    * Opens the feature's window, or shows and focuses it when it's already open. The id may carry
-   * options ("today?section=inbox"): a separate window, given them in its hash.
+   * options ("today?section=inbox"): a separate window, given them in its hash. Params become the
+   * hash query (`#/sessions?id=mk`) of the one window; an open window gets the new hash.
    */
-  openWindow(id: string): void {
+  openWindow(id: string, params?: Record<string, string>): void {
+    const hash = windowHash(id, params);
     const existing = this.windows.get(id);
     if (existing && !existing.isDestroyed()) {
+      if (params) void existing.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`);
       existing.show();
       existing.focus();
       return;
@@ -77,7 +81,7 @@ export class WindowManager {
     win.on("resized", save);
     win.on("closed", () => this.windows.delete(id));
     void win.loadFile(this.rendererIndex, {
-      hash: `/${id}`,
+      hash,
       ...(this.scenario ? { query: { scenario: this.scenario } } : {}),
     });
   }

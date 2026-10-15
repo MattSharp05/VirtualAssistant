@@ -11,6 +11,7 @@ const paths: Record<string, string> = {
   calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   spark: "M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z",
   orb: "M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z",
+  refresh: "M20 11a8 8 0 1 0-2 5.3M20 4v7h-7",
   minimize: "M6 12h12",
   close: "M6 6l12 12M18 6 6 18",
 };
