@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { BrainUsageToday, SystemResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { Icon } from "../../app/icons";
+import Latency from "./Latency";
 import {
   agoFrom,
   bytes,
@@ -246,7 +247,10 @@ function Devices({ r }: { r: SystemResponse }) {
 const clock = (at: string) =>
   new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-/** The System window (JD-30): plan usage, routine fires, container health and the brains' use today. */
+/**
+ * The System window (JD-30): plan usage, routine fires, container health, voice latency (JD-48) and
+ * the brains' use today.
+ */
 export default function System() {
   const { response, error, loading, reload } = useSystem(useBridge());
   return (
@@ -280,6 +284,7 @@ export default function System() {
           <Plan r={response} />
           <Fires r={response} />
           <Container r={response} />
+          <Latency summary={response.voiceLatency} />
           <Brain r={response} />
           <Devices r={response} />
         </div>

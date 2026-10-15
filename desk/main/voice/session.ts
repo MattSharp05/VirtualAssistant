@@ -16,6 +16,12 @@ export interface ListenResult {
   /** How long transcription took after Matthew stopped talking. */
   ms: number;
   reason: EndReason | "cancelled";
+  /** When Matthew stopped talking (the last speech frame; `now`'s clock), for JD-48's latency. */
+  speechEndAt?: number;
+  /** How long after that the end was decided (the endpointer's silence wait, or the key's release). */
+  endpointMs?: number;
+  /** How long he spoke. */
+  speechMs?: number;
 }
 
 /** What listen() needs once the models are on disk. */
@@ -29,8 +35,10 @@ export interface VoiceSessionDeps {
   prepare(): Promise<VoiceEngine>;
   openMic(): Promise<Mic>;
   publish(event: DeskEvent): void;
+  /** Wall clock in ms (Date.now): ListenResult's speechEndAt is on it. */
   now?: () => number;
-  endpointer?: Partial<EndpointerOptions>;
+  /** Overrides, read at every listen (Settings → endpointSilenceMs, JD-48). */
+  endpointer?: Partial<EndpointerOptions> | (() => Partial<EndpointerOptions>);
 }
 
 export interface ListenOptions {
@@ -116,10 +124,13 @@ export class VoiceSession {
     }
     this.stateNow = "listening";
     this.orb("listening", 0);
-    const endpointer = new Endpointer(this.deps.endpointer);
+    const tuning = this.deps.endpointer;
+    const endpointer = new Endpointer(typeof tuning === "function" ? tuning() : tuning);
     engine.vad.reset();
     let audio: Int16Array | undefined;
     let reason: EndReason;
+    let silenceMs: number;
+    let speechMs: number;
     const preRoll = [...(opts.preRoll ?? [])];
     try {
       outer: for (;;) {
@@ -128,13 +139,13 @@ export class VoiceSession {
         for (const e of endpointer.push(frame, p)) {
           if (e.type === "level") this.orb("listening", e.level);
           if (e.type === "end") {
-            audio = e.audio;
-            reason = e.reason;
+            ({ audio, reason, silenceMs, speechMs } = e);
             break outer;
           }
         }
         if (this.stopRequested) {
-          ({ audio, reason } = endpointer.flush());
+          ({ audio, reason, silenceMs } = endpointer.flush());
+          speechMs = audio ? Math.round((audio.length * 1000) / endpointer.opts.sampleRate) : 0;
           break;
         }
       }
@@ -152,6 +163,8 @@ export class VoiceSession {
     this.stateNow = "transcribing";
     this.orb("thinking");
     const started = now();
+    // The frames arrive in real time, so the last speech frame was `silenceMs` of audio ago.
+    const timing = { speechEndAt: started - silenceMs, endpointMs: silenceMs, speechMs };
     try {
       const text = await engine.transcribe(audio);
       // Cancelled while Whisper was busy: the words are dropped, not sent.
@@ -160,7 +173,7 @@ export class VoiceSession {
         return { text: "", ms: now() - started, reason: "cancelled" };
       }
       if (!opts.keepThinking || !text) this.orb("idle");
-      return { text, ms: now() - started, reason };
+      return { text, ms: now() - started, reason, ...timing };
     } catch (err) {
       this.orb("idle");
       throw err;

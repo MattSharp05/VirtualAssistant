@@ -6,7 +6,11 @@
 // the next one synthesised while the current one plays; while a sentence plays the orb gets
 // orb.state speaking { amplitude } 30 times a second from the file's loudness (aiff.ts), and idle once
 // the last one ends. interrupt() (⌥⌥ while it talks) stops at once and drops everything queued, and
-// the rest of that reply. The processes are injected: tested with a fake say and afplay.
+// the rest of that reply. For voice latency (JD-48) it reports each reply's first sentence, its `say`
+// file being ready and the first afplay (onMark); a reply's first sentence may be just its first clause
+// when it runs long (FIRST_CLAUSE_CHARS), and prewarm() runs a throwaway `say` while Matthew is still
+// talking, so the voice is loaded before the first real sentence. The processes are injected: tested
+// with a fake say and afplay.
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
@@ -15,6 +19,7 @@ import { join } from "node:path";
 import type { DeskEvent } from "@jarvis/shared";
 import { envelope, ENVELOPE_HZ, parseAiff } from "./aiff";
 import { SentenceSplitter } from "./sentences";
+import type { SpeechStage } from "../latency";
 
 /** A running `say` or `afplay`: done when it exits (rejects when it fails); stop() kills it. */
 export interface SpeechProcess {
@@ -36,6 +41,8 @@ export interface SpeakerDeps {
   /** Settings → speakReplies. */
   speakReplies(): boolean;
   publish(event: DeskEvent): void;
+  /** Voice latency (JD-48): a reply's first sentence, its file written, and its first sound. */
+  onMark?(stage: SpeechStage, messageId: string): void;
   now?: () => number;
   setInterval?: (fn: () => void, ms: number) => unknown;
   clearInterval?: (handle: unknown) => void;
@@ -43,6 +50,10 @@ export interface SpeakerDeps {
 
 /** Sentences synthesised ahead of playback: the one playing and the next. */
 export const SYNTH_AHEAD = 2;
+/** A reply's first sentence still going at this many characters is spoken from its last comma (JD-48). */
+export const FIRST_CLAUSE_CHARS = 80;
+/** prewarm() does nothing when `say` ran this recently (its voice is still loaded). */
+export const PREWARM_EVERY_MS = 60_000;
 
 interface Sentence {
   text: string;
@@ -51,6 +62,8 @@ interface Sentence {
   envelope: number[];
   process?: SpeechProcess;
   dropped?: boolean;
+  /** The reply whose first sentence this is (JD-48's marks). */
+  firstOf?: string;
 }
 
 export class Speaker {
@@ -64,6 +77,8 @@ export class Speaker {
   /** Whether anything has played since the orb last rested (so a reply with nothing to say stays quiet). */
   private spoke = false;
   private waiters: (() => void)[] = [];
+  /** When `say` last ran (a sentence or a prewarm), on `now`'s clock. */
+  private lastSay = -Infinity;
 
   constructor(private readonly deps: SpeakerDeps) {}
 
@@ -82,22 +97,53 @@ export class Speaker {
   onEvent(e: DeskEvent): void {
     if (e.type === "brain.start") {
       if (e.channel === "desk-voice" && this.deps.speakReplies())
-        this.replies.set(e.messageId, new SentenceSplitter());
+        this.replies.set(e.messageId, new SentenceSplitter({ firstClauseChars: FIRST_CLAUSE_CHARS }));
     } else if (e.type === "brain.delta") {
-      for (const s of this.replies.get(e.messageId)?.push(e.text) ?? []) this.say(s);
+      const splitter = this.replies.get(e.messageId);
+      if (splitter) this.sayAll(splitter, splitter.push(e.text), e.messageId);
     } else if (e.type === "brain.done" || e.type === "brain.error") {
       const splitter = this.replies.get(e.messageId);
       if (!splitter) return;
       this.replies.delete(e.messageId);
-      for (const s of splitter.flush()) this.say(s);
+      this.sayAll(splitter, splitter.flush(), e.messageId);
       this.settle();
     }
   }
 
+  /** Queues a reply's sentences; the very first one is marked for JD-48. */
+  private sayAll(splitter: SentenceSplitter, sentences: string[], messageId: string): void {
+    sentences.forEach((s, i) => {
+      const first = i === 0 && splitter.said === sentences.length;
+      if (first) this.deps.onMark?.("firstSentence", messageId);
+      this.say(s, first ? messageId : undefined);
+    });
+  }
+
   /** Queues one sentence. */
-  say(text: string): void {
-    this.queue.push({ text, file: this.deps.file(++this.count), state: "waiting", envelope: [] });
+  say(text: string, firstOf?: string): void {
+    this.queue.push({
+      text,
+      file: this.deps.file(++this.count),
+      state: "waiting",
+      envelope: [],
+      ...(firstOf ? { firstOf } : {}),
+    });
     this.pump();
+  }
+
+  /**
+   * Runs `say` once into a throwaway file so the voice is loaded before the first sentence (JD-48;
+   * push-to-talk calls it when listening starts). Skipped while talking or when `say` ran recently.
+   */
+  prewarm(): void {
+    const now = (this.deps.now ?? (() => performance.now()))();
+    if (this.busy || this.synthesising || now - this.lastSay < PREWARM_EVERY_MS) return;
+    this.lastSay = now;
+    const file = this.deps.file(0);
+    this.deps
+      .synthesize("Ready.", file)
+      .done.catch(() => {})
+      .finally(() => this.deps.remove(file));
   }
 
   /** Stops talking now: the sentence playing, everything queued, and the rest of the replies streaming. */
@@ -128,6 +174,7 @@ export class Speaker {
   private synthesize(s: Sentence): void {
     s.state = "synthesising";
     this.synthesising = true;
+    this.lastSay = (this.deps.now ?? (() => performance.now()))();
     const process = this.deps.synthesize(s.text, s.file);
     s.process = process;
     process.done
@@ -136,6 +183,7 @@ export class Speaker {
         (envelope) => {
           s.envelope = envelope;
           s.state = "ready";
+          if (s.firstOf && !s.dropped) this.deps.onMark?.("sayReady", s.firstOf);
         },
         (err: unknown) => {
           if (s.dropped) return;
@@ -155,6 +203,7 @@ export class Speaker {
   private play(s: Sentence): void {
     const process = this.deps.play(s.file);
     s.process = process;
+    if (s.firstOf) this.deps.onMark?.("audioStart", s.firstOf);
     const now = this.deps.now ?? (() => performance.now());
     const startedAt = now();
     const tick = () => {
@@ -205,6 +254,7 @@ export interface MacSpeakerOptions {
   rate(): number;
   speakReplies(): boolean;
   publish(event: DeskEvent): void;
+  onMark?(stage: SpeechStage, messageId: string): void;
 }
 
 export function createMacSpeaker(opts: MacSpeakerOptions): Speaker {
@@ -224,6 +274,7 @@ export function createMacSpeaker(opts: MacSpeakerOptions): Speaker {
     file: (n) => join((dir ??= mkdtempSync(join(tmpdir(), "jarvis-say-"))), `${n}.aiff`),
     speakReplies: opts.speakReplies,
     publish: opts.publish,
+    ...(opts.onMark ? { onMark: opts.onMark } : {}),
   });
 }
 

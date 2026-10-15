@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BridgeProvider } from "../../app/bridge";
 import { createMockBridge, type MockBridge } from "../../mock/bridge";
@@ -55,6 +55,36 @@ describe("System window", () => {
     expect(screen.getByText("History builds up while JARVIS runs.")).toBeTruthy();
     expect(screen.getByRole("img", { name: "No brain use yet today" })).toBeTruthy();
     expect(screen.getByText("No Macs paired.")).toBeTruthy();
+  });
+
+  it("shows voice latency against the target and where the time goes (JD-48)", async () => {
+    renderSystem("system");
+    const panel = (await screen.findByRole("heading", { name: "VOICE · FIRST WORD" })).closest("section")!;
+    const stat = (label: string) => within(panel).getByText(label).closest(".latency-stat")!;
+    expect(stat("Median (p50)").textContent).toBe("Median (p50)2.2 starget ≤ 2.5 s · met");
+    expect(stat("p90").getAttribute("data-verdict")).toBe("met");
+    expect(within(panel).getByText("last 20 turns")).toBeTruthy();
+    expect(
+      within(panel).getByRole("img", {
+        name: "Where the time goes: Silence wait 704 ms, Whisper 356 ms, Request 50 ms, Brain 720 ms, First sentence 75 ms, say 310 ms, Playback 25 ms",
+      }),
+    ).toBeTruthy();
+    expect(panel.textContent).toContain("Biggest: Brain (720 ms).");
+    expect(panel.textContent).toContain("Last turn: 2.2 s · wake word · sonnet.");
+  });
+
+  it("says when the target is missed, and when nothing has been timed yet", async () => {
+    renderSystem("system-latency-slow");
+    const panel = (await screen.findByRole("heading", { name: "VOICE · FIRST WORD" })).closest("section")!;
+    expect(panel.querySelectorAll('[data-verdict="missed"]')).toHaveLength(2);
+    expect(panel.textContent).toContain("target ≤ 3.5 s · missed");
+    expect(panel.textContent).toContain("Biggest: Brain (1.7 s).");
+    expect(panel.textContent).toContain("Last turn: no first word · push-to-talk · sonnet.");
+    cleanup();
+    bridge.close();
+    renderSystem("system-quiet");
+    await screen.findByText(/No voice turns timed yet/);
+    expect(screen.queryByText(/Median/)).toBeNull();
   });
 
   it("shows loading until the first answer", () => {

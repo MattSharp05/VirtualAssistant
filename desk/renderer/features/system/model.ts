@@ -1,7 +1,7 @@
 // The System window's numbers (JD-30): meter levels and the text the dashboard's tiles show, as pure
 // functions. Relative times are measured from the response's checkedAt (the server's clock), so they
-// don't depend on the Mac's clock or the preview's.
-import type { BrainUsageToday } from "@jarvis/shared";
+// don't depend on the Mac's clock or the preview's. Voice latency (JD-48) is split into a waterfall.
+import type { BrainUsageToday, VoiceLatencyStage, VoiceLatencySummary } from "@jarvis/shared";
 
 /** ok below 75%, amber from 75%, red from 90% (the dashboard's "Getting close" / "Nearly out"). */
 export type MeterLevel = "ok" | "amber" | "red";
@@ -100,4 +100,56 @@ export function sparkline(values: (number | null)[], width: number, height: numb
     })
     .join(" ");
   return { points, min, max };
+}
+
+// ── Voice latency (JD-48): from Matthew's last word to JARVIS's first ──
+
+/** The PRD's target for the first spoken word after he stops talking. */
+export const LATENCY_TARGET = { p50: 2500, p90: 3500 } as const;
+
+/** "640 ms", "2.4 s"; "—" when unknown. */
+export function seconds(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined) return "—";
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(1)} s`;
+}
+
+export type SegmentId = "silence" | "whisper" | "request" | "brain" | "sentence" | "say" | "play";
+
+/** The stage that ends each segment of the waterfall ("sent" is folded into the request). */
+const SEGMENTS: { id: SegmentId; label: string; until: VoiceLatencyStage }[] = [
+  { id: "silence", label: "Silence wait", until: "endpoint" },
+  { id: "whisper", label: "Whisper", until: "transcript" },
+  { id: "request", label: "Request", until: "accepted" },
+  { id: "brain", label: "Brain", until: "firstDelta" },
+  { id: "sentence", label: "First sentence", until: "firstSentence" },
+  { id: "say", label: "say", until: "sayReady" },
+  { id: "play", label: "Playback", until: "audioStart" },
+];
+
+export interface Segment {
+  id: SegmentId;
+  label: string;
+  ms: number;
+}
+
+/**
+ * Where the time goes: each stage's median minus the one before it (0 when the medians cross), for
+ * the stages the turns reached. The pieces add up to the median first word when the stages are in order.
+ */
+export function waterfall(stages: VoiceLatencySummary["stages"]): Segment[] {
+  const p50 = new Map(stages.map((s) => [s.stage, s.p50]));
+  let at = 0;
+  return SEGMENTS.flatMap(({ id, label, until }) => {
+    const end = p50.get(until);
+    if (end === undefined) return [];
+    const ms = Math.max(0, end - at);
+    at = Math.max(at, end);
+    return [{ id, label, ms }];
+  });
+}
+
+/** The segment that costs the most (the one to tune first). */
+export function biggest(segments: Segment[]): Segment | undefined {
+  return segments.reduce<Segment | undefined>((top, s) => (!top || s.ms > top.ms ? s : top), undefined);
 }

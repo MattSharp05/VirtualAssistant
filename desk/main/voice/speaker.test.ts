@@ -1,7 +1,7 @@
 // @vitest-environment node
 import type { DeskEvent } from "@jarvis/shared";
 import { describe, expect, it } from "vitest";
-import { Speaker, type SpeakerDeps } from "./speaker";
+import { FIRST_CLAUSE_CHARS, PREWARM_EVERY_MS, Speaker, type SpeakerDeps } from "./speaker";
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
@@ -87,7 +87,21 @@ function setup(over: Partial<SpeakerDeps> = {}) {
   };
   const done = (id: string) =>
     speaker.onEvent({ type: "brain.done", messageId: id, text: "", metrics: {} as never });
-  return { speaker, events, log, says, plays, removed, orb, said, played, advance, reply, done };
+  return {
+    speaker,
+    events,
+    log,
+    says,
+    plays,
+    removed,
+    orb,
+    said,
+    played,
+    advance,
+    reply,
+    done,
+    at: (ms: number) => void (clock = ms),
+  };
 }
 
 describe("Speaker", () => {
@@ -210,5 +224,52 @@ describe("Speaker", () => {
     expect(done).toBe(false);
     await t.played(0);
     expect(done).toBe(true);
+  });
+
+  it("marks each reply's first sentence, its file ready and its first sound for the latency tracker (JD-48)", async () => {
+    const marks: string[] = [];
+    const t = setup({ onMark: (stage, id) => void marks.push(`${stage} ${id}`) });
+    t.reply("m1", "desk-voice", "One. Two. ");
+    expect(marks).toEqual(["firstSentence m1"]);
+    await t.said(0);
+    expect(marks).toEqual(["firstSentence m1", "sayReady m1", "audioStart m1"]);
+    await t.said(1);
+    await t.played(0);
+    t.speaker.onEvent({ type: "brain.delta", messageId: "m1", text: "Three. " });
+    t.done("m1");
+    await t.said(2);
+    await t.played(1);
+    expect(marks).toHaveLength(3); // only the first sentence of a reply
+    t.reply("m2", "desk-voice", "Next reply. ");
+    expect(marks.at(-1)).toBe("firstSentence m2");
+  });
+
+  it("starts a long first sentence at its last comma so JARVIS talks sooner", () => {
+    const t = setup();
+    const long = "You have three meetings this afternoon, starting with the design review at two";
+    t.reply("m1", "desk-voice", long.slice(0, 40));
+    expect(t.log).toEqual([]);
+    t.speaker.onEvent({ type: "brain.delta", messageId: "m1", text: `${long.slice(40)} and then` });
+    expect(long.length + 9).toBeGreaterThanOrEqual(FIRST_CLAUSE_CHARS);
+    expect(t.log).toEqual(["say You have three meetings this afternoon, → /tmp/1.aiff"]);
+    t.speaker.onEvent({ type: "brain.delta", messageId: "m1", text: " the standup, with Jo. Done." });
+    t.done("m1");
+    expect(t.speaker.busy).toBe(true);
+  });
+
+  it("prewarm runs one throwaway `say` while nothing is being said, at most once a minute", async () => {
+    const t = setup();
+    t.speaker.prewarm();
+    expect(t.log).toEqual(["say Ready. → /tmp/0.aiff"]);
+    await t.said(0);
+    expect(t.removed).toEqual(["/tmp/0.aiff"]);
+    expect(t.speaker.busy).toBe(false);
+    expect(t.orb()).toEqual([]); // nothing played
+    t.speaker.prewarm();
+    expect(t.log).toHaveLength(1);
+    t.at(PREWARM_EVERY_MS + 1);
+    t.speaker.say("Hello.");
+    t.speaker.prewarm(); // talking (and say just ran): no
+    expect(t.log.filter((l) => l.startsWith("say Ready."))).toHaveLength(1);
   });
 });

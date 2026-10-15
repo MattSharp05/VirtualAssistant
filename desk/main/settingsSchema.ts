@@ -42,11 +42,20 @@ export interface DeskSettings {
   checkForUpdates: boolean;
   /** Where each window was last left, by feature id (JD-20). */
   windowBounds: Record<string, Rect>;
+  // Voice latency tuning (JD-48; settings.json only for now). The defaults are the measured baseline's.
+  /** The model voice turns ask ("" = the chat's model), e.g. claude-haiku-5-5 if Sonnet is too slow to start. */
+  voiceModel: string;
+  /** Silence after the last word before JARVIS decides Matthew has finished (the endpointer's wait). */
+  endpointSilenceMs: number;
+  /** whisper-cli's CPU threads (-t) and beam size (-bs; 1 = greedy, quicker). */
+  whisperThreads: number;
+  whisperBeamSize: number;
 }
 
 export type SettingKey = keyof DeskSettings;
 
 export const SPEECH_RATE = { min: 120, max: 300 } as const;
+export const ENDPOINT_SILENCE = { min: 300, max: 1500 } as const;
 
 export const DEFAULT_SETTINGS: DeskSettings = {
   serverUrl: "",
@@ -66,6 +75,10 @@ export const DEFAULT_SETTINGS: DeskSettings = {
   layouts: {},
   checkForUpdates: true,
   windowBounds: {},
+  voiceModel: "",
+  endpointSilenceMs: 700,
+  whisperThreads: 4,
+  whisperBeamSize: 5,
 };
 
 export const SECRET_KEYS: readonly DeskSecret[] = ["deviceKey", "picovoiceKey"];
@@ -114,6 +127,12 @@ function bool(key: string, v: unknown): boolean {
 function text(key: string, v: unknown, max = 200): string {
   if (typeof v !== "string" || v.length > max) throw new SettingError(`${key} must be text.`);
   return v;
+}
+
+/** A whole number in min..max (clamped), or a SettingError. */
+function int(key: string, v: unknown, min: number, max: number): number {
+  if (typeof v !== "number" || !Number.isFinite(v)) throw new SettingError(`${key} must be a number.`);
+  return Math.round(Math.min(max, Math.max(min, v)));
 }
 
 function folder(key: string, v: unknown): string {
@@ -173,6 +192,14 @@ const validators: { [K in SettingKey]: (v: unknown) => DeskSettings[K] } = {
     if (!isPlainObject(v)) throw new SettingError("Window bounds must be an object.");
     return Object.fromEntries(Object.entries(v).filter(([, r]) => isRect(r))) as Record<string, Rect>;
   },
+  voiceModel: (v) => {
+    const model = text("voiceModel", v, 100).trim();
+    if (model && !/^[a-z0-9][a-z0-9.-]*$/i.test(model)) throw new SettingError("That isn't a model name.");
+    return model;
+  },
+  endpointSilenceMs: (v) => int("endpointSilenceMs", v, ENDPOINT_SILENCE.min, ENDPOINT_SILENCE.max),
+  whisperThreads: (v) => int("whisperThreads", v, 1, 16),
+  whisperBeamSize: (v) => int("whisperBeamSize", v, 1, 8),
 };
 
 /** The checked (and tidied) value for a setting; throws SettingError with a message for people. */

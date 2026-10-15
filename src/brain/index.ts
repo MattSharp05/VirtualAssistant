@@ -101,6 +101,8 @@ export interface ChatOptions {
   attachments?: { path: string; name: string }[];
   /** Use this message id instead of a new one (a caller that must hand it back before queueing). */
   messageId?: string;
+  /** This turn's model (one of `models`; JD-48's voiceModel), instead of the chosen one. A warm process on another model restarts, resuming the conversation. */
+  model?: string;
 }
 
 export interface CliResult {
@@ -136,6 +138,8 @@ export class Brain {
   /** The tools used so far by each turn in flight, kept with the reply (chat window chips). */
   private readonly steps = new Map<string, ChatStep[]>();
   private proc?: WarmProcess;
+  /** A warm process being started (its setup is read first). */
+  private starting?: Promise<WarmProcess>;
   private idleTimer?: NodeJS.Timeout;
   /** Turns in flight (warm mode); a restart waits for 0. */
   private busy = 0;
@@ -174,6 +178,21 @@ export class Brain {
 
   get warm(): boolean {
     return this.config.warm !== false;
+  }
+
+  /**
+   * Starts the warm process now if it isn't running (JD-48: the Desk calls this when Matthew starts
+   * talking, so a process that idled out or restarted for memory is up again by the time he's done).
+   * Does nothing in cold mode, or while a turn is running.
+   */
+  async prewarm(model = this.model): Promise<boolean> {
+    if (!this.warm || this.busy > 0 || this.restartPending || !this.config.models.includes(model)) return false;
+    while (this.starting) await this.starting.catch(() => undefined);
+    const before = this.proc;
+    const proc = await this.process(model);
+    if (proc === before) return false;
+    this.armIdle();
+    return true;
   }
 
   setModel(model: string): void {
@@ -219,6 +238,7 @@ export class Brain {
 
   private async run(messageId: string, text: string, channel: BrainChannel, options: ChatOptions): Promise<BrainReply> {
     const sentAt = new Date();
+    const model = options.model && this.config.models.includes(options.model) ? options.model : this.model;
     this.store.addBrainMessage({ at: sentAt.toISOString(), from: "you", channel, text });
     this.publish({ type: "brain.start", messageId, channel, text });
     this.publish({ type: "orb.state", state: "thinking" });
@@ -229,11 +249,11 @@ export class Brain {
       this.publish({ type: "brain.delta", messageId, text: chunk });
     };
     try {
-      const result = this.warm ? await this.runWarm(messageId, stamped, onDelta) : await this.runOnce(stamped);
+      const result = this.warm ? await this.runWarm(messageId, stamped, onDelta, model) : await this.runOnce(stamped, model);
       const u = result.usage ?? {};
       const metrics: BrainMetrics = {
         ms: result.duration_ms ?? Date.now() - sentAt.getTime(),
-        model: this.model,
+        model,
         inputTokens: u.input_tokens ?? 0,
         cacheReadTokens: u.cache_read_input_tokens ?? 0,
         cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
@@ -257,7 +277,7 @@ export class Brain {
 
   // ── Warm: one streaming process per conversation ──
 
-  private async runWarm(messageId: string, prompt: string, onDelta: (t: string) => void): Promise<CliResult> {
+  private async runWarm(messageId: string, prompt: string, onDelta: (t: string) => void, model: string): Promise<CliResult> {
     const tools = new Map<string, { name: string; input: unknown }>();
     const handlers = {
       onDelta,
@@ -271,7 +291,7 @@ export class Brain {
       },
     };
     for (let attempt = 0; ; attempt++) {
-      const proc = await this.process();
+      const proc = await this.process(model);
       this.busy++;
       try {
         const result = await withTimeout(proc.send(prompt, handlers), TIMEOUT_MS, () => proc.kill());
@@ -297,20 +317,30 @@ export class Brain {
     }
   }
 
-  /** The warm process for the current model and conversation, started if needed. */
-  private async process(): Promise<WarmProcess> {
+  /** The warm process for `model` and the current conversation, started if needed. */
+  private async process(model: string): Promise<WarmProcess> {
+    // One start at a time: a prewarm and a turn arriving together share the process it starts.
+    while (this.starting) await this.starting.catch(() => undefined);
     const state = this.store.brain();
     const p = this.proc;
     const stale =
-      !p || !p.alive || p.model !== this.model || (state.sessionId !== undefined && p.sessionId !== state.sessionId) || Date.now() - p.lastUsed > IDLE_MS;
+      !p || !p.alive || p.model !== model || (state.sessionId !== undefined && p.sessionId !== state.sessionId) || Date.now() - p.lastUsed > IDLE_MS;
     if (!stale) return p;
     p?.kill();
     const fresh = !state.sessionId;
     const sessionId = state.sessionId ?? randomUUID();
-    const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", ...(await this.args(sessionId, fresh))];
-    this.spawns++;
-    this.proc = new WarmProcess(this.config.claudeBin, args, this.cwd, this.model, sessionId);
-    return this.proc;
+    const start = (async () => {
+      const args = ["--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", ...(await this.args(sessionId, fresh, model))];
+      this.spawns++;
+      this.proc = new WarmProcess(this.config.claudeBin, args, this.cwd, model, sessionId);
+      return this.proc;
+    })();
+    this.starting = start;
+    try {
+      return await start;
+    } finally {
+      this.starting = undefined;
+    }
   }
 
   private armIdle(): void {
@@ -337,24 +367,24 @@ export class Brain {
 
   // ── Cold (BRAIN_WARM=0): one process per message ──
 
-  private async runOnce(prompt: string): Promise<CliResult> {
+  private async runOnce(prompt: string, model: string): Promise<CliResult> {
     const state = this.store.brain();
     let fresh = !state.sessionId;
     let sessionId = state.sessionId ?? randomUUID();
-    let out = await this.invoke(prompt, sessionId, fresh);
+    let out = await this.invoke(prompt, sessionId, fresh, model);
     // A resumed conversation can be gone (volume reset, CLI cleanup): start over once.
     if (!fresh && (!out.result || out.result.is_error) && GONE.test(out.stderr + (out.result?.result ?? ""))) {
       fresh = true;
       sessionId = randomUUID();
-      out = await this.invoke(prompt, sessionId, true);
+      out = await this.invoke(prompt, sessionId, true, model);
     }
     if (!out.result) throw new Error(`The brain didn't answer: ${(out.stderr || "no output").trim().slice(0, 300)}`);
     if (fresh) this.store.updateBrain({ sessionId });
     return out.result;
   }
 
-  private async invoke(prompt: string, sessionId: string, fresh: boolean): Promise<{ result?: CliResult; stderr: string }> {
-    const args = ["--output-format", "json", ...(await this.args(sessionId, fresh))];
+  private async invoke(prompt: string, sessionId: string, fresh: boolean, model: string): Promise<{ result?: CliResult; stderr: string }> {
+    const args = ["--output-format", "json", ...(await this.args(sessionId, fresh, model))];
     this.spawns++;
     return new Promise((resolve) => {
       const child = spawn(this.config.claudeBin, args, { cwd: this.cwd, stdio: ["pipe", "pipe", "pipe"] });
@@ -377,7 +407,7 @@ export class Brain {
   }
 
   /** Everything after `-p` except the output format: model, prompt, tools, conversation. */
-  private async args(sessionId: string, fresh: boolean): Promise<string[]> {
+  private async args(sessionId: string, fresh: boolean, model = this.model): Promise<string[]> {
     const setup = this.config.setup ? await this.config.setup() : NO_TOOLS;
     const mcpConfig = JSON.stringify({
       mcpServers: {
@@ -391,7 +421,7 @@ export class Brain {
     });
     return [
       "-p",
-      "--model", this.model,
+      "--model", model,
       "--system-prompt", (this.config.prompt ?? systemPrompt)(setup),
       // Built-in tools stay off except what a group asks for (uploads: Read, limited by allowRules).
       "--tools", (setup.builtinTools ?? []).join(","),

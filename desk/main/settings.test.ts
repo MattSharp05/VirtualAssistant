@@ -70,6 +70,24 @@ describe("settings schema", () => {
     expect(settings.get("allowedFolders")).toEqual(["/Users/matthew/Projects"]);
   });
 
+  it("keeps the voice latency knobs (JD-48) in range: today's behaviour by default", () => {
+    const { settings } = setup();
+    expect(settings.get("endpointSilenceMs")).toBe(700);
+    expect(settings.get("voiceModel")).toBe("");
+    expect(settings.get("whisperThreads")).toBe(4);
+    expect(settings.get("whisperBeamSize")).toBe(5);
+    settings.set("endpointSilenceMs", 120);
+    expect(settings.get("endpointSilenceMs")).toBe(300);
+    settings.set("endpointSilenceMs", 512.4);
+    expect(settings.get("endpointSilenceMs")).toBe(512);
+    settings.set("whisperBeamSize", 0);
+    expect(settings.get("whisperBeamSize")).toBe(1);
+    settings.set("voiceModel", " claude-haiku-5-5 ");
+    expect(settings.get("voiceModel")).toBe("claude-haiku-5-5");
+    expect(() => settings.set("voiceModel", "haiku; rm -rf")).toThrow(/model name/);
+    expect(() => settings.set("whisperThreads", "lots")).toThrow(/number/);
+  });
+
   it("loads an old or hand-edited file safely: bad values fall back, JD-20 bounds move, unknown keys stay", () => {
     const { settings, file, read } = setup({
       voice: 42,

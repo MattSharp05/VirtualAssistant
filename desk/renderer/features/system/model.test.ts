@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { voiceLatency } from "../../mock/data/system";
 import {
   agoFrom,
+  biggest,
   bytes,
   duration,
   inFrom,
   meterLevel,
   percentOf,
+  seconds,
   sparkline,
   tokens,
+  waterfall,
   workerShare,
 } from "./model";
 
@@ -67,5 +71,47 @@ describe("System window model", () => {
     expect(s.points).toBe("0.0,42.0 200.0,22.0 300.0,2.0");
     expect(sparkline([5], 300, 44)).toBeUndefined();
     expect(sparkline([null, null], 300, 44)).toBeUndefined();
+  });
+});
+
+describe("voice latency (JD-48)", () => {
+  it("shows short times in ms and the rest in seconds", () => {
+    expect(seconds(640.4)).toBe("640 ms");
+    expect(seconds(2240)).toBe("2.2 s");
+    expect(seconds(null)).toBe("—");
+    expect(seconds(undefined)).toBe("—");
+  });
+
+  it("splits the stage medians into a waterfall that adds up to the first word", () => {
+    const segments = waterfall(voiceLatency.stages);
+    expect(segments.map((s) => [s.id, s.ms])).toEqual([
+      ["silence", 704],
+      ["whisper", 356],
+      ["request", 50],
+      ["brain", 720],
+      ["sentence", 75],
+      ["say", 310],
+      ["play", 25],
+    ]);
+    expect(segments.reduce((n, s) => n + s.ms, 0)).toBe(voiceLatency.p50);
+    expect(biggest(segments)?.label).toBe("Brain");
+  });
+
+  it("skips stages no turn reached and never goes backwards when medians cross", () => {
+    expect(
+      waterfall([
+        { stage: "endpoint", p50: 700 },
+        { stage: "transcript", p50: 1000 },
+        { stage: "accepted", p50: 1900 },
+        { stage: "firstDelta", p50: 1800 },
+      ]).map((s) => [s.id, s.ms]),
+    ).toEqual([
+      ["silence", 700],
+      ["whisper", 300],
+      ["request", 900],
+      ["brain", 0],
+    ]);
+    expect(waterfall([])).toEqual([]);
+    expect(biggest([])).toBeUndefined();
   });
 });

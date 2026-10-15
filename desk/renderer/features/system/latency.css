@@ -1,0 +1,149 @@
+/* Voice latency (JD-48) in the System window: p50/p90 of the first word against the PRD's target,
+   and a waterfall of where the time goes, one colour per stage. */
+.system-latency {
+  grid-area: latency;
+  --seg-silence: rgba(201, 211, 219, 0.45);
+  --seg-whisper: var(--listen);
+  --seg-request: #8fa3ff;
+  --seg-brain: var(--accent);
+  --seg-sentence: var(--green);
+  --seg-say: var(--amber);
+  --seg-play: #c59af2;
+}
+
+.latency-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.latency-count {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.latency-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.latency-stat {
+  --verdict: var(--ink);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.latency-stat[data-verdict="met"] {
+  --verdict: var(--green);
+}
+
+.latency-stat[data-verdict="missed"] {
+  --verdict: var(--red);
+}
+
+.latency-stat-label {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.latency-stat-value {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--verdict);
+}
+
+.latency-stat-target {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.latency-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.latency-bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.latency-segment {
+  flex-basis: 0;
+  min-width: 2px;
+  background: var(--seg);
+}
+
+[data-segment="silence"] {
+  --seg: var(--seg-silence);
+}
+[data-segment="whisper"] {
+  --seg: var(--seg-whisper);
+}
+[data-segment="request"] {
+  --seg: var(--seg-request);
+}
+[data-segment="brain"] {
+  --seg: var(--seg-brain);
+}
+[data-segment="sentence"] {
+  --seg: var(--seg-sentence);
+}
+[data-segment="say"] {
+  --seg: var(--seg-say);
+}
+[data-segment="play"] {
+  --seg: var(--seg-play);
+}
+
+.latency-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.latency-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.latency-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--seg);
+}
+
+.latency-legend-ms {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.latency-legend li[data-top] .latency-legend-label,
+.latency-legend li[data-top] .latency-legend-ms {
+  color: var(--ink);
+}
+
+.latency-foot strong {
+  font-weight: 500;
+  color: var(--ink-2);
+}

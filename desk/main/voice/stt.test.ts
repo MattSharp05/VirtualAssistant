@@ -3,7 +3,15 @@ import { EventEmitter } from "node:events";
 import { existsSync, readFileSync } from "node:fs";
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { encodeWav, findWhisper, parseWhisperOutput, transcribe, whisperCandidates, type Spawn } from "./stt";
+import {
+  encodeWav,
+  findWhisper,
+  parseWhisperOutput,
+  transcribe,
+  whisperArgs,
+  whisperCandidates,
+  type Spawn,
+} from "./stt";
 
 describe("encodeWav", () => {
   it("writes a 16 kHz mono 16-bit WAV", () => {
@@ -80,6 +88,26 @@ describe("transcribe", () => {
     expect(calls[0].args).toEqual(expect.arrayContaining(["-m", "/m/base.bin", "-l", "en", "-nt", "-np"]));
     expect(calls[0].wav!.length).toBe(44 + 3200);
     expect(existsSync(calls[0].args[calls[0].args.indexOf("-f") + 1])).toBe(false);
+  });
+
+  it("passes the latency tuning (JD-48): threads, and a beam size only when it isn't whisper's own", async () => {
+    expect(whisperArgs("m", "w.wav")).toEqual([
+      "-m",
+      "m",
+      "-f",
+      "w.wav",
+      "-l",
+      "en",
+      "-nt",
+      "-np",
+      "-t",
+      "4",
+    ]);
+    expect(whisperArgs("m", "w.wav", { threads: 6, beamSize: 5 }).slice(-2)).toEqual(["-t", "6"]);
+    expect(whisperArgs("m", "w.wav", { threads: 6, beamSize: 1 }).slice(-4)).toEqual(["-t", "6", "-bs", "1"]);
+    const { spawn, calls } = fakeSpawn("ok\n");
+    await transcribe(new Int16Array(10), { binary: "w", model: "m", spawn, tuning: { beamSize: 2 } });
+    expect(calls[0].args.slice(-2)).toEqual(["-bs", "2"]);
   });
 
   it("fails with whisper's last error line", async () => {

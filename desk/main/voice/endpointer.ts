@@ -42,8 +42,11 @@ export type EndReason = "silence" | "max" | "no-speech" | "stopped";
 export type EndpointerEvent =
   | { type: "level"; level: number }
   | { type: "start" }
-  /** audio: the utterance as 16-bit PCM (absent for no-speech); speechMs: frames that were speech. */
-  | { type: "end"; reason: EndReason; audio?: Int16Array; speechMs: number };
+  /**
+   * audio: the utterance as 16-bit PCM (absent for no-speech); speechMs: frames that were speech;
+   * silenceMs: the non-speech since the last speech frame, i.e. how long ago Matthew stopped (JD-48).
+   */
+  | { type: "end"; reason: EndReason; audio?: Int16Array; speechMs: number; silenceMs: number };
 
 export type EndpointerState = "waiting" | "candidate" | "speaking" | "done";
 
@@ -152,17 +155,18 @@ export class Endpointer {
   }
 
   /** Ends now: the utterance so far if there was one (300 ms of speech), else no audio. */
-  flush(): { reason: EndReason; audio?: Int16Array } {
-    if (this.stateNow === "done") return { reason: "stopped" };
+  flush(): { reason: EndReason; audio?: Int16Array; silenceMs: number } {
+    if (this.stateNow === "done") return { reason: "stopped", silenceMs: 0 };
     const spoke = this.stateNow === "speaking";
     const end = this.finish(spoke ? "stopped" : "no-speech");
-    return { reason: end.reason, ...(end.audio ? { audio: end.audio } : {}) };
+    return { reason: end.reason, silenceMs: end.silenceMs, ...(end.audio ? { audio: end.audio } : {}) };
   }
 
   private finish(reason: EndReason): Extract<EndpointerEvent, { type: "end" }> {
     this.stateNow = "done";
     const speechMs = Math.round(this.ms(this.speechSamples));
-    if (reason === "no-speech") return { type: "end", reason, speechMs: 0 };
+    const silenceMs = Math.round(this.ms(this.silenceSamples));
+    if (reason === "no-speech") return { type: "end", reason, speechMs: 0, silenceMs };
     const frameLen = this.utterance[0]?.length ?? 1;
     const tail = Math.ceil((this.opts.tailMs * this.opts.sampleRate) / 1000 / frameLen);
     const frames = this.utterance.slice(0, Math.min(this.utterance.length, this.lastSpeechAt + tail));
@@ -172,6 +176,6 @@ export class Endpointer {
       audio.set(f, at);
       at += f.length;
     }
-    return { type: "end", reason, audio, speechMs };
+    return { type: "end", reason, audio, speechMs, silenceMs };
   }
 }

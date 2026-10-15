@@ -5,9 +5,11 @@
 // → idle on the reply's brain.done. Spoken replies (JD-38, speaker.ts) take over at the first sentence:
 // the orb then rests once the last one has been said, and a press while JARVIS talks (⌥⌥) stops it at
 // once and listens again. A second toggle while listening cancels; nothing heard shows "didn't catch
-// that". The wake word (JD-43) starts the same turn with the audio heard just before. Dependencies are
-// injected: tested with a fake session, server and speaker.
+// that". The wake word (JD-43) starts the same turn with the audio heard just before. Each turn's
+// timings go to `timing` (JD-48's LatencyTracker). Dependencies are injected: tested with a fake
+// session, server and speaker.
 import type { ChatResponse, DeskEvent, ScreenCard } from "@jarvis/shared";
+import type { TurnTiming } from "../latency";
 import { missedCard, TRANSCRIPT_CARD_ID, voiceErrorCard } from "./cards";
 import type { PttSignal } from "./hotkey";
 import type { ListenOptions, ListenResult } from "./session";
@@ -32,6 +34,8 @@ export interface PushToTalkDeps {
   speech?: SpeechLike;
   /** Every state change (the wake word pauses while push-to-talk isn't idle, JD-43). */
   onState?(state: PttState): void;
+  /** Voice latency (JD-48): where each turn has got to. */
+  timing?: TurnTiming;
   now?: () => Date;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -124,6 +128,7 @@ export class PushToTalk {
     // Talking over JARVIS: it stops mid-sentence and listens.
     if (this.deps.speech?.busy) this.deps.speech.interrupt();
     this.clearReply();
+    this.deps.timing?.start(preRoll ? "wake" : "ptt");
     this.stateNow = "listening";
     this.deps.publish({ type: "card.dismiss", id: TRANSCRIPT_CARD_ID });
     this.started = false;
@@ -146,6 +151,7 @@ export class PushToTalk {
       result = await run;
     } catch (err) {
       if (turn !== this.turn) return;
+      this.deps.timing?.cancel();
       console.error("voice:", err);
       this.card(voiceErrorCard(err, this.now()));
       this.stateNow = "idle";
@@ -154,6 +160,7 @@ export class PushToTalk {
     if (turn !== this.turn) return;
     const text = result.text.trim();
     if (!text) {
+      this.deps.timing?.cancel();
       if (result.reason !== "cancelled") this.card(missedCard(result, this.deps.hint(), this.now()));
       this.stateNow = "idle";
       return;
@@ -162,17 +169,26 @@ export class PushToTalk {
     this.deps.publish({ type: "voice.transcript", text, final: true });
     this.stateNow = "thinking";
     this.asked = text;
+    if (result.speechEndAt !== undefined)
+      this.deps.timing?.heard({
+        speechEndAt: result.speechEndAt,
+        endpointMs: result.endpointMs ?? 0,
+        speechMs: result.speechMs ?? 0,
+      });
+    this.deps.timing?.sent();
     let messageId: string;
     try {
       ({ messageId } = await this.deps.chat(text));
     } catch (err) {
       if (turn !== this.turn) return;
+      this.deps.timing?.cancel();
       this.card(voiceErrorCard(err, this.now(), "Couldn't reach JARVIS"));
       this.finish();
       return;
     }
     if (turn !== this.turn || (this.stateNow !== "thinking" && this.stateNow !== "replying")) return;
     this.messageId ??= messageId;
+    this.deps.timing?.accepted(messageId);
     if (this.finished.has(this.messageId)) return this.replied();
     this.finished.clear();
     const set = this.deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
@@ -181,6 +197,7 @@ export class PushToTalk {
 
   private cancel(): void {
     this.turn++;
+    this.deps.timing?.cancel();
     this.deps.cancel();
     this.stateNow = "idle";
   }

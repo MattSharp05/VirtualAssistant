@@ -28,9 +28,23 @@ export function encodeWav(pcm: Int16Array, sampleRate = 16_000): Buffer {
   return buf;
 }
 
+/** whisper-cli's own beam size; -bs is passed only when Settings → whisperBeamSize differs. */
+export const WHISPER_BEAM_DEFAULT = 5;
+
+export interface WhisperTuning {
+  /** CPU threads beside Metal (-t). */
+  threads?: number;
+  /** -bs: 1 decodes greedily (quicker; JD-48's tuning). */
+  beamSize?: number;
+}
+
 /** `-nt` plain text, `-np` nothing but the text, English, a few CPU threads beside Metal. */
-export function whisperArgs(model: string, wav: string, threads = 4): string[] {
-  return ["-m", model, "-f", wav, "-l", "en", "-nt", "-np", "-t", String(threads)];
+export function whisperArgs(model: string, wav: string, tuning: WhisperTuning = {}): string[] {
+  const { threads = 4, beamSize = WHISPER_BEAM_DEFAULT } = tuning;
+  return [
+    ...["-m", model, "-f", wav, "-l", "en", "-nt", "-np", "-t", String(threads)],
+    ...(beamSize === WHISPER_BEAM_DEFAULT ? [] : ["-bs", String(beamSize)]),
+  ];
 }
 
 /** Whisper's stdout as one line; non-speech tags like [BLANK_AUDIO] or (wind blowing) dropped. */
@@ -78,6 +92,8 @@ export interface SttOptions {
   model: string;
   spawn?: Spawn;
   timeoutMs?: number;
+  /** Settings → whisperThreads and whisperBeamSize (JD-48). */
+  tuning?: WhisperTuning;
 }
 
 /** Transcribes one utterance; "" when Whisper heard nothing it could write down. */
@@ -86,7 +102,7 @@ export async function transcribe(audio: Int16Array, opts: SttOptions): Promise<s
   const wav = join(dir, "utterance.wav");
   try {
     await writeFile(wav, encodeWav(audio));
-    const stdout = await run(opts, whisperArgs(opts.model, wav));
+    const stdout = await run(opts, whisperArgs(opts.model, wav, opts.tuning));
     return parseWhisperOutput(stdout);
   } finally {
     await rm(dir, { recursive: true, force: true });
