@@ -80,6 +80,26 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
       await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered("CommandOrControl+Alt+L")),
     ).toBe(true);
 
+    // JD-37: Work mode opens the four windows (closing Settings); Focus closes them all.
+    const titles = () =>
+      app.evaluate(({ BrowserWindow }) =>
+        ["Sessions", "Today", "Chat", "To-do", "Settings"].filter((t) =>
+          BrowserWindow.getAllWindows().some((w) => w.isVisible() && w.getTitle().startsWith(t)),
+        ),
+      );
+    const applyLayout = (name: string) =>
+      window.evaluate(
+        (n) =>
+          (
+            window as unknown as { desk: { layouts: { apply(n: string): Promise<void> } } }
+          ).desk.layouts.apply(n),
+        name,
+      );
+    await applyLayout("Work mode");
+    await expect.poll(titles, { timeout: 15_000 }).toEqual(["Sessions", "Today", "Chat", "To-do"]);
+    await applyLayout("Focus");
+    await expect.poll(titles, { timeout: 10_000 }).toEqual([]);
+
     const shot = testInfo.outputPath("electron-smoke.png");
     await window.screenshot({ path: shot });
     await testInfo.attach("app", { path: shot, contentType: "image/png" });

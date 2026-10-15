@@ -13,11 +13,20 @@ import {
   ipcMain,
   Menu,
   safeStorage,
+  screen,
   systemPreferences,
 } from "electron";
-import type { DeskEvent, DeskSecret, FsListRequest, FsReadRequest, UsageResponse } from "@jarvis/shared";
+import {
+  LAYOUT_RPC,
+  type DeskEvent,
+  type DeskSecret,
+  type FsListRequest,
+  type FsReadRequest,
+  type UsageResponse,
+} from "@jarvis/shared";
 import { Connection } from "./connection";
 import { MacFiles } from "./rpcHandlers/fs";
+import { askLayoutName, Layouts } from "./rpcHandlers/layout";
 import { answerRpc, type RpcHandler } from "./rpcHandlers";
 import { isSecretKey, Settings } from "./settings";
 import { createTray } from "./tray";
@@ -76,6 +85,18 @@ app.whenReady().then(() => {
   globalShortcut.register("CommandOrControl+Alt+L", () => void voice.debugListen());
   // First run downloads the models now, with a progress card (not on a scenario, e.g. the smoke test).
   if (!scenario) voice.session.warmUp().catch((err) => console.error("voice models:", err));
+  // Saved layouts (JD-37): the tray, the command bar and the server's apply_layout tool.
+  const layouts = new Layouts({
+    windows,
+    saved: () => settings.get("layouts"),
+    store: (value) => settings.set("layouts", value),
+    screen: {
+      displays: () => screen.getAllDisplays().map((d) => ({ id: d.id, workArea: d.workArea })),
+      primaryId: () => screen.getPrimaryDisplay().id,
+      displayOf: (bounds) => screen.getDisplayMatching(bounds).id,
+    },
+    askName: () => askLayoutName(),
+  });
   let usage: UsageResponse | undefined;
   // Server→Mac requests (rpcHandlers/): folder access reads Settings → Folders on every call.
   const macFiles = new MacFiles({ allowedFolders: () => settings.get("allowedFolders") });
@@ -86,9 +107,10 @@ app.whenReady().then(() => {
   const connection = new Connection({
     config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
     onEvent: (event) => {
-      if (event.type === "rpc")
-        void answerRpc(event, rpcHandlers, (path, answer) => connection.request(path, answer));
-      else broadcast(event);
+      if (event.type !== "rpc") broadcast(event);
+      else if (event.kind === LAYOUT_RPC)
+        connection.request(`/rpc/${event.id}`, layouts.answer(event.payload)).catch(() => {});
+      else void answerRpc(event, rpcHandlers, (path, answer) => connection.request(path, answer));
     },
     onStatus: (status) => {
       if (status.state === "connected") void refreshUsage();
@@ -105,22 +127,33 @@ app.whenReady().then(() => {
   };
   setInterval(() => connection.status.state === "connected" && void refreshUsage(), USAGE_EVERY_MS);
 
-  const tray = createTray(() => ({ settings: settings.all(), connection: connection.status, usage }), {
-    // The voice loop arrives in a later ticket; until then Talk opens Chat.
-    talk: () => windows.openWindow("chat"),
-    commandBar: () => commandBar.toggle(),
-    layout: () => {}, // JD-37
-    setFace: (face) => settings.set("face", face),
-    setWakeWord: (on) => settings.set("wakeWordEnabled", on),
-    setCameraHands: (on) => settings.set("cameraHands", on),
-    setDnd: (on) => {
-      settings.set("dnd", on);
-      // The server holds Do Not Disturb for Telegram notices too.
-      connection.request("/dnd", { on }).catch(() => {});
+  const tray = createTray(
+    () => ({
+      settings: settings.all(),
+      layouts: layouts.names(),
+      activeLayout: layouts.active(),
+      connection: connection.status,
+      usage,
+    }),
+    {
+      // The voice loop arrives in a later ticket; until then Talk opens Chat.
+      talk: () => windows.openWindow("chat"),
+      commandBar: () => commandBar.toggle(),
+      layout: (name) => void layouts.apply(name),
+      saveLayout: () => void layouts.saveCurrent(),
+      setFace: (face) => settings.set("face", face),
+      setWakeWord: (on) => settings.set("wakeWordEnabled", on),
+      setCameraHands: (on) => settings.set("cameraHands", on),
+      setDnd: (on) => {
+        settings.set("dnd", on);
+        // The server holds Do Not Disturb for Telegram notices too.
+        connection.request("/dnd", { on }).catch(() => {});
+      },
+      openSettings: () => windows.openWindow("settings"),
+      quit: () => app.quit(),
     },
-    openSettings: () => windows.openWindow("settings"),
-    quit: () => app.quit(),
-  });
+  );
+  windows.onChange(() => tray.refresh());
   settings.onChange((key) => {
     if (key === "serverUrl" || key === "deviceKey") connection.restart();
     tray.refresh();
@@ -155,6 +188,8 @@ app.whenReady().then(() => {
       : await dialog.showOpenDialog(options);
     return picked.canceled ? undefined : picked.filePaths[0];
   });
+  ipcMain.handle("desk:layouts-list", () => layouts.list());
+  ipcMain.handle("desk:layouts-apply", (_e, name: string) => void layouts.apply(String(name)));
   ipcMain.on("desk:open-window", (_e, id: string, params?: Record<string, string>) =>
     windows.openWindow(id, params),
   );

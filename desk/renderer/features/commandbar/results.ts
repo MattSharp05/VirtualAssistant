@@ -99,7 +99,10 @@ export function notionHits(answer: unknown): NotionHit[] {
   });
 }
 
-/** The saved layouts setting: { name: { windows: ["chat", …] } } (or a bare list of window ids). */
+/**
+ * The saved layouts setting: { name: { windows: [{ windowId, bounds, displayId }, …] } } (JD-37), or
+ * window ids ({ windows: ["chat", …] } or a bare list).
+ */
 export function layoutHits(setting: unknown): LayoutHit[] {
   if (!setting || typeof setting !== "object") return [];
   return Object.entries(setting as Record<string, unknown>).map(([name, value]) => {
@@ -107,9 +110,11 @@ export function layoutHits(setting: unknown): LayoutHit[] {
     const windows = (Array.isArray(raw) ? raw : []).flatMap((w: unknown) =>
       typeof w === "string"
         ? [w]
-        : typeof (w as { id?: unknown })?.id === "string"
-          ? [(w as { id: string }).id]
-          : [],
+        : typeof (w as { windowId?: unknown })?.windowId === "string"
+          ? [(w as { windowId: string }).windowId]
+          : typeof (w as { id?: unknown })?.id === "string"
+            ? [(w as { id: string }).id]
+            : [],
     );
     return { name, windows };
   });

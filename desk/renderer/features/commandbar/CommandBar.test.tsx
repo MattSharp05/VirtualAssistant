@@ -6,9 +6,10 @@ import type { MockBridge } from "../../mock/bridge";
 import CommandBar from "./index";
 import { NOTION_DEBOUNCE_MS } from "./useSources";
 
-function renderBar(scenario = "commandbar") {
+function renderBar(scenario = "commandbar", setup?: (bridge: MockBridge) => void) {
   const choice = chooseBridge(`?scenario=${scenario}`, undefined);
   const bridge = choice.bridge as MockBridge;
+  setup?.(bridge);
   const opened: [string, Record<string, string> | undefined][] = [];
   bridge.openWindow = (id, params) => void opened.push([id, params]);
   const chats: DeskEvent[] = [];
@@ -94,6 +95,23 @@ describe("Command bar", () => {
     expect(opened.slice(1).map(([id]) => id)).toEqual(["chat", "sessions", "today"]);
     fireEvent.keyDown(input, { key: "Escape" });
     expect(bridge.frameActions).toEqual(["close", "close", "close"]);
+  });
+
+  it("in the app, lists every layout (built-ins too) and applies one by name (JD-37)", async () => {
+    const applied: string[] = [];
+    const { opened, input } = renderBar("commandbar", (b) => {
+      b.layouts = {
+        list: async () => [
+          { name: "Work mode", windows: ["sessions", "today", "chat", "todo"] },
+          { name: "Focus", windows: [] },
+        ],
+        apply: async (name) => void applied.push(name),
+      };
+    });
+    fireEvent.change(input, { target: { value: "focus" } });
+    fireEvent.click(await screen.findByRole("option", { name: "Layout: Focus" }));
+    expect(applied).toEqual(["Focus"]);
+    expect(opened).toEqual([]);
   });
 
   it("still works when sessions and Notion search aren't on the server yet", async () => {

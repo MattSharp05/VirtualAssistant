@@ -8,6 +8,7 @@ const actions = (): TrayActions => ({
   talk: vi.fn(),
   commandBar: vi.fn(),
   layout: vi.fn(),
+  saveLayout: vi.fn(),
   setFace: vi.fn(),
   setWakeWord: vi.fn(),
   setCameraHands: vi.fn(),
@@ -18,6 +19,8 @@ const actions = (): TrayActions => ({
 
 const state = (over: Partial<TrayState> = {}): TrayState => ({
   settings: DEFAULT_SETTINGS,
+  layouts: ["Work mode", "Focus"],
+  activeLayout: "Work mode",
   connection: { state: "connected", serverUrl: "https://j.ts.net", deviceName: "MacBook Pro" },
   usage: { available: true, fiveHour: 42, weekly: 18, checkedAt: "2026-10-15T09:00:00Z" },
   ...over,
@@ -31,6 +34,8 @@ describe("tray menu (mockup 8)", () => {
       "Command bar",
       "—",
       "Layout",
+      "Work mode",
+      "Focus (orb only)",
       "Save current layout…",
       "—",
       "Face",
@@ -71,11 +76,19 @@ describe("tray menu (mockup 8)", () => {
     expect(act.quit).toHaveBeenCalled();
   });
 
-  it("shows saved layouts (JD-37) under Layout", () => {
+  it("lists layouts (JD-37) with a check on the active one, and saves the current one", () => {
     const act = actions();
-    const items = trayMenu(state({ settings: { ...DEFAULT_SETTINGS, layouts: { "Work mode": {} } } }), act);
-    items.find((i) => i.label === "Work mode")!.click!();
-    expect(act.layout).toHaveBeenCalledWith("Work mode");
+    const items = trayMenu(
+      state({ layouts: ["Work mode", "Focus", "Writing"], activeLayout: "Writing" }),
+      act,
+    );
+    const item = (label: string) => items.find((i) => i.label === label)!;
+    expect(item("Work mode")).toMatchObject({ type: "checkbox", checked: false });
+    expect(item("Writing").checked).toBe(true);
+    item("Focus (orb only)").click!();
+    expect(act.layout).toHaveBeenCalledWith("Focus");
+    item("Save current layout…").click!();
+    expect(act.saveLayout).toHaveBeenCalled();
   });
 
   it("the status line has a dot for the connection; the plan line hides when usage is unknown", () => {

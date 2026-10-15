@@ -168,6 +168,22 @@ export interface FsReadResult {
   data: string;
 }
 
+/** The rpc kind that applies a saved window layout on the Mac (JD-37): payload { name }, result LayoutApplied. */
+export const LAYOUT_RPC = "layout.apply";
+export interface LayoutApplied {
+  /** The layout's name as the Desk knows it ("work" finds "Work mode"). */
+  name: string;
+  /** The windows it left open. */
+  windows: string[];
+}
+
+/** A saved window layout (JD-37): the built-ins (Work mode, Focus) and Matthew's own. */
+export interface LayoutSummary {
+  name: string;
+  /** The windows it opens (Focus opens none and closes the rest). */
+  windows: string[];
+}
+
 /** POST /api/desk/chat: the reply streams over /api/desk/events as brain.* events with this messageId. */
 export interface ChatRequest {
   text: string;
@@ -663,6 +679,11 @@ export interface DeskBridge {
     speak(text: string, voice: string, rate: number): Promise<void>;
     /** The macOS folder picker; undefined when cancelled. */
     pickFolder(): Promise<string | undefined>;
+  };
+  /** Saved window layouts (JD-37): applying one opens, moves and closes windows. Absent in the preview. */
+  layouts?: {
+    list(): Promise<LayoutSummary[]>;
+    apply(name: string): Promise<void>;
   };
   /** The window this renderer is in (JD-20): the frame's minimise and close buttons. */
   frame?: {

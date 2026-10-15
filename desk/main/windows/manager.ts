@@ -22,6 +22,7 @@ function featureMeta(id: string): FeatureMeta | undefined {
 
 export class WindowManager {
   private readonly windows = new Map<string, BrowserWindow>();
+  private readonly listeners = new Set<() => void>();
 
   constructor(
     private readonly rendererIndex: string,
@@ -77,7 +78,12 @@ export class WindowManager {
     const save = () => this.settings.setBounds(id, win.getBounds());
     win.on("moved", save);
     win.on("resized", save);
-    win.on("closed", () => this.windows.delete(id));
+    win.on("closed", () => {
+      this.windows.delete(id);
+      this.changed();
+    });
+    win.on("show", () => this.changed());
+    win.on("hide", () => this.changed());
     void win.loadFile(this.rendererIndex, {
       hash,
       ...(this.scenario ? { query: { scenario: this.scenario } } : {}),
@@ -93,6 +99,44 @@ export class WindowManager {
     const win = this.windows.get(id);
     if (win && !win.isDestroyed() && win.isVisible()) win.close();
     else this.openWindow(id);
+  }
+
+  /** The windows showing now and where they are (saved layouts, JD-37). */
+  openWindows(): { windowId: string; bounds: Rect }[] {
+    return [...this.windows]
+      .filter(([, w]) => !w.isDestroyed() && w.isVisible())
+      .map(([windowId, w]) => ({ windowId, bounds: w.getBounds() }));
+  }
+
+  /** Every window open now, showing or minimised. */
+  windowIds(): string[] {
+    return [...this.windows].filter(([, w]) => !w.isDestroyed()).map(([id]) => id);
+  }
+
+  /** Opens the window at these bounds, or moves it there when it's open (a layout being applied). */
+  placeWindow(id: string, bounds: Rect): void {
+    this.settings.setBounds(id, bounds);
+    const win = this.windows.get(id);
+    if (win && !win.isDestroyed()) {
+      win.setBounds(bounds);
+      win.show();
+    } else this.openWindow(id);
+  }
+
+  /** A window's smallest size, from its feature.ts. */
+  minSize(id: string): { width: number; height: number } {
+    const target = parseWindowId(id);
+    return (target && featureMeta(target.feature)?.minSize) ?? DEFAULT_MIN_SIZE;
+  }
+
+  /** Called when a window opens, closes, shows or hides (moves reach settings.windowBounds). */
+  onChange(fn: () => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private changed(): void {
+    for (const fn of this.listeners) fn();
   }
 
   private initialBounds(id: string, meta: FeatureMeta): Rect {
