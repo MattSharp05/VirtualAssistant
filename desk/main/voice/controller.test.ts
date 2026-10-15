@@ -1,7 +1,7 @@
 // @vitest-environment node
 import type { DeskEvent } from "@jarvis/shared";
 import { describe, expect, it } from "vitest";
-import { PushToTalk, REPLY_TIMEOUT_MS, type PushToTalkDeps } from "./controller";
+import { PushToTalk, REPLY_TIMEOUT_MS, type PushToTalkDeps, type SpeechLike } from "./controller";
 import type { ListenResult } from "./session";
 
 const at = new Date("2026-10-15T09:00:00Z");
@@ -192,5 +192,86 @@ describe("PushToTalk", () => {
     expect(t.ptt.state).toBe("listening");
     await t.hear("second");
     expect(t.asked).toEqual(["first", "second"]);
+  });
+
+  describe("with spoken replies (JD-38)", () => {
+    /** A fake speaker: busy until the test says it has finished talking. */
+    function fakeSpeech() {
+      const log: string[] = [];
+      let finish: (() => void) | undefined;
+      const speech: SpeechLike & { busy: boolean; talked(): void } = {
+        busy: false,
+        drained: () => new Promise<void>((r) => (finish = r)),
+        interrupt: () => {
+          log.push("interrupt");
+          speech.busy = false;
+          finish?.();
+        },
+        talked: () => {
+          speech.busy = false;
+          finish?.();
+        },
+      };
+      return { speech, log };
+    }
+
+    it("stays replying until the last sentence has been said; the speaker rests the orb", async () => {
+      const { speech } = fakeSpeech();
+      const t = setup({ speech });
+      t.ptt.signal("toggle");
+      await t.hear("what's on today?");
+      t.ptt.onEvent({
+        type: "brain.start",
+        messageId: "m1",
+        channel: "desk-voice",
+        text: "what's on today?",
+      });
+      t.ptt.onEvent({ type: "brain.delta", messageId: "m1", text: "Three things." });
+      speech.busy = true;
+      t.ptt.onEvent({ type: "brain.done", messageId: "m1", text: "Three things.", metrics: {} as never });
+      expect(t.ptt.state).toBe("replying");
+      expect(t.timers).toEqual([]); // the reply has arrived: no timeout while it's spoken
+      speech.talked();
+      await tick();
+      expect(t.ptt.state).toBe("idle");
+      expect(t.orb()).toEqual(["listening", "thinking"]);
+    });
+
+    it("a reply with nothing to say finishes at once", async () => {
+      const { speech } = fakeSpeech();
+      const t = setup({ speech });
+      t.ptt.signal("toggle");
+      await t.hear("show me the code");
+      t.ptt.onEvent({ type: "brain.done", messageId: "m1", text: "```x```", metrics: {} as never });
+      expect(t.ptt.state).toBe("idle");
+      expect(t.orb().at(-1)).toBe("idle");
+    });
+
+    it("⌥⌥ while JARVIS talks stops it and listens again", async () => {
+      const { speech, log } = fakeSpeech();
+      const t = setup({ speech });
+      t.ptt.signal("toggle");
+      await t.hear("tell me a story");
+      t.ptt.onEvent({ type: "brain.delta", messageId: "m1", text: "Once upon a time." });
+      speech.busy = true;
+      t.ptt.onEvent({ type: "brain.done", messageId: "m1", text: "…", metrics: {} as never });
+      t.ptt.signal("toggle");
+      expect(log).toEqual(["interrupt"]);
+      expect(t.ptt.state).toBe("listening");
+      await tick();
+      // The interrupted reply's end doesn't touch the new listen.
+      expect(t.ptt.state).toBe("listening");
+      await t.hear("what's next?");
+      expect(t.asked).toEqual(["tell me a story", "what's next?"]);
+    });
+
+    it("⌥⌥ while a brief is spoken (no question of its own) interrupts it too", async () => {
+      const { speech, log } = fakeSpeech();
+      speech.busy = true;
+      const t = setup({ speech });
+      t.ptt.signal("toggle");
+      expect(log).toEqual(["interrupt"]);
+      expect(t.ptt.state).toBe("listening");
+    });
   });
 });

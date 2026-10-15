@@ -1,7 +1,7 @@
 // Voice wiring for main/index.ts: the real mic (PvRecorder), Silero VAD and whisper-cli behind a
 // VoiceSession, models fetched on first use with a progress card, and push-to-talk (JD-31): the
-// system-wide hotkey (hotkey.ts) driving the PushToTalk controller, which asks JARVIS what was heard.
-// Electron stays in main/index.ts.
+// system-wide hotkey (hotkey.ts) driving the PushToTalk controller, which asks JARVIS what was heard,
+// and the Speaker (JD-38) that says voice replies out loud. Electron stays in main/index.ts.
 import type { ChatResponse, DeskEvent } from "@jarvis/shared";
 import type { PttKey } from "../settingsSchema";
 import { openMic } from "../audio/recorder";
@@ -9,6 +9,7 @@ import { ensureModels, modelsReady } from "../models";
 import { MODELS_CARD_ID, modelsCard, progressThrottle, pttHint } from "./cards";
 import { PushToTalk } from "./controller";
 import { createHotkey, type Hotkey } from "./hotkey";
+import { createMacSpeaker, type Speaker } from "./speaker";
 import { VoiceSession } from "./session";
 import { findWhisper, transcribe, type WhisperLocation } from "./stt";
 import { createSileroVad } from "./vad";
@@ -26,6 +27,10 @@ export interface VoiceOptions {
   pttKey(): PttKey;
   /** Asks JARVIS (POST /api/desk/chat, channel desk-voice). */
   chat(text: string): Promise<ChatResponse>;
+  /** Settings → voice, speechRate and speakReplies (JD-38). */
+  voice(): string;
+  speechRate(): number;
+  speakReplies(): boolean;
 }
 
 export interface Voice {
@@ -34,6 +39,10 @@ export interface Voice {
   ptt: PushToTalk;
   /** The system-wide key hook (not started: permissions.ts starts it once macOS allows). */
   hotkey: Hotkey;
+  /** Says desk-voice replies out loud (JD-38). */
+  speaker: Speaker;
+  /** The server's events, for the speaker first, then push-to-talk (which waits for the speaker). */
+  onEvent(event: DeskEvent): void;
 }
 
 const MIC_OFF =
@@ -64,6 +73,12 @@ export function createVoice(opts: VoiceOptions): Voice {
     },
   });
 
+  const speaker = createMacSpeaker({
+    voice: opts.voice,
+    rate: opts.speechRate,
+    speakReplies: opts.speakReplies,
+    publish: opts.publish,
+  });
   const ptt = new PushToTalk({
     listen: (o) => session.listen(o),
     stop: () => session.stop(),
@@ -71,7 +86,12 @@ export function createVoice(opts: VoiceOptions): Voice {
     chat: opts.chat,
     publish: opts.publish,
     hint: () => pttHint(opts.pttKey()),
+    speech: speaker,
   });
   const hotkey = createHotkey(opts.pttKey(), (signal) => ptt.signal(signal));
-  return { session, ptt, hotkey };
+  const onEvent = (event: DeskEvent) => {
+    speaker.onEvent(event);
+    ptt.onEvent(event);
+  };
+  return { session, ptt, hotkey, speaker, onEvent };
 }

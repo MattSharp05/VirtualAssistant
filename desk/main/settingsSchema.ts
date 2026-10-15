@@ -21,6 +21,8 @@ export interface DeskSettings {
   voice: string;
   /** Words per minute for `say`. */
   speechRate: number;
+  /** Say voice replies out loud (JD-38); typed turns are never spoken. */
+  speakReplies: boolean;
   pttKey: PttKey;
   wakeWordEnabled: boolean;
   /** Porcupine sensitivity, 0–1. */
@@ -48,6 +50,7 @@ export const DEFAULT_SETTINGS: DeskSettings = {
   serverUrl: "",
   voice: "Daniel",
   speechRate: 185,
+  speakReplies: true,
   pttKey: "RightAlt-double",
   wakeWordEnabled: true,
   wakeSensitivity: 0.5,
@@ -127,6 +130,7 @@ const validators: { [K in SettingKey]: (v: unknown) => DeskSettings[K] } = {
     if (typeof v !== "number" || !Number.isFinite(v)) throw new SettingError("Speed must be a number.");
     return Math.round(Math.min(SPEECH_RATE.max, Math.max(SPEECH_RATE.min, v)));
   },
+  speakReplies: (v) => bool("speakReplies", v),
   pttKey: (v) => {
     if (v === "RightAlt-double" || v === "RightAlt-hold") return v;
     if (typeof v === "string" && /^F([1-9]|1[0-9]|20)$/.test(v)) return v as PttKey;
