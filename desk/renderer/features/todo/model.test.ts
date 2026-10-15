@@ -1,0 +1,93 @@
+import { describe, expect, it } from "vitest";
+import type { TaskItem } from "@jarvis/shared";
+import { dueLabel, groupByProject, hasDate, isOverdue, suggestions, summary, tabTasks } from "./model";
+
+const task = (id: string, extra: Partial<TaskItem> = {}): TaskItem => ({
+  id,
+  name: id,
+  status: "Open",
+  source: "You",
+  createdAt: "2026-10-10T08:00:00Z",
+  ...extra,
+});
+
+const TODAY = "2026-10-14";
+const all = [
+  task("late", { due: "2026-10-12", project: "Trip" }),
+  task("now", { due: "2026-10-14T16:30:00", project: "Personal", priority: "P1" }),
+  task("later", { due: "2026-10-20", project: "Trip" }),
+  task("someday"),
+  task("finished", { status: "Done", createdAt: "2026-10-13T08:00:00Z" }),
+  task("older", { status: "Done" }),
+  task("idea", { status: "Suggested", why: "because" }),
+  task("gone", { status: "Dismissed" }),
+];
+const ids = (ts: TaskItem[]) => ts.map((t) => t.id);
+
+describe("to-do tabs", () => {
+  it("puts open tasks due today or earlier in Today, the rest in Upcoming (like the server)", () => {
+    expect(ids(tabTasks(all, "today", TODAY))).toEqual(["late", "now"]);
+    expect(ids(tabTasks(all, "upcoming", TODAY))).toEqual(["later", "someday"]);
+  });
+
+  it("groups open tasks by project, no project last", () => {
+    const groups = groupByProject(tabTasks(all, "project", TODAY));
+    expect(groups.map((g) => [g.project, ids(g.tasks)])).toEqual([
+      ["Personal", ["now"]],
+      ["Trip", ["late", "later"]],
+      ["No project", ["someday"]],
+    ]);
+  });
+
+  it("lists done tasks newest first and suggestions apart", () => {
+    expect(ids(tabTasks(all, "done", TODAY))).toEqual(["finished", "older"]);
+    expect(ids(suggestions(all))).toEqual(["idea"]);
+  });
+
+  it("marks overdue open tasks and sums them up", () => {
+    expect(isOverdue(all[0]!, TODAY)).toBe(true);
+    expect(isOverdue(all[1]!, TODAY)).toBe(false);
+    expect(summary(all, TODAY)).toBe("4 open · 1 overdue");
+    expect(summary([task("x")], TODAY)).toBe("1 open");
+  });
+});
+
+describe("dueLabel", () => {
+  it("reads like the mockup: today, tomorrow, a weekday this week, else a date", () => {
+    expect(dueLabel("2026-10-14", TODAY)).toBe("today");
+    expect(dueLabel("2026-10-14T16:30:00", TODAY)).toBe("today 16:30");
+    expect(dueLabel("2026-10-15", TODAY)).toBe("tomorrow");
+    expect(dueLabel("2026-10-13", TODAY)).toBe("yesterday");
+    expect(dueLabel("2026-10-16", TODAY)).toBe("Fri");
+    expect(dueLabel("2026-10-21", TODAY)).toBe("Oct 21");
+    expect(dueLabel("2026-10-01", TODAY)).toBe("Oct 1");
+    expect(dueLabel("2026-11-02", "2026-10-31")).toBe("Mon");
+  });
+});
+
+describe("hasDate", () => {
+  it.each([
+    "call Sam tomorrow",
+    "renew passport on Friday",
+    "QA batch by fri",
+    "dentist next week",
+    "pay rent Oct 31",
+    "pay rent 31st of October",
+    "book flights 2026-11-02",
+    "call mum 10/16",
+    "standup at 9am",
+    "stretch at 15:00",
+    "check the oven in 20 minutes",
+    "remind me to water the plants",
+    "finish the deck EOD",
+  ])("“%s” goes to JARVIS", (text) => expect(hasDate(text)).toBe(true));
+
+  it.each([
+    "Buy milk",
+    "Read the Trip PRD",
+    "Sunscreen for the trip",
+    "Reply to Alex about the new logo",
+    "Ask if we may march on",
+    "Fix 3 failing tests",
+  ])("“%s” is added directly", (text) => expect(hasDate(text)).toBe(false));
+});

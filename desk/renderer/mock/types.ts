@@ -8,14 +8,28 @@ export interface TimedEvent {
   event: DeskEvent;
 }
 
+/**
+ * Answers requests static data can't (writes that change state, views computed from it). Returns
+ * undefined for paths it doesn't handle; throws to fail the request. `data` is this bridge's own copy
+ * of the scenario's data, so a route can keep state in it.
+ */
+export type MockRoute = (
+  path: string,
+  body: unknown,
+  ctx: { data: Record<string, unknown>; emit(event: DeskEvent): void },
+) => unknown;
+
 /** Part of a scenario's state; demo-day merges every file in mock/data/. */
 export interface ScenarioPart {
   /** Responses for bridge.request(path), keyed by Desk API path, e.g. "/sessions"; a function gets the body. */
   data?: Record<string, unknown>;
   events?: TimedEvent[];
+  /** Tried in order before `data`. */
+  routes?: MockRoute[];
 }
 
-export interface Scenario extends Required<ScenarioPart> {
+export interface Scenario extends Required<Omit<ScenarioPart, "routes">> {
+  routes?: MockRoute[];
   name: string;
   description: string;
   /** What JARVIS answers in chat (streamed word by word). */

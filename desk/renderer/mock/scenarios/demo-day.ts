@@ -9,6 +9,7 @@ const scenario: Scenario = {
   description: "A normal Tuesday: three projects, a few meetings, inbox and to-dos.",
   data: Object.assign({}, ...Object.values(parts).map((p) => p.data ?? {})),
   events: Object.values(parts).flatMap((p) => p.events ?? []),
+  routes: Object.values(parts).flatMap((p) => p.routes ?? []),
   chatReply: "mk is on MK-74 with two builders running. Trip is waiting on you: what's the hotel budget?",
 };
 

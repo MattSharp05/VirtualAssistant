@@ -107,6 +107,7 @@ test("tasks: add → today; complete → Done; changes publish tasks.changed; to
   const call = (method: string, path: string, extra: Json) => route(method, path).handler({ ctx: deskCtx, params: {}, body: {}, ...extra } as never);
   const upcoming = (await call("GET", "/tasks", { url: new URL("http://x/api/desk/tasks?view=upcoming") })) as TasksResponse;
   assert.deepEqual(upcoming.tasks.map((t) => t.name), ["Book dentist", "Read Trip PRD"]);
+  assert.equal(upcoming.notionUrl, `https://www.notion.so/${notionIdsFile(dir).get().tasksDatabaseId!.replace(/-/g, "")}`);
   const added = (await call("POST", "/tasks", { body: { name: "Water plants", due: "2026-10-14" } })) as { id: string };
   await call("POST", "/tasks/:id/done", { params: { id: added.id } });
   await call("POST", "/tasks/:id/reopen", { params: { id: added.id } });
