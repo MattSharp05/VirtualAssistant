@@ -15,12 +15,18 @@ Apple, so macOS asks you once to confirm you want to open it.
 3. Eject the disk image.
 
 ## 3. Open it the first time
-1. Open **Applications**, **right-click** JARVIS Desk and choose **Open**.
-2. macOS says it can't check the developer. Click **Open** again.
+1. Open **Applications** and double-click **JARVIS Desk**. macOS says "JARVIS Desk Not Opened"
+   (Apple could not verify it). Click **Done**.
+2. Open **System Settings → Privacy & Security**, scroll down to **Security**, and next to
+   "JARVIS Desk was blocked to protect your Mac" click **Open Anyway**. Confirm with your password
+   or Touch ID, then click **Open Anyway** once more.
    You only do this once; after that it opens normally.
 
-If macOS refuses with "is damaged and can't be opened", open Terminal and run:
-`xattr -dr com.apple.quarantine "/Applications/JARVIS Desk.app"`, then open it again.
+(On macOS 15 and later, right-click → Open no longer skips this check; older guides that say so
+are out of date.)
+
+Faster, from Terminal: `xattr -dr com.apple.quarantine "/Applications/JARVIS Desk.app"`, then open
+it normally. This also fixes "is damaged and can't be opened".
 
 ## 4. Permissions it asks for, and why
 macOS asks the first time each one is needed. You can change them later in **System Settings →

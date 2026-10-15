@@ -165,7 +165,10 @@ test("worker usage is tracked apart from the chat's", async (t) => {
   t.after(s.close);
   s.payload(GOOD);
   await s.runner.run("digest");
-  await new Promise((r) => setTimeout(r, 20));
+  // The worker records usage when its turn ends, just after the run settles: wait for it (slow CI).
+  const deadline = Date.now() + 3000;
+  while (new WorkerState(s.dir).brain().totals.replies === 0 && Date.now() < deadline)
+    await new Promise((r) => setTimeout(r, 20));
   assert.equal(s.store.brain().totals.replies, 0, "the chat's totals are untouched");
   const worker = new WorkerState(s.dir).brain();
   assert.equal(worker.totals.replies, 1);
