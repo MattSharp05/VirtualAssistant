@@ -155,6 +155,7 @@ if (!bot) {
             { command: "attach", description: "Add a session by link" },
             { command: "forget", description: "Stop tracking a session" },
             { command: "status", description: "Login, plan usage, routine fires" },
+            { command: "voice", description: "Voice-note replies: on, off or auto" },
           ])
           .catch((err) => console.warn("couldn't set the Telegram command menu:", (err as Error).message));
       },

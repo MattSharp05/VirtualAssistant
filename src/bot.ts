@@ -1,13 +1,14 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { Bot, InlineKeyboard, type Context } from "grammy";
+import { Bot, InputFile, InlineKeyboard, type Context } from "grammy";
 import { formatMetrics, type Brain, type BrainReply } from "./brain/index.js";
 import { briefFor } from "./brief.js";
 import { LiveReply } from "./liveReply.js";
 import { MAX_UPLOAD_BYTES, UploadStore, type Upload } from "./uploads.js";
 import { transcribe as whisperTranscribe, type Transcript } from "./voice/stt.js";
+import { synthesize } from "./voice/tts.js";
 import type { Jarvis } from "./jarvis.js";
-import type { Job } from "./store.js";
+import type { Job, VoiceReplies } from "./store.js";
 
 const HELP = [
   "Just talk to me: \"what's mk up to?\", \"tell mk to pause after this ticket\", \"what's in the ShapeMint PRD?\".",
@@ -25,6 +26,7 @@ const HELP = [
   "/forget <job> — stop tracking a session",
   "/say <job> <message> — message a specific session",
   "/status — Claude login, plan usage, routine fires",
+  "/voice on|off|auto — voice-note replies (auto: only when you send a voice note)",
   "",
   "Plain messages go to me, or straight to a session after /sessions or /use.",
 ].join("\n");
@@ -49,10 +51,18 @@ function seconds(ms: number): string {
 
 const WINDOW_LABEL = { five_hour: "5-hour window", seven_day: "Weekly" } as const;
 
-/** What tests replace: downloading a Telegram file and speech-to-text. */
+const VOICE_MODES: Record<VoiceReplies, string> = {
+  auto: "auto: I answer voice notes with text plus a voice note",
+  on: "on: every reply from me comes with a voice note",
+  off: "off: text replies only",
+};
+
+/** What tests replace: downloading a Telegram file, speech-to-text and text-to-speech. */
 export interface BotDeps {
   download?: (filePath: string) => Promise<Uint8Array>;
   transcribe?: (audioPath: string) => Promise<Transcript>;
+  /** Reply text → OGG/Opus voice note. */
+  speak?: (text: string) => Promise<Uint8Array>;
 }
 
 export function createBot(token: string, allowedChatId: number | undefined, jarvis: Jarvis, brain?: Brain, deps: BotDeps = {}): Bot {
@@ -65,6 +75,7 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
       return new Uint8Array(await res.arrayBuffer());
     });
   const transcribe = deps.transcribe ?? ((path: string) => whisperTranscribe(path));
+  const speak = deps.speak ?? ((text: string) => synthesize(text));
   const { store } = jarvis;
   const uploads = new UploadStore(jarvis.config.dataDir);
 
@@ -225,13 +236,24 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     await relay(ctx, jobId, ctx.match.trim().slice(jobId.length).trim());
   });
 
+  // Voice-note replies (src/voice/tts.ts): auto = only after a voice note (default), on, off.
+  bot.command("voice", async (ctx) => {
+    const wanted = ctx.match.trim().toLowerCase();
+    if (wanted === "on" || wanted === "off" || wanted === "auto") {
+      store.updateBrain({ voiceReplies: wanted });
+      return ctx.reply(`Voice replies ${VOICE_MODES[wanted]}.`);
+    }
+    const mode = store.brain().voiceReplies ?? "auto";
+    await ctx.reply(`Voice replies ${VOICE_MODES[mode]}.\nUsage: /voice on|off|auto`);
+  });
+
   bot.on("message:text", (ctx) => handleText(ctx, ctx.message.text));
 
   /** Typed text and voice transcripts go the same way: to the picked session, or to JARVIS. */
-  async function handleText(ctx: Context, text: string): Promise<void> {
+  async function handleText(ctx: Context, text: string, fromVoice = false): Promise<void> {
     const target = store.brain().talkTo ?? "jarvis";
     if (target !== "jarvis" && store.getJob(target)) return relay(ctx, target, text);
-    await askBrain(ctx, text);
+    await askBrain(ctx, text, [], undefined, fromVoice);
   }
 
   // Voice notes (and audio files): transcribed in the container (src/voice/stt.ts), echoed, then
@@ -256,7 +278,7 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     }
     if (!text) return ctx.reply("I didn't catch anything in that recording.");
     await ctx.reply(`🎙 <i>${escapeHtml(text)}</i>`, { parse_mode: "HTML" });
-    await handleText(ctx, text);
+    await handleText(ctx, text, true);
   });
 
   // Documents and photos: saved to the uploads folder (src/uploads.ts), then JARVIS reads them.
@@ -278,7 +300,13 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
   });
 
   /** One message to the brain, with the reply growing in place (src/liveReply.ts). */
-  async function askBrain(ctx: Context, text: string, attachments: Upload[] = [], ask?: (onDelta: (chunk: string) => void) => Promise<BrainReply>): Promise<void> {
+  async function askBrain(
+    ctx: Context,
+    text: string,
+    attachments: Upload[] = [],
+    ask?: (onDelta: (chunk: string) => void) => Promise<BrainReply>,
+    fromVoice = false,
+  ): Promise<void> {
     if (!brain) {
       await ctx.reply("The brain isn't running. Use /sessions to message a session directly.");
       return;
@@ -296,10 +324,23 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
       const { reply, metrics } = await (ask ? ask(onDelta) : brain.chat(text, "telegram", { onDelta, attachments }));
       clearInterval(typing);
       await live.finish(`${reply}\n\n${formatMetrics(metrics)}`);
+      const mode = store.brain().voiceReplies ?? "auto";
+      if (mode === "on" || (mode === "auto" && fromVoice)) await sendVoiceReply(ctx, reply);
     } catch (err) {
       await ctx.reply(`I couldn't answer that: ${(err as Error).message.slice(0, 300)}`);
     } finally {
       clearInterval(typing);
+    }
+  }
+
+  /** The spoken version, after the text. If speech fails the text has already gone, so just log it. */
+  async function sendVoiceReply(ctx: Context, reply: string): Promise<void> {
+    try {
+      void ctx.replyWithChatAction("record_voice").catch(() => {});
+      const audio = await speak(reply);
+      await ctx.replyWithVoice(new InputFile(audio, "jarvis.ogg"));
+    } catch (err) {
+      console.warn("voice reply:", (err as Error).message);
     }
   }
 

@@ -120,6 +120,7 @@ Commands:
 - `/jarvis`: go back to talking to JARVIS. This is the default; plain text goes to JARVIS.
 - `/model`: pick the model JARVIS's chat uses.
 - `/newchat`: start a fresh conversation with JARVIS.
+- `/voice on|off|auto`: voice-note replies (auto, the default: only when you sent a voice note).
 - `/new <task>`, `/jobs`, `/use <job>`, `/say <job> <message>`, `/attach <link> <name>`,
   `/forget <job>`, `/status`.
 
@@ -234,6 +235,10 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
   container (whisper.cpp, no cloud service), echoed back in italics, then answered like a typed
   message. The first `docker compose up -d --build` after this takes a few minutes longer (it
   compiles whisper.cpp and downloads its 142 MB model once).
+- **Voice replies:** when you send a voice note, JARVIS answers with the text as usual and then a
+  voice note of it (Piper, a British male voice, spoken in the container). Links, markdown and code
+  aren't read out, and only the first ~1,000 characters are spoken. `/voice on` speaks every reply,
+  `/voice off` turns it off, `/voice auto` (the default) only answers voice notes with voice.
 - **Files:** send JARVIS a PDF, text file or photo on Telegram (caption = what you want, e.g.
   "summarise this"). It's kept for 7 days in `data/uploads`; JARVIS can read those files and
   nothing else on disk.

@@ -61,7 +61,11 @@ export interface BrainState {
   totals: { replies: number; inputTokens: number; outputTokens: number; ms: number; apiEquivalentUsd: number };
   /** Telegram: "jarvis" = plain messages go to the brain; a job id = straight to that session. */
   talkTo?: string;
+  /** Telegram voice-note replies (/voice): "auto" (default) = only after a voice note, "on" = always, "off" = never. */
+  voiceReplies?: VoiceReplies;
 }
+
+export type VoiceReplies = "on" | "off" | "auto";
 
 interface State {
   nextJob: number;
