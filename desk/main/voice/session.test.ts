@@ -2,7 +2,7 @@
 import type { DeskEvent } from "@jarvis/shared";
 import { describe, expect, it } from "vitest";
 import type { Mic } from "../audio/recorder";
-import { record, type Segment } from "./fixtures";
+import { framesFor, record, type Segment } from "./fixtures";
 import { VoiceSession, type VoiceSessionDeps } from "./session";
 
 /** A mic that plays a recording; the fake VAD looks each frame's probability up. */
@@ -138,6 +138,46 @@ describe("VoiceSession.listen", () => {
     const noModels = setup(speech, { prepare: async () => Promise.reject(new Error("offline")) });
     await expect(noModels.session.listen()).rejects.toThrow("offline");
     expect(noModels.session.state).toBe("idle");
+  });
+
+  it("runs the wake word's 500 ms pre-roll through the endpointer first (JD-43)", async () => {
+    // "Jarvis, what's on today" in one breath: the speech starts inside the pre-roll.
+    const pre = record([
+      ["silence", 180],
+      ["speech", 300],
+    ]);
+    const rest = record([
+      ["speech", 900],
+      ["silence", 1500],
+    ]);
+    const prob = new Map(
+      [...pre.frames, ...rest.frames].map((f, i) => [f, [...pre.probabilities, ...rest.probabilities][i]]),
+    );
+    const seen: Int16Array[] = [];
+    let heard: Int16Array | undefined;
+    let i = 0;
+    const session = new VoiceSession({
+      prepare: async () => ({
+        vad: {
+          probability: async (f) => (seen.push(f), prob.get(f) ?? 0),
+          reset: () => {},
+        },
+        transcribe: async (audio) => ((heard = audio), "what's on today"),
+      }),
+      openMic: async () => ({
+        read: async () => rest.frames[i++] ?? Promise.reject(new Error("over")),
+        stop: () => {},
+      }),
+      publish: () => {},
+    });
+    expect(pre.frames).toHaveLength(framesFor(500));
+    const result = await session.listen({ preRoll: pre.frames });
+    expect(result.text).toBe("what's on today");
+    expect(seen.slice(0, pre.frames.length)).toEqual(pre.frames);
+    // The utterance starts inside the pre-roll, so all of it leads the audio that's transcribed.
+    const preAudio = pre.frames.flatMap((f) => Array.from(f));
+    expect(Array.from(heard!.subarray(0, preAudio.length))).toEqual(preAudio);
+    expect(heard!.length).toBeGreaterThan(preAudio.length);
   });
 });
 

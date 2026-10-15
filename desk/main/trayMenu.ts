@@ -26,6 +26,8 @@ export interface TrayState {
   usage?: UsageResponse;
   /** The updater (JD-46): a newer version to offer, and its download's progress (0–1). */
   update?: { version?: string; downloading?: number; checking?: boolean };
+  /** The wake word (JD-43): a status line when it can't listen, and when it last heard "Jarvis". */
+  wake?: { line?: string; lastTrigger?: number };
 }
 
 export interface TrayActions {
@@ -37,6 +39,8 @@ export interface TrayActions {
   setWakeWord(on: boolean): void;
   setCameraHands(on: boolean): void;
   setDnd(on: boolean): void;
+  /** The last "Jarvis" was a false trigger: logged for tuning (JD-43). */
+  notMe(): void;
   openSettings(): void;
   checkForUpdates(): void;
   installUpdate(): void;
@@ -130,6 +134,10 @@ export function trayMenu(state: TrayState, act: TrayActions): TrayItem[] {
       checked: settings.wakeWordEnabled,
       click: () => act.setWakeWord(!settings.wakeWordEnabled),
     },
+    ...(settings.wakeWordEnabled && state.wake?.line ? [heading(state.wake.line)] : []),
+    ...(settings.wakeWordEnabled
+      ? [{ label: "That wasn't me", enabled: state.wake?.lastTrigger !== undefined, click: act.notMe }]
+      : []),
     {
       label: "Camera hands",
       type: "checkbox",

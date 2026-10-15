@@ -3,6 +3,7 @@
 // opens (windows/manager.ts). Main holds the connection to the server (connection.ts) and the settings
 // (settings.ts); renderers reach both only through the bridge (preload/index.ts). Voice (voice/) listens
 // on the Mac and publishes its orb states and cards like server events.
+import { appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   app,
@@ -40,6 +41,7 @@ import { Updater } from "./updater";
 import { createVoice } from "./voice";
 import { Uploader, type UploadSource } from "./uploads";
 import { pttHint } from "./voice/cards";
+import { falseTriggerEntry, wakeStatusLine } from "./voice/wake";
 import { listVoices, speak } from "./voices";
 import { createAmbient } from "./windows/ambient";
 import { CommandBar, COMMAND_BAR_SHORTCUT } from "./windows/commandbar";
@@ -99,6 +101,17 @@ app.whenReady().then(() => {
     voice: () => settings.get("voice"),
     speechRate: () => settings.get("speechRate"),
     speakReplies: () => settings.get("speakReplies"),
+    wake: () => ({
+      enabled: settings.get("wakeWordEnabled"),
+      accessKey: settings.getSecret("picovoiceKey"),
+      sensitivity: settings.get("wakeSensitivity"),
+      dnd: settings.get("dnd"),
+      wakeDuringDnd: settings.get("wakeDuringDnd"),
+    }),
+    chimePath: app.isPackaged
+      ? join(process.resourcesPath, "chime.wav")
+      : join(app.getAppPath(), "resources/chime.wav"),
+    onWakeStatus: () => tray.refresh(),
   });
   // Push-to-talk (JD-31): the hotkey from any app, once macOS allows it (a card says how until then);
   // ⌘⌥L does the same without that permission. Not on a scenario (e.g. the smoke test).
@@ -120,6 +133,12 @@ app.whenReady().then(() => {
   app.on("will-quit", () => {
     voice.hotkey.stop();
     voice.speaker.interrupt(); // afplay would otherwise finish the sentence after JARVIS quits
+    voice.wake.stop();
+  });
+  // The wake word (JD-43) follows its settings; a new key, sensitivity or mic starts it afresh.
+  settings.onChange((key) => {
+    if (key === "wakeWordEnabled" || key === "dnd" || key === "wakeDuringDnd") voice.wake.sync();
+    if (key === "picovoiceKey" || key === "wakeSensitivity" || key === "micDevice") voice.wake.reload();
   });
   // First run downloads the models now, with a progress card (not on a scenario, e.g. the smoke test).
   if (!scenario) voice.session.warmUp().catch((err) => console.error("voice models:", err));
@@ -204,6 +223,7 @@ app.whenReady().then(() => {
         downloading: updater.state.downloading,
         checking: updater.state.checking,
       },
+      wake: { line: wakeStatusLine(voice.wake.status), lastTrigger: voice.wake.lastTrigger },
     }),
     {
       talk,
@@ -218,6 +238,16 @@ app.whenReady().then(() => {
         // The server holds Do Not Disturb for Telegram notices too.
         connection.request("/dnd", { on }).catch(() => {});
       },
+      notMe: () => {
+        const last = voice.wake.lastTrigger;
+        if (last === undefined) return;
+        // Still listening to that false start: drop it.
+        if (Date.now() - last < 15_000) voice.ptt.signal("hold-cancel");
+        const line = falseTriggerEntry(last, Date.now(), settings.get("wakeSensitivity"));
+        appendFile(join(userData, "wake-false-triggers.jsonl"), line).catch((err) =>
+          console.error("wake word log:", err),
+        );
+      },
       openSettings: () => windows.openWindow("settings"),
       checkForUpdates: () => void updater.check({ forced: true }),
       installUpdate: () => void updater.install(),
@@ -230,6 +260,7 @@ app.whenReady().then(() => {
     tray.refresh();
   });
   connection.restart();
+  if (!scenario) voice.wake.start();
   // Windows re-read a setting when told (e.g. the overlay starts or stops Camera hands, JD-42). macOS
   // asks for the camera once, before the overlay opens it.
   const askCamera = () =>

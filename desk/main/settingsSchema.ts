@@ -30,6 +30,8 @@ export interface DeskSettings {
   /** "" = the system's default microphone. */
   micDevice: string;
   dnd: boolean;
+  /** Keep listening for "Jarvis" during Do Not Disturb (JD-43; settings.json only for now). */
+  wakeDuringDnd: boolean;
   face: Face;
   cameraHands: boolean;
   /** Folders JARVIS may read from this Mac. */
@@ -56,6 +58,7 @@ export const DEFAULT_SETTINGS: DeskSettings = {
   wakeSensitivity: 0.5,
   micDevice: "",
   dnd: false,
+  wakeDuringDnd: false,
   face: "corner",
   cameraHands: false,
   allowedFolders: [],
@@ -144,6 +147,7 @@ const validators: { [K in SettingKey]: (v: unknown) => DeskSettings[K] } = {
   },
   micDevice: (v) => text("micDevice", v),
   dnd: (v) => bool("dnd", v),
+  wakeDuringDnd: (v) => bool("wakeDuringDnd", v),
   face: (v) => {
     if (v !== "corner" && v !== "ambient") throw new SettingError("Face is corner or ambient.");
     return v;

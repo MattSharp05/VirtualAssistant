@@ -5,7 +5,8 @@
 // → idle on the reply's brain.done. Spoken replies (JD-38, speaker.ts) take over at the first sentence:
 // the orb then rests once the last one has been said, and a press while JARVIS talks (⌥⌥) stops it at
 // once and listens again. A second toggle while listening cancels; nothing heard shows "didn't catch
-// that". Dependencies are injected: tested with a fake session, server and speaker.
+// that". The wake word (JD-43) starts the same turn with the audio heard just before. Dependencies are
+// injected: tested with a fake session, server and speaker.
 import type { ChatResponse, DeskEvent, ScreenCard } from "@jarvis/shared";
 import { missedCard, TRANSCRIPT_CARD_ID, voiceErrorCard } from "./cards";
 import type { PttSignal } from "./hotkey";
@@ -29,6 +30,8 @@ export interface PushToTalkDeps {
   hint(): string;
   /** The Speaker (JD-38), when replies are spoken. */
   speech?: SpeechLike;
+  /** Every state change (the wake word pauses while push-to-talk isn't idle, JD-43). */
+  onState?(state: PttState): void;
   now?: () => Date;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -42,7 +45,7 @@ export interface SpeechLike {
 }
 
 export class PushToTalk {
-  private stateNow: PttState = "idle";
+  private stateValue: PttState = "idle";
   /** Bumped by every start and cancel: a listen or chat that finishes for an older turn is dropped. */
   private turn = 0;
   /** The listen in flight (also a cancelled one still transcribing): a new listen waits for it. */
@@ -60,6 +63,23 @@ export class PushToTalk {
 
   get state(): PttState {
     return this.stateNow;
+  }
+
+  private get stateNow(): PttState {
+    return this.stateValue;
+  }
+
+  private set stateNow(state: PttState) {
+    if (state === this.stateValue) return;
+    this.stateValue = state;
+    this.deps.onState?.(state);
+  }
+
+  /** "Jarvis" was heard (JD-43): listen, starting with `preRoll`. False (ignored) unless idle. */
+  wake(preRoll: Int16Array[]): boolean {
+    if (this.stateNow !== "idle") return false;
+    void this.start(preRoll);
+    return true;
   }
 
   /** A signal from the hotkey (or the tray / Chat's mic button / ⌘⌥L, as a toggle). */
@@ -99,7 +119,7 @@ export class PushToTalk {
     }
   }
 
-  private async start(): Promise<void> {
+  private async start(preRoll?: Int16Array[]): Promise<void> {
     const turn = ++this.turn;
     // Talking over JARVIS: it stops mid-sentence and listens.
     if (this.deps.speech?.busy) this.deps.speech.interrupt();
@@ -111,7 +131,7 @@ export class PushToTalk {
     if (this.listening) await this.listening;
     if (turn !== this.turn) return;
     let result: ListenResult;
-    const run = this.deps.listen({ keepThinking: true });
+    const run = this.deps.listen({ keepThinking: true, ...(preRoll ? { preRoll } : {}) });
     this.started = true;
     if (this.stopSoon) this.deps.stop();
     const settled = run.then(

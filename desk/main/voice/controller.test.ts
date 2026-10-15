@@ -18,6 +18,7 @@ function setup(over: Partial<PushToTalkDeps> = {}) {
   const deps: PushToTalkDeps = {
     listen: (opts) => {
       log.push(`listen keepThinking=${opts.keepThinking}`);
+      if (opts.preRoll) log.push(`preRoll ${opts.preRoll.length}`);
       events.push({ type: "orb.state", state: "listening", amplitude: 0 });
       return new Promise<ListenResult>((resolve, reject) => {
         finish = (r) => {
@@ -57,6 +58,20 @@ function setup(over: Partial<PushToTalkDeps> = {}) {
 }
 
 describe("PushToTalk", () => {
+  it("the wake word (JD-43) starts the same turn with its pre-roll, only when idle", async () => {
+    const states: string[] = [];
+    const { ptt, log, hear, asked } = setup({ onState: (s) => states.push(s) });
+    const preRoll = [new Int16Array(512), new Int16Array(512)];
+    expect(ptt.wake(preRoll)).toBe(true);
+    expect(ptt.wake(preRoll)).toBe(false); // already listening
+    await hear("what's on today");
+    expect(log).toEqual(["listen keepThinking=true", "preRoll 2"]);
+    expect(asked).toEqual(["what's on today"]);
+    expect(ptt.wake(preRoll)).toBe(false); // thinking
+    ptt.onEvent({ type: "brain.done", messageId: "m1", text: "Two meetings.", metrics: {} as never });
+    expect(states).toEqual(["listening", "thinking", "idle"]);
+  });
+
   it("goes listening → thinking → idle, asking JARVIS what was heard", async () => {
     const t = setup();
     t.ptt.signal("toggle");
