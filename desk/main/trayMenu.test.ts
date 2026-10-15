@@ -14,6 +14,8 @@ const actions = (): TrayActions => ({
   setCameraHands: vi.fn(),
   setDnd: vi.fn(),
   openSettings: vi.fn(),
+  checkForUpdates: vi.fn(),
+  installUpdate: vi.fn(),
   quit: vi.fn(),
 });
 
@@ -49,8 +51,28 @@ describe("tray menu (mockup 8)", () => {
       "Connected as MacBook Pro",
       "Plan: 5-hour 42% · weekly 18%",
       "Settings…",
+      "Check for updates",
       "Quit JARVIS Desk",
     ]);
+  });
+
+  it("offers a newer version (JD-46), shows its download's progress, and forces a check", () => {
+    const act = actions();
+    const labels = (update: TrayState["update"]) =>
+      trayMenu(state({ update }), act)
+        .map((i) => i.label)
+        .filter((l) => /update/i.test(l ?? ""));
+    expect(labels({ version: "1.2.10" })).toEqual(["Update to v1.2.10…", "Check for updates"]);
+    expect(labels({ version: "1.2.10", downloading: 0.425 })).toEqual([
+      "Downloading update… 42%",
+      "Check for updates",
+    ]);
+    expect(labels({ checking: true })).toEqual(["Checking for updates…"]);
+    const items = trayMenu(state({ update: { version: "1.2.10" } }), act);
+    items.find((i) => i.label === "Update to v1.2.10…")!.click!();
+    items.find((i) => i.label === "Check for updates")!.click!();
+    expect(act.installUpdate).toHaveBeenCalled();
+    expect(act.checkForUpdates).toHaveBeenCalled();
   });
 
   it("ticks the current face and toggles, and each click flips its setting", () => {

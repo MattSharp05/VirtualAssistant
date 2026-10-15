@@ -6,7 +6,12 @@ import { BrowserWindow, ipcMain, screen, shell } from "electron";
 import { DROP_POLL_MS, inside, orbZone, OverlayMouse } from "./dropZone";
 import { isExternalLink } from "./target";
 
-export function createOverlay(rendererIndex: string, scenario?: string): BrowserWindow {
+export function createOverlay(
+  rendererIndex: string,
+  scenario?: string,
+  /** Links main handles itself (the updater's Update button, JD-46): true when it took the link. */
+  handleLink?: (url: string) => boolean,
+): BrowserWindow {
   const { workArea } = screen.getPrimaryDisplay();
   const win = new BrowserWindow({
     ...workArea,
@@ -43,6 +48,7 @@ export function createOverlay(rendererIndex: string, scenario?: string): Browser
   win.on("closed", () => clearInterval(watch));
   // Links on cards (JD-27) open in the default browser, never in a new app window.
   win.webContents.setWindowOpenHandler(({ url }) => {
+    if (handleLink?.(url)) return { action: "deny" };
     if (isExternalLink(url)) void shell.openExternal(url);
     return { action: "deny" };
   });

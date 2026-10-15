@@ -24,6 +24,8 @@ export interface TrayState {
   activeLayout?: string;
   connection: DeskConnection;
   usage?: UsageResponse;
+  /** The updater (JD-46): a newer version to offer, and its download's progress (0–1). */
+  update?: { version?: string; downloading?: number; checking?: boolean };
 }
 
 export interface TrayActions {
@@ -36,6 +38,8 @@ export interface TrayActions {
   setCameraHands(on: boolean): void;
   setDnd(on: boolean): void;
   openSettings(): void;
+  checkForUpdates(): void;
+  installUpdate(): void;
   quit(): void;
 }
 
@@ -63,6 +67,22 @@ export function planLine(usage: UsageResponse | undefined): string | undefined {
     usage.weekly === undefined ? undefined : `weekly ${usage.weekly}%`,
   ].filter(Boolean);
   return parts.length ? `Plan: ${parts.join(" · ")}` : undefined;
+}
+
+/** "Update to v1.2.10…" when there's one (or its download's progress), then "Check for updates". */
+export function updateItems(update: TrayState["update"], act: TrayActions): TrayItem[] {
+  const offer: TrayItem[] =
+    update?.downloading !== undefined
+      ? [{ label: `Downloading update… ${Math.floor(update.downloading * 100)}%`, enabled: false }]
+      : update?.version
+        ? [{ label: `Update to v${update.version}…`, click: act.installUpdate }]
+        : [];
+  return [
+    ...offer,
+    update?.checking
+      ? { label: "Checking for updates…", enabled: false }
+      : { label: "Check for updates", click: act.checkForUpdates },
+  ];
 }
 
 const separator: TrayItem = { type: "separator" };
@@ -131,6 +151,7 @@ export function trayMenu(state: TrayState, act: TrayActions): TrayItem[] {
       registerAccelerator: false,
       click: act.openSettings,
     },
+    ...updateItems(state.update, act),
     { label: "Quit JARVIS Desk", accelerator: "CommandOrControl+Q", click: act.quit },
   ];
 }
