@@ -133,6 +133,50 @@ export interface ChatResponse {
   messageId: string;
 }
 
+// ── Chat window (JD-29): the one conversation Telegram, the dashboard and the Desk share ──
+
+/** A tool JARVIS used while answering (the chat window's step chips). */
+export interface ChatStep {
+  name: string;
+  summary?: string;
+  isError?: boolean;
+}
+
+/** One message of the conversation, oldest first in a history page. */
+export interface ChatMessage {
+  at: string;
+  from: "you" | "jarvis";
+  channel: BrainChannel;
+  text: string;
+  /** Replies only. */
+  metrics?: BrainMetrics;
+  steps?: ChatStep[];
+}
+
+/** Replies, tokens and time added up (today's line under the chat window). */
+export interface ChatTotals {
+  replies: number;
+  inputTokens: number;
+  outputTokens: number;
+  ms: number;
+}
+
+/** GET /api/desk/chat/history?before=<ISO>&limit=50: the current conversation, a page at a time. */
+export interface ChatHistoryResponse {
+  messages: ChatMessage[];
+  /** Older messages exist: ask again with before = the first message's `at`. */
+  hasMore: boolean;
+  model: string;
+  models: string[];
+  /** Every reply today (Matthew's time zone), across conversations. */
+  today: ChatTotals;
+}
+
+/** POST /api/desk/chat/model { model } → the model now in use. POST /api/desk/chat/reset {} → { ok }. */
+export interface ChatModelResponse {
+  model: string;
+}
+
 // ── JARVIS Tasks (a Notion database Matthew can see and edit; ADR 0006) ──
 
 export type TaskStatus = "Suggested" | "Open" | "Done" | "Dismissed";
@@ -339,6 +383,10 @@ export interface DeskBridge {
     setInteractive(on: boolean): void;
     /** The orb was clicked (the overlay opens its launcher ring itself). */
     orbClicked(): void;
+  };
+  /** Voice input (JD-31): starts listening as if the hotkey was pressed. Absent until voice is set up. */
+  voice?: {
+    pushToTalk(): void;
   };
   /** The window this renderer is in (JD-20): the frame's minimise and close buttons. */
   frame?: {

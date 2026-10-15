@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import type { DeskEvent } from "@jarvis/shared";
 import { Brain, type BrainToolEvent } from "../src/brain/index.js";
-import chatRoute from "../src/desk/routes/chat.js";
+import chatRoutes from "../src/desk/routes/chat.js";
 import type { DeskContext } from "../src/desk/routes/index.js";
 import { EventBus } from "../src/events.js";
 import { Jarvis } from "../src/jarvis.js";
@@ -129,6 +129,10 @@ test("warm brain: streams deltas before the reply finishes, reuses one process, 
   assert.equal(flag(argv, "--model"), "claude-sonnet-5-5");
   assert.match(flag(argv, "--session-id")!, /^[0-9a-f-]{36}$/);
   assert.equal(new Store(dir).brain().totals.replies, 2);
+  // The chat window's step chips: the tools each reply used are kept with it.
+  const replies = new Store(dir).brain().messages.filter((m) => m.from === "jarvis");
+  assert.deepEqual(replies[0].steps, [{ name: "mcp__jarvis__overview", summary: "mk: 3/5 merged" }]);
+  assert.equal(replies[1].steps, undefined);
 });
 
 test("warm brain: model change and reset restart the process; a crash restarts with --resume", async (t) => {
@@ -158,6 +162,7 @@ test("warm brain: model change and reset restart the process; a crash restarts w
   assert.equal(flag(spawns()[3], "--resume"), sessionId, "a model change keeps the conversation");
 
   brain.reset();
+  assert.ok(new Store(dir).brain().conversationStartedAt, "reset marks where the Desk's chat history starts");
   await brain.chat("fresh start", "telegram");
   assert.equal(spawns().length, 5);
   const fresh = flag(spawns()[4], "--session-id");
@@ -214,7 +219,7 @@ test("POST /api/desk/chat answers with a message id and the reply arrives as bra
     }),
   );
   const ctx = { bus, brain } as unknown as DeskContext;
-  const call = (body: Record<string, unknown>) => (chatRoute as { handler: (r: unknown) => unknown }).handler({ body, ctx, params: {} });
+  const call = (body: Record<string, unknown>) => (chatRoutes.find((r) => r.method === "POST" && r.path === "/chat")!.handler as (r: unknown) => unknown)({ body, ctx, params: {} });
   assert.throws(() => call({ text: "  " }), /text is empty/);
   const { messageId } = call({ text: "what's on today?", channel: "desk-voice" }) as { messageId: string };
   await finished;

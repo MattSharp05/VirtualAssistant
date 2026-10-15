@@ -10,7 +10,7 @@ export interface TimedEvent {
 
 /** Part of a scenario's state; demo-day merges every file in mock/data/. */
 export interface ScenarioPart {
-  /** Responses for bridge.request(path), keyed by Desk API path, e.g. "/sessions". */
+  /** Responses for bridge.request(path), keyed by Desk API path, e.g. "/sessions"; a function gets the body. */
   data?: Record<string, unknown>;
   events?: TimedEvent[];
 }

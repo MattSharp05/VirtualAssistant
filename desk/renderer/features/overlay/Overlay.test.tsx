@@ -89,12 +89,12 @@ describe("Overlay + orb", () => {
     expect(ring()).toHaveLength(0);
   });
 
-  it("opens a window from the ring, the placeholder until that window exists", () => {
+  it("opens a window from the ring (Chat exists since JD-29)", () => {
     vi.spyOn(window, "open").mockImplementation(() => null);
     const { orb, bridge } = renderOn("orb-idle");
     fireEvent.click(orb());
     fireEvent.click(screen.getByRole("button", { name: "Chat" }));
-    expect(bridge.opened).toEqual(["hello"]);
+    expect(bridge.opened).toEqual(["chat"]);
     expect(screen.queryByRole("button", { name: "Chat" })).toBeNull();
   });
 
