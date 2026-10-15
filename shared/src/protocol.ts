@@ -455,6 +455,46 @@ export interface VoiceInfo {
 /** Settings kept in the Keychain, never in settings.json; the renderer can store one but never read it. */
 export type DeskSecret = "deviceKey" | "picovoiceKey";
 
+// ── System window (JD-30): the dashboard's tiles, from the server's usage and system monitors ──
+
+/** Brain use over today (server's local day): every reply's tokens (input incl. cache + output), turns and time. */
+export interface BrainUsageToday {
+  replies: number;
+  tokens: number;
+  turns: number;
+  ms: number;
+}
+
+/** GET /api/desk/system */
+export interface SystemResponse {
+  checkedAt: string;
+  /** The Claude plan's allowance spent, 0..100; null when the login doesn't report it. */
+  plan: {
+    available: boolean;
+    fiveHour: number | null;
+    weekly: number | null;
+    /** When the 5-hour window resets. */
+    resetsAt?: string;
+    weeklyResetsAt?: string;
+    reason?: string;
+  };
+  /** Routine fires (new cloud jobs) in the last hour against the per-routine cap. */
+  fires: { configured: boolean; used: number; limit: number; nextFreeAt?: string };
+  /** The container's cgroup readings; bytes, and CPU where 100 = one full core. */
+  container: {
+    memUsed: number | null;
+    memLimit: number | null;
+    memPeak: number | null;
+    cpu: number | null;
+    claudeProcs: number;
+    uptimeSeconds: number;
+    /** Memory every 10 s over the last hour, oldest first (the sparkline). */
+    memHistory: { at: string; memUsed: number | null }[];
+  };
+  brain: { chatToday: BrainUsageToday; workerToday: BrainUsageToday };
+  devices: DeviceInfo[];
+}
+
 // ── The Desk bridge (window.desk): the renderer's only door to the rest of the app ──
 // In Electron, preload implements it over IPC and main talks to the server; in the web preview
 // (and e2e) a mock implements it from a scenario (desk/renderer/mock/). Features extend it.
