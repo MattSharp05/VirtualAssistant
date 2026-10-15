@@ -10,6 +10,7 @@ import { Connection } from "./connection";
 import { isSecretKey, Settings } from "./settings";
 import { createTray } from "./tray";
 import { listVoices, speak } from "./voices";
+import { createAmbient } from "./windows/ambient";
 import { WindowManager } from "./windows/manager";
 import { createOverlay } from "./windows/overlay";
 
@@ -119,6 +120,10 @@ app.whenReady().then(() => {
   const overlay = createOverlay(rendererIndex, scenario);
   // The launcher ring opens in the overlay; focus it so Esc reaches the ring.
   ipcMain.on("desk:orb-click", () => overlay.focus());
+  // The ambient face (JD-25) follows the Face setting; closing it (Esc) puts Face back to corner.
+  const ambient = createAmbient(rendererIndex, overlay, () => settings.set("face", "corner"), scenario);
+  settings.onChange((key) => key === "face" && ambient.sync(settings.get("face")));
+  ambient.sync(settings.get("face"));
 
   // First launch: nothing to connect to yet, so Settings opens (not on a scenario, e.g. the smoke test).
   if (!scenario && (!settings.get("serverUrl") || !settings.hasSecret("deviceKey")))

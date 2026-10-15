@@ -1,0 +1,293 @@
+/* The ambient face (JD-25, mockup 9): full screen, dark, the orb in the middle. Sizes follow the
+   screen (vmin) so the face fits any monitor. Cheap CSS only: nothing animates while the orb is idle. */
+html.ambient-window,
+html.ambient-window body {
+  background: #080b0e;
+}
+
+.ambient {
+  --core: clamp(120px, 17vmin, 260px);
+  --gutter: clamp(32px, 4.5vmin, 80px);
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 24px;
+  padding: var(--gutter) var(--gutter) clamp(24px, 4vmin, 48px);
+  overflow: hidden;
+  background: #080b0e;
+  color: var(--ink);
+  font-family: var(--font-body);
+  cursor: default;
+}
+
+.ambient :where(p, h2, dl, dd) {
+  margin: 0;
+}
+
+.ambient-left,
+.ambient-right {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(24px, 4vmin, 40px);
+  min-width: 0;
+}
+
+.ambient-right {
+  justify-self: end;
+  width: clamp(220px, 20vw, 320px);
+  /* Room for the close button in the corner. */
+  padding-top: 8px;
+}
+
+.ambient-time {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(48px, 7.2vmin, 96px);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ambient-date {
+  margin-top: 6px;
+  color: var(--ink-3);
+  font-size: clamp(14px, 1.8vmin, 20px);
+}
+
+.ambient-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ambient-value {
+  margin-top: 6px;
+  font-size: clamp(18px, 2.2vmin, 24px);
+}
+
+.ambient-muted {
+  color: var(--ink-3);
+  font-size: 14px;
+}
+
+.ambient-label + .ambient-muted {
+  margin-top: 10px;
+}
+
+.ambient-value.ambient-muted {
+  font-size: clamp(16px, 2vmin, 20px);
+}
+
+/* The orb and its halos (static rings; the inner one turns while JARVIS thinks). */
+.ambient-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.ambient-orb {
+  --halo: var(--accent);
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: calc(var(--core) * 3.3);
+  height: calc(var(--core) * 3.3);
+}
+
+.ambient-orb[data-orb-mood="amber"] {
+  --halo: var(--amber);
+}
+
+.ambient-orb[data-orb-mood="red"] {
+  --halo: var(--red);
+}
+
+.ambient-halo {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.ambient-halo-1 {
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.ambient-halo-2 {
+  inset: 8%;
+  border: 1px dashed color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.ambient-halo-3 {
+  inset: 16%;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--halo);
+  transition: border-color 250ms ease;
+}
+
+.ambient-orb[data-orb-state="thinking"] .ambient-halo-3 {
+  animation: orb-spin 2.4s linear infinite;
+}
+
+.ambient-orb .orb[data-orb-expanded="true"] {
+  --size: var(--core);
+}
+
+/* At this size idle reads as calm, not off: the orb's own colours, a little dimmed, with the mood glow. */
+.ambient-orb .orb[data-orb-state="idle"] .orb-core {
+  opacity: 0.85;
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--tint) 85%, white),
+    var(--tint) 45%,
+    color-mix(in srgb, var(--tint) 40%, black) 100%
+  );
+}
+
+.ambient-name {
+  margin-top: clamp(12px, 2vmin, 28px);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(20px, 3vmin, 32px);
+  letter-spacing: 0.3em;
+  /* Keep the letter-spaced word optically centred. */
+  padding-left: 0.3em;
+}
+
+.ambient-state {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+.ambient-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 16px;
+}
+
+.ambient-count {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ambient-count dd {
+  font-family: var(--font-mono);
+  color: var(--ink-3);
+}
+
+.ambient-count dd[data-tone="green"] {
+  color: var(--green);
+}
+
+.ambient-count dd[data-tone="amber"] {
+  color: var(--amber);
+}
+
+.ambient-count dd[data-tone="red"] {
+  color: var(--red);
+}
+
+.ambient-meter {
+  margin-top: 10px;
+}
+
+.ambient-meter + .ambient-meter {
+  margin-top: 12px;
+}
+
+.ambient-meter-label {
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.ambient-meter-track {
+  --fill: var(--accent);
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: #1a222b;
+  overflow: hidden;
+}
+
+.ambient-meter-track[data-tone="high"] {
+  --fill: var(--amber);
+}
+
+.ambient-meter-track[data-tone="full"] {
+  --fill: var(--red);
+}
+
+.ambient-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--fill);
+}
+
+.ambient-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 24px;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+.ambient-report {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ambient-hint {
+  flex: none;
+  font-family: var(--font-mono);
+}
+
+/* Barely there until the pointer or keyboard finds it. */
+.ambient-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-3);
+  opacity: 0.25;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.ambient-close:hover,
+.ambient-close:focus-visible {
+  opacity: 1;
+  border-color: var(--glass-border);
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-halo-3 {
+    animation: none !important;
+  }
+}
