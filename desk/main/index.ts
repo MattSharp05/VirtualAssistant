@@ -15,8 +15,10 @@ import {
   safeStorage,
   systemPreferences,
 } from "electron";
-import type { DeskEvent, DeskSecret, UsageResponse } from "@jarvis/shared";
+import type { DeskEvent, DeskSecret, FsListRequest, FsReadRequest, UsageResponse } from "@jarvis/shared";
 import { Connection } from "./connection";
+import { MacFiles } from "./rpcHandlers/fs";
+import { answerRpc, type RpcHandler } from "./rpcHandlers";
 import { isSecretKey, Settings } from "./settings";
 import { createTray } from "./tray";
 import { createVoice } from "./voice";
@@ -74,9 +76,19 @@ app.whenReady().then(() => {
   // First run downloads the models now, with a progress card (not on a scenario, e.g. the smoke test).
   if (!scenario) voice.session.warmUp().catch((err) => console.error("voice models:", err));
   let usage: UsageResponse | undefined;
+  // Server→Mac requests (rpcHandlers/): folder access reads Settings → Folders on every call.
+  const macFiles = new MacFiles({ allowedFolders: () => settings.get("allowedFolders") });
+  const rpcHandlers: Record<string, RpcHandler> = {
+    "fs.list": (p) => macFiles.list(p as FsListRequest),
+    "fs.read": (p) => macFiles.read(p as FsReadRequest),
+  };
   const connection = new Connection({
     config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
-    onEvent: broadcast,
+    onEvent: (event) => {
+      if (event.type === "rpc")
+        void answerRpc(event, rpcHandlers, (path, answer) => connection.request(path, answer));
+      else broadcast(event);
+    },
     onStatus: (status) => {
       if (status.state === "connected") void refreshUsage();
       tray.refresh();

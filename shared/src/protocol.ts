@@ -128,6 +128,46 @@ export interface MeResponse {
 /** POST /api/desk/rpc/:id */
 export type RpcAnswer = { ok: true; result: unknown } | { ok: false; error: string };
 
+// Folder access (JD-41, ADR 0009): `rpc` kinds "fs.list" and "fs.read", answered by the Desk only for
+// paths inside Settings → Folders (no hidden files; text/PDF/images up to FS_MAX_FILE_BYTES).
+
+export const FS_MAX_FILE_BYTES = 2 * 1024 * 1024;
+export const FS_MAX_LIST_ENTRIES = 200;
+
+/** rpc "fs.list": a folder's files (recursively), or the allowed folders themselves without `folder`. */
+export interface FsListRequest {
+  folder?: string;
+  /** A name pattern with * and ?, case-insensitive, e.g. "*trip*.md". */
+  pattern?: string;
+}
+
+export interface FsEntry {
+  /** Absolute path on the Mac (what fs.read takes). */
+  path: string;
+  type: "file" | "folder";
+  size?: number;
+  modified?: string;
+}
+
+export interface FsListResult {
+  folder?: string;
+  entries: FsEntry[];
+  /** More than FS_MAX_LIST_ENTRIES matched; narrow it with a pattern or a subfolder. */
+  truncated: boolean;
+}
+
+/** rpc "fs.read" */
+export interface FsReadRequest {
+  path: string;
+}
+
+export interface FsReadResult {
+  name: string;
+  size: number;
+  /** The file's bytes, base64. */
+  data: string;
+}
+
 /** POST /api/desk/chat: the reply streams over /api/desk/events as brain.* events with this messageId. */
 export interface ChatRequest {
   text: string;
