@@ -53,6 +53,7 @@ function telegramHarness(dir: string, whisperOut: string | "fail") {
   const bot = createBot("123:fake", 42, jarvis, brain, {
     download: async () => new TextEncoder().encode("OggS fake voice"),
     transcribe: (path) => transcribe(path, stt),
+    speak: async () => new TextEncoder().encode("OggS fake reply"), // voice replies: test/voiceOut.test.ts
   });
   bot.botInfo = { id: 1, is_bot: true, first_name: "JARVIS", username: "jarvis_bot", can_join_groups: false, can_read_all_group_messages: false, supports_inline_queries: false, can_connect_to_business: false, has_main_web_app: false } as never;
   const sent: { method: string; payload: Record<string, unknown> }[] = [];
