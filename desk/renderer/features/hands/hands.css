@@ -48,3 +48,27 @@
     0 0 0 1px rgba(0, 0, 0, 0.35),
     0 0 6px rgba(95, 212, 230, 0.6);
 }
+
+/* Pinching (JD-47): the ring fills and tightens a little. */
+.hand-ring {
+  transition:
+    background-color 120ms ease-out,
+    scale 120ms ease-out;
+}
+
+.hand-pinching .hand-ring {
+  background: var(--accent);
+  scale: 0.85;
+}
+
+/* A card picked up by a pinch lifts off the stack (JD-47). Moved with `translate`, so it composes
+   with any transform the card animates. */
+.hand-grabbed {
+  position: relative;
+  scale: 1.02;
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.55);
+  z-index: 5;
+  transition:
+    scale 120ms ease-out,
+    box-shadow 120ms ease-out;
+}

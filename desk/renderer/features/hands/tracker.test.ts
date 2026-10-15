@@ -1,10 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { samplesFrom, startTracking, type Landmarker, type TrackerDeps, type TrackerState } from "./tracker";
 
-/** 21 landmarks with the thumb tip (4) and index tip (8) set. */
+/** 21 landmarks with the thumb tip (4) and index tip (8) set, and knuckles 5 and 17 0.1 apart. */
 const hand = (thumb: number, index: number) =>
   Array.from({ length: 21 }, (_, i) =>
-    i === 4 ? { x: thumb, y: thumb } : i === 8 ? { x: index, y: index } : { x: 0, y: 0 },
+    i === 4
+      ? { x: thumb, y: thumb }
+      : i === 8
+        ? { x: index, y: index }
+        : i === 17
+          ? { x: 0, y: 0.1 }
+          : { x: 0, y: 0 },
   );
 
 function fakes(opts: { camera?: Promise<MediaStream> } = {}) {
@@ -39,15 +45,15 @@ function fakes(opts: { camera?: Promise<MediaStream> } = {}) {
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("samplesFrom", () => {
-  it("takes the index and thumb tips of each hand, keeping same-labelled hands apart", () => {
+  it("takes the index and thumb tips and palm width of each hand, keeping same-labelled hands apart", () => {
     expect(
       samplesFrom({
         landmarks: [hand(0.1, 0.2), hand(0.3, 0.4), [{ x: 0, y: 0 }]],
         handedness: [[{ categoryName: "Left" }], [{ categoryName: "Left" }], []],
       }),
     ).toEqual([
-      { hand: "Left", thumb: { x: 0.1, y: 0.1 }, index: { x: 0.2, y: 0.2 } },
-      { hand: "Left-2", thumb: { x: 0.3, y: 0.3 }, index: { x: 0.4, y: 0.4 } },
+      { hand: "Left", thumb: { x: 0.1, y: 0.1 }, index: { x: 0.2, y: 0.2 }, palm: 0.1 },
+      { hand: "Left-2", thumb: { x: 0.3, y: 0.3 }, index: { x: 0.4, y: 0.4 }, palm: 0.1 },
     ]);
   });
 });

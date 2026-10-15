@@ -61,4 +61,25 @@ describe("HandsLayer", () => {
     await flush();
     expect(tracker.start).toHaveBeenCalledTimes(2);
   });
+
+  it("fills the ring while a hand pinches (JD-47)", async () => {
+    const tracker = fakeTracker();
+    const bridge = createMockBridge(findScenario("hands-on")!);
+    const { container } = render(<HandsLayer bridge={bridge} track={tracker.start} />);
+    await flush();
+    const frame = (gap: number, t: number) =>
+      act(() =>
+        tracker.cb!.onFrame(
+          [{ hand: "Left", index: { x: 0.5 + gap, y: 0.5 }, thumb: { x: 0.5, y: 0.5 }, palm: 0.12 }],
+          t,
+        ),
+      );
+    const hand = () => container.querySelector("[data-hand=Left]")!;
+    frame(0.06, 0);
+    expect(hand().classList).not.toContain("hand-pinching");
+    frame(0.02, 33);
+    expect(hand().classList).toContain("hand-pinching");
+    frame(0.06, 66);
+    expect(hand().classList).not.toContain("hand-pinching");
+  });
 });

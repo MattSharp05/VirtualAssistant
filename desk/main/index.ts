@@ -45,6 +45,7 @@ import { falseTriggerEntry, wakeStatusLine } from "./voice/wake";
 import { listVoices, speak } from "./voices";
 import { createAmbient } from "./windows/ambient";
 import { CommandBar, COMMAND_BAR_SHORTCUT } from "./windows/commandbar";
+import { registerHandWindows } from "./windows/hands";
 import { WindowManager } from "./windows/manager";
 import { createOverlay } from "./windows/overlay";
 import { registerWebViews } from "./windows/webview";
@@ -322,6 +323,8 @@ app.whenReady().then(() => {
   ipcMain.on("desk:frame-close", (e) => BrowserWindow.fromWebContents(e.sender)?.close());
   // Full views (JD-39): claude.ai sessions and notion.so pages inside their windows.
   registerWebViews();
+  // Camera hands (JD-47): the overlay grabs, moves, resizes and minimises windows.
+  registerHandWindows(windows);
 
   const overlay = createOverlay(rendererIndex, scenario, (url) => {
     if (!updater.isInstallLink(url)) return false;

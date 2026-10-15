@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DeskEvent } from "@jarvis/shared";
 import { BridgeProvider, chooseBridge } from "../../../app/bridge";
+import { HAND_FLICK } from "../../../app/handTargets";
 import { createMockBridge, type MockBridge } from "../../../mock/bridge";
 import type { Scenario } from "../../../mock/types";
 import { Overlay } from "../Overlay";
@@ -55,6 +56,17 @@ describe("cards beside the orb", () => {
     fireEvent.click(stack().getByRole("button", { name: "Pop out Today" }));
     expect(bridge.opened).toEqual(["today"]);
     expect(stack().queryByRole("article", { name: "Today" })).toBeNull();
+  });
+
+  it("cards can be picked up by camera hands, and a flick throws one away (JD-47)", async () => {
+    vi.useFakeTimers();
+    renderOn("cards");
+    await settle(1000);
+    const today = stack().getByRole("article", { name: "Today" });
+    expect(today.hasAttribute("data-hand-grab")).toBe(true);
+    act(() => void today.dispatchEvent(new CustomEvent(HAND_FLICK, { bubbles: true })));
+    expect(stack().queryByRole("article", { name: "Today" })).toBeNull();
+    expect(stack().getAllByRole("article")).toHaveLength(2);
   });
 
   it("a notice's action opens its window with params; Later and Dismiss just remove the card", async () => {

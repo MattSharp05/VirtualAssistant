@@ -53,6 +53,31 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
     await expect.poll(helloWindow).toBeUndefined();
     await openHello();
     await expect.poll(async () => (await helloWindow())?.bounds, { timeout: 10_000 }).toEqual(moved);
+    // JD-47: camera hands find a window by its title bar (in the overlay's coordinates) and move it.
+    type Hands = {
+      windowAt(p: { x: number; y: number }, part: string): Promise<{ id: string; bounds: typeof moved }>;
+      setBounds(id: string, b: typeof moved, done: boolean): void;
+    };
+    // The point is in the overlay's own coordinates, so offset it by where the overlay sits on screen.
+    // The reopened window has its bounds before it shows, so wait until it can be grabbed.
+    const grab = () =>
+      window.evaluate(
+        (p) =>
+          (window as unknown as { desk: { hands: Hands } }).desk.hands.windowAt(
+            { x: p.x - globalThis.screenX, y: p.y - globalThis.screenY },
+            "titlebar",
+          ),
+        { x: moved.x + 60, y: moved.y + 20 },
+      );
+    await expect.poll(async () => (await grab())?.id, { timeout: 10_000 }).toBe("hello");
+    const grabbed = await grab();
+    await window.evaluate(
+      (b) => (window as unknown as { desk: { hands: Hands } }).desk.hands.setBounds("hello", b, true),
+      { ...grabbed.bounds, x: grabbed.bounds.x + 40 },
+    );
+    await expect
+      .poll(async () => (await helloWindow())?.bounds, { timeout: 5_000 })
+      .toEqual({ ...moved, x: moved.x + 40 });
     await app.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows()
         .find((w) => w.getTitle().startsWith("Hello"))

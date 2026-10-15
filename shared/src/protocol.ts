@@ -662,6 +662,14 @@ export interface NotionPinnedResponse {
 // In Electron, preload implements it over IPC and main talks to the server; in the web preview
 // (and e2e) a mock implements it from a scenario (desk/renderer/mock/). Features extend it.
 
+/** A Desk window under a pinch (JD-47), in the asking window's coordinates (CSS px from its top-left). */
+export interface HandWindow {
+  id: string;
+  bounds: { x: number; y: number; width: number; height: number };
+  /** The feature's smallest size: a two-hand resize stops there. */
+  minSize: { width: number; height: number };
+}
+
 export interface DeskBridge {
   protocolVersion: number;
   /** Live events from the server's stream. Returns an unsubscribe function. */
@@ -735,5 +743,15 @@ export interface DeskBridge {
   webview?: {
     show(url: string, bounds: { x: number; y: number; width: number; height: number }): void;
     hide(): void;
+  };
+  /**
+   * Camera-hand gestures on Desk windows (JD-47), for the overlay: which window is at a point (its
+   * title bar, or anywhere on it), and moving, resizing or minimising it. Coordinates are the overlay's.
+   * `done` marks a gesture's last move, when the bounds are saved. Absent in the web preview.
+   */
+  hands?: {
+    windowAt(point: { x: number; y: number }, part: "titlebar" | "any"): Promise<HandWindow | undefined>;
+    setBounds(id: string, bounds: { x: number; y: number; width: number; height: number }, done?: boolean): void;
+    minimize(id: string): void;
   };
 }

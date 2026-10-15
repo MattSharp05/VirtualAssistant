@@ -38,6 +38,11 @@
   pointer-events: auto;
 }
 
+/* A card moved by camera hands (JD-47) can be anywhere on screen: the stack doesn't clip it then. */
+.card-stack:has([data-hand-x]) {
+  overflow: visible;
+}
+
 .card {
   padding: 16px 18px;
   animation: card-in 220ms ease-out;
