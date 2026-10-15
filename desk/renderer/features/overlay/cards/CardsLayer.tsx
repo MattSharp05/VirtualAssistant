@@ -34,6 +34,8 @@ function Glyph({ name }: { name: keyof typeof GLYPHS }) {
 interface LayerProps {
   bridge: DeskBridge;
   hits: HitRegions;
+  /** Shown first in the stack, outside its rules (the dropped file's card, JD-40). */
+  pinned?: ReactNode;
 }
 
 /**
@@ -41,7 +43,7 @@ interface LayerProps {
  * the Do Not Disturb badge on it, and the "You said" bubble + spoken caption for voice replies.
  * Only cards and the badge take clicks; the rest of the overlay stays click-through.
  */
-export function CardsLayer({ bridge, hits }: LayerProps) {
+export function CardsLayer({ bridge, hits, pinned }: LayerProps) {
   const cards = useCards(bridge);
   const voice = useVoiceReply(bridge);
   const { shown, more } = visibleCards(cards);
@@ -69,6 +71,7 @@ export function CardsLayer({ bridge, hits }: LayerProps) {
         </aside>
       )}
       <section className="card-stack" aria-label="Cards from JARVIS">
+        {pinned}
         {shown.map((card) => (
           <Hit key={card.key} hits={hits} id={`card:${card.key}`}>
             <Card card={card} bridge={bridge} dismiss={cards.dismiss} />
@@ -87,7 +90,7 @@ export function CardsLayer({ bridge, hits }: LayerProps) {
 }
 
 /** A clickable region: click-through is off while the pointer is inside (and it leaves on unmount). */
-function Hit({ hits, id, children }: { hits: HitRegions; id: string; children: ReactNode }) {
+export function Hit({ hits, id, children }: { hits: HitRegions; id: string; children: ReactNode }) {
   useEffect(() => () => hits.leave(id), [hits, id]);
   return (
     <div className="card-hit" onMouseEnter={() => hits.enter(id)} onMouseLeave={() => hits.leave(id)}>

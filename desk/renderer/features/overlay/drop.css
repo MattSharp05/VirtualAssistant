@@ -1,0 +1,112 @@
+/* File drop on the orb (JD-40): the dashed ring while a file is dragged over, and the file's card at the
+   top of the stack (glass card styles from cards/cards.css). */
+.drop-ring {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.drop-ring-circle {
+  position: absolute;
+  left: -38px;
+  top: -38px;
+  width: 76px;
+  height: 76px;
+  box-sizing: border-box;
+  border: 2px dashed var(--accent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--accent) 45%, transparent);
+  animation: drop-ring-in 180ms ease-out;
+}
+
+.drop-ring-label {
+  position: absolute;
+  /* Right-aligned near the ring's edge so it stays on screen in the corner. */
+  top: 46px;
+  right: -28px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(10, 14, 18, 0.85);
+  color: var(--accent-ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@keyframes drop-ring-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+.card-drop {
+  padding: 14px 16px;
+}
+
+.card-drop[data-level="alert"] {
+  border-color: color-mix(in srgb, var(--level) 45%, transparent);
+}
+
+.drop-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent-ink);
+}
+
+.drop-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.drop-name {
+  overflow: hidden;
+  color: var(--ink);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drop-progress {
+  height: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.drop-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 120ms linear;
+}
+
+.drop-question {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.drop-question b {
+  font-weight: 600;
+}
+
+.drop-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-left: 30px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop-ring-circle {
+    animation: none;
+  }
+}

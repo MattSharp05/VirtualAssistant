@@ -4,6 +4,7 @@
 import { join } from "node:path";
 import { app, BrowserWindow, screen } from "electron";
 import commandbar from "../../renderer/features/commandbar/feature";
+import { windowHash } from "../../renderer/app/router";
 import { DEFAULT_SIZE } from "../../renderer/features/types";
 import { commandBarBounds } from "./commandbarBounds";
 
@@ -27,7 +28,9 @@ export class CommandBar {
     this.win = undefined;
   }
 
-  private open(): void {
+  /** Opens the bar (a fresh one), e.g. prefilled with params from the drop card's Ask (JD-40). */
+  open(params?: Record<string, string>): void {
+    this.close();
     const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
     const win = new BrowserWindow({
       ...commandBarBounds(commandbar.defaultSize ?? DEFAULT_SIZE, display.workArea),
@@ -62,7 +65,7 @@ export class CommandBar {
       if (this.win === win) this.win = undefined;
     });
     void win.loadFile(this.rendererIndex, {
-      hash: `/${commandbar.id}`,
+      hash: windowHash(commandbar.id, params),
       ...(this.scenario ? { query: { scenario: this.scenario } } : {}),
     });
   }

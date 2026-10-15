@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, 
 import type { ChatHistoryResponse, ChatModelResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { Icon } from "../../app/icons";
+import { AttachmentChips, useAttachments } from "./Attachments";
 import {
   channelLabel,
   chatReducer,
@@ -25,7 +26,10 @@ const historyPath = (before?: string) =>
 
 const now = () => new Date().toISOString();
 
-/** The chat window (mockup 3): history, the reply streaming in, model picker, new conversation, compose. */
+/**
+ * The chat window (mockup 3): history, the reply streaming in, model picker, new conversation, compose.
+ * Files dropped on it go with the next message (JD-40).
+ */
 export default function Chat() {
   const bridge = useBridge();
   const [state, dispatch] = useReducer(chatReducer, undefined, initialChat);
@@ -39,6 +43,7 @@ export default function Chat() {
   /** Set while an older page loads, so the view stays on what Matthew was reading. */
   const anchor = useRef<{ height: number; top: number } | undefined>(undefined);
   const localKeys = useRef(0);
+  const files = useAttachments(bridge);
 
   useEffect(() => {
     let alive = true;
@@ -86,12 +91,12 @@ export default function Chat() {
   };
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, attached: { ids: string[]; names: string[] } = { ids: [], names: [] }) => {
       const key = `local:${++localKeys.current}`;
       stick.current = true;
-      dispatch({ type: "sent", key, text, at: now() });
+      dispatch({ type: "sent", key, text, at: now(), files: attached.names });
       bridge
-        .chat(text, "desk-typed")
+        .chat(text, "desk-typed", attached.ids.length ? attached.ids : undefined)
         .then(({ messageId }) => dispatch({ type: "acked", key, messageId }))
         .catch((err: Error) => dispatch({ type: "failed", key, error: err.message }));
     },
@@ -101,9 +106,11 @@ export default function Chat() {
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
-    if (!text) return;
+    if (!text || files.uploading) return;
     setDraft("");
-    send(text);
+    const ready = files.items.flatMap((a) => (a.upload ? [a.upload] : []));
+    send(text, { ids: ready.map((u) => u.id), names: ready.map((u) => u.name) });
+    files.clear();
   };
 
   const changeModel = (next: string) => {
@@ -126,7 +133,12 @@ export default function Chat() {
   const empty = state.items.length === 0;
 
   return (
-    <div className="chat">
+    <div className="chat" {...files.dropHandlers}>
+      {files.dragging && (
+        <div className="chat-drop" aria-hidden="true">
+          Drop to attach to your next message
+        </div>
+      )}
       <div className="chat-toolbar">
         <span className="chat-chip">same conversation as Telegram</span>
         <label className="chat-model">
@@ -183,6 +195,7 @@ export default function Chat() {
         )}
       </div>
 
+      <AttachmentChips attachments={files} />
       <form className="chat-compose" onSubmit={onSubmit}>
         <button
           type="button"
@@ -211,7 +224,7 @@ export default function Chat() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
-        <button type="submit" className="chat-send" disabled={!draft.trim()}>
+        <button type="submit" className="chat-send" disabled={!draft.trim() || files.uploading}>
           Send
         </button>
       </form>
@@ -227,6 +240,13 @@ function Message({ item }: { item: MessageItem }) {
     return (
       <div className="chat-msg chat-msg-mine" data-channel={item.channel}>
         <div className="chat-bubble">{item.text}</div>
+        {item.files && (
+          <ul className="chat-sent-files" aria-label="Files sent">
+            {item.files.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        )}
         <div className="chat-meta">
           {channelLabel(item.channel)} · {clock(item.at)}
           {item.error && <span className="chat-error"> · not sent: {item.error}</span>}
