@@ -1,5 +1,6 @@
 // An in-memory Notion API for tests: pages, databases, blocks (with `after` inserts and deletes),
-// database rows and queries; enough for setup, tasks and memory.
+// database rows and queries, and search by title; enough for setup, tasks, memory and the Desk's
+// Notion window.
 import { randomUUID } from "node:crypto";
 
 type Json = Record<string, unknown>;
@@ -44,6 +45,16 @@ export function fakeNotion() {
       children.set(m[1], list);
       touch(m[1]);
       return ok({ results: made });
+    }
+    if (method === "POST" && path === "/search") {
+      const q = String(body.query ?? "").toLowerCase();
+      const titled = (o: Json) => {
+        const prop = Object.values((o.properties ?? {}) as Record<string, Json>).find((p) => p.type === "title");
+        const rich = (prop?.title ?? o.title) as Json[] | undefined;
+        return Array.isArray(rich) ? rich.map((r) => String(r.plain_text ?? "")).join("") : "";
+      };
+      const results = [...objects.values()].filter((o) => (o.object === "page" || o.object === "database") && titled(o).toLowerCase().includes(q));
+      return ok({ results: results.slice(0, Number(body.page_size ?? 100)), has_more: false });
     }
     if (method === "POST" && path === "/pages") {
       const parent = body.parent as Json;

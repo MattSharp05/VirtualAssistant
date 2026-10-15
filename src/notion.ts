@@ -1,6 +1,9 @@
 // Read-only Notion access for the brain, through a Notion internal integration (NOTION_TOKEN).
 // It sees only the pages and databases you've shared with the integration.
 
+import type { NotionBlock, NotionBlockType, NotionPage, NotionPageRef } from "@jarvis/shared";
+import { normalizeId } from "./notionWrite.js";
+
 const API = "https://api.notion.com/v1";
 // The stable API version for /databases/{id}/query; later versions moved databases to data sources.
 const VERSION = "2022-06-28";
@@ -92,6 +95,61 @@ export function blockText(block: Json, depth: number): string | undefined {
   }
 }
 
+/** Notion's block types as the Desk's (JD-34); others are dropped unless they hold text (→ paragraph). */
+const BLOCK_TYPES: Record<string, NotionBlockType> = {
+  heading_1: "heading_1",
+  heading_2: "heading_2",
+  heading_3: "heading_3",
+  paragraph: "paragraph",
+  bulleted_list_item: "bulleted",
+  numbered_list_item: "numbered",
+  to_do: "todo",
+  toggle: "toggle",
+  quote: "quote",
+  callout: "callout",
+  code: "code",
+  divider: "divider",
+  child_page: "child_page",
+  child_database: "child_database",
+};
+
+/** A raw block and the blocks under it, as read (two levels below the page at most). */
+export interface BlockNode {
+  block: Json;
+  children: BlockNode[];
+}
+
+/** A block as structured JSON for the Desk's read view (JD-34). */
+export function blockJson(node: BlockNode): NotionBlock | undefined {
+  const { block } = node;
+  const raw = String(block.type);
+  const body = (block[raw] ?? {}) as Json;
+  const text = plain(body.rich_text);
+  const type = BLOCK_TYPES[raw] ?? (text ? "paragraph" : undefined);
+  if (!type) return undefined;
+  const children = node.children.map(blockJson).filter((b): b is NotionBlock => Boolean(b));
+  if (type === "paragraph" && !text && !children.length) return undefined; // blank lines
+  const out: NotionBlock = { id: normalizeId(String(block.id)), type };
+  if (type === "child_page" || type === "child_database") out.title = String(body.title ?? "") || "Untitled";
+  else if (type !== "divider") out.text = text;
+  if (type === "todo") out.checked = Boolean(body.checked);
+  if (type === "code" && body.language) out.language = String(body.language);
+  if (type === "callout" && (body.icon as Json | undefined)?.emoji) out.icon = String((body.icon as Json).emoji);
+  if (children.length) out.children = children;
+  return out;
+}
+
+/** A search result, pin or database row as a NotionPageRef. */
+export function pageRef(obj: Json): NotionPageRef {
+  return {
+    id: normalizeId(String(obj.id)),
+    title: titleOf(obj),
+    kind: obj.object === "database" ? "database" : "page",
+    ...(obj.url ? { url: String(obj.url) } : {}),
+    ...(obj.last_edited_time ? { editedAt: String(obj.last_edited_time) } : {}),
+  };
+}
+
 export class Notion {
   constructor(
     private readonly token: string,
@@ -122,34 +180,85 @@ export class Notion {
       .join("\n");
   }
 
-  async readPage(id: string): Promise<string> {
-    const page = await this.call(`/pages/${encodeURIComponent(id)}`);
-    const props = Object.entries((page.properties ?? {}) as Record<string, Json>)
-      .filter(([, p]) => p.type !== "title")
-      .map(([name, p]) => [name, propertyText(p)])
-      .filter(([, v]) => v)
-      .map(([name, v]) => `${name}: ${v}`);
-    const lines: string[] = [];
+  /** A page's blocks, two levels deep, at most MAX_BLOCKS of them. */
+  private async blockTree(id: string): Promise<{ nodes: BlockNode[]; truncated: boolean }> {
     let count = 0;
-    const walk = async (blockId: string, depth: number): Promise<void> => {
+    const walk = async (blockId: string, depth: number): Promise<BlockNode[]> => {
+      const nodes: BlockNode[] = [];
       let cursor: string | undefined;
       do {
         const res = await this.call(`/blocks/${encodeURIComponent(blockId)}/children?page_size=100${cursor ? `&start_cursor=${cursor}` : ""}`);
         for (const block of (res.results as Json[]) ?? []) {
-          if (++count > MAX_BLOCKS) return;
-          const line = blockText(block, depth);
-          if (line) lines.push(line);
+          if (++count > MAX_BLOCKS) return nodes;
+          const node: BlockNode = { block, children: [] };
+          nodes.push(node);
           if (block.has_children && depth < 2 && block.type !== "child_page" && block.type !== "child_database") {
-            await walk(String(block.id), depth + 1);
+            node.children = await walk(String(block.id), depth + 1);
           }
         }
         cursor = res.has_more ? String(res.next_cursor) : undefined;
       } while (cursor && count <= MAX_BLOCKS);
+      return nodes;
     };
-    await walk(id, 0);
+    const nodes = await walk(id, 0);
+    return { nodes, truncated: count > MAX_BLOCKS };
+  }
+
+  private static props(page: Json): { name: string; value: string }[] {
+    return Object.entries((page.properties ?? {}) as Record<string, Json>)
+      .filter(([, p]) => p.type !== "title")
+      .map(([name, p]) => ({ name, value: propertyText(p) }))
+      .filter((p) => p.value);
+  }
+
+  async readPage(id: string): Promise<string> {
+    const page = await this.call(`/pages/${encodeURIComponent(id)}`);
+    const props = Notion.props(page).map((p) => `${p.name}: ${p.value}`);
+    const lines: string[] = [];
+    const flatten = (nodes: BlockNode[], depth: number) => {
+      for (const node of nodes) {
+        const line = blockText(node.block, depth);
+        if (line) lines.push(line);
+        flatten(node.children, depth + 1);
+      }
+    };
+    flatten((await this.blockTree(id)).nodes, 0);
     let text = [`# ${titleOf(page)}`, String(page.url ?? ""), ...props, "", ...lines].join("\n");
     if (text.length > MAX_CHARS) text = `${text.slice(0, MAX_CHARS)}\n… (truncated)`;
     return text;
+  }
+
+  /** Pages and databases matching `query` for the Desk (JD-34); an empty query lists recently edited ones. */
+  async searchPages(query: string, limit = 20): Promise<NotionPageRef[]> {
+    const res = await this.call("/search", { ...(query ? { query } : {}), page_size: limit });
+    return ((res.results as Json[]) ?? []).map(pageRef);
+  }
+
+  /**
+   * A page as structured JSON for the Desk's read view (JD-34). A database reads as its first 100
+   * rows, each a child_page block, so it opens like a page of links.
+   */
+  async readPageJson(id: string): Promise<NotionPage> {
+    let page: Json;
+    try {
+      page = await this.call(`/pages/${encodeURIComponent(id)}`);
+    } catch (err) {
+      // /pages/{id} refuses a database id (400); try it as one before giving up.
+      try {
+        page = await this.call(`/databases/${encodeURIComponent(id)}`);
+      } catch {
+        throw err;
+      }
+    }
+    const ref = pageRef(page);
+    if (ref.kind === "database") {
+      const res = await this.call(`/databases/${encodeURIComponent(id)}/query`, { page_size: 100 });
+      const rows = ((res.results as Json[]) ?? []).map((row) => ({ id: normalizeId(String(row.id)), type: "child_page" as const, title: titleOf(row) }));
+      return { ...ref, properties: [], blocks: rows, ...(res.has_more ? { truncated: true } : {}) };
+    }
+    const { nodes, truncated } = await this.blockTree(id);
+    const blocks = nodes.map(blockJson).filter((b): b is NotionBlock => Boolean(b));
+    return { ...ref, properties: Notion.props(page), blocks, ...(truncated ? { truncated } : {}) };
   }
 
   async queryDatabase(id: string, limit = 25): Promise<string> {

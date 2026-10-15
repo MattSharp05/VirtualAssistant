@@ -506,6 +506,77 @@ export interface SystemResponse {
   devices: DeviceInfo[];
 }
 
+// ── Notion window (JD-34): search, pinned + recent pages, and a read view of one page ──
+
+/** A page or database as a search result, a pin or a recent entry. Ids are 32 hex chars, no dashes. */
+export interface NotionPageRef {
+  id: string;
+  title: string;
+  kind: "page" | "database";
+  url?: string;
+  /** Last edited (ISO time), when Notion said. */
+  editedAt?: string;
+  /** JARVIS Tasks and JARVIS Memory: always pinned, can't be unpinned. */
+  fixed?: boolean;
+}
+
+/** GET /api/desk/notion/search?q= (an empty q lists recently edited pages) */
+export interface NotionSearchResponse {
+  query: string;
+  results: NotionPageRef[];
+}
+
+export type NotionBlockType =
+  | "heading_1"
+  | "heading_2"
+  | "heading_3"
+  | "paragraph"
+  | "bulleted"
+  | "numbered"
+  | "todo"
+  | "toggle"
+  | "quote"
+  | "callout"
+  | "code"
+  | "divider"
+  | "child_page"
+  | "child_database";
+
+/** One block of a page, as plain text; list items and toggles carry their nested blocks. */
+export interface NotionBlock {
+  id: string;
+  type: NotionBlockType;
+  text?: string;
+  /** To-dos. */
+  checked?: boolean;
+  /** Code blocks. */
+  language?: string;
+  /** Callouts: their emoji. */
+  icon?: string;
+  /** child_page / child_database: the title (the block's id is the page's id). */
+  title?: string;
+  children?: NotionBlock[];
+}
+
+/** GET /api/desk/notion/page/:id (a database reads as its rows, each a child_page block) */
+export interface NotionPage extends NotionPageRef {
+  /** Every non-empty property but the title, as short text. */
+  properties: { name: string; value: string }[];
+  blocks: NotionBlock[];
+  /** True when the page was longer than the server reads (400 blocks). */
+  truncated?: boolean;
+}
+
+/**
+ * GET /api/desk/notion/pinned → JARVIS Tasks, JARVIS Memory and Matthew's pins, plus the last 10
+ * pages opened. POST /notion/pinned/:id { title?, kind? } pins; DELETE (or POST …/:id/unpin, for the
+ * bridge's GET/POST) unpins. Each answers the new state.
+ */
+export interface NotionPinnedResponse {
+  pinned: NotionPageRef[];
+  recent: NotionPageRef[];
+}
+
 // ── The Desk bridge (window.desk): the renderer's only door to the rest of the app ──
 // In Electron, preload implements it over IPC and main talks to the server; in the web preview
 // (and e2e) a mock implements it from a scenario (desk/renderer/mock/). Features extend it.
