@@ -49,6 +49,8 @@ export type DeskEvent =
   | { type: "calendar.changed"; entry: CalendarChange }
   /** A fresh Today digest is ready (JD-17); GET /api/desk/today. */
   | { type: "today.updated"; generatedAt: string }
+  /** The morning brief's text (JD-23); its reply also streams as brain.* events with this messageId. */
+  | { type: "brief.ready"; messageId: string; text: string; at: string }
   /** The JARVIS Memory page changed (JARVIS wrote to it, or Matthew edited it in Notion). */
   | { type: "memory.changed" }
   /** A card next to the orb (JD-8, rendered by JD-27). */
@@ -235,6 +237,11 @@ export interface TodayResponse {
   ageSeconds?: number;
   running: boolean;
   lastError?: string;
+}
+
+/** POST /api/desk/brief { channel? }: the brief streams as brain.* events with this messageId, then brief.ready. */
+export interface BriefResponse {
+  messageId: string;
 }
 
 /** A paired Mac, as the dashboard lists it (never includes the key). */
