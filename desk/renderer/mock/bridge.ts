@@ -93,13 +93,14 @@ export function createMockBridge(scenario: Scenario): MockBridge {
       });
       return { messageId };
     },
-    openWindow(id) {
+    openWindow(id, params) {
       opened.push(id);
       // An id may carry options for the window, e.g. "today?section=inbox" → ?window=today&section=inbox.
       const [windowId, query = ""] = id.split("?");
       const url = new URL(window.location.href);
       url.searchParams.set("window", windowId);
       for (const [key, value] of new URLSearchParams(query)) url.searchParams.set(key, value);
+      for (const [k, v] of Object.entries(params ?? {})) url.searchParams.set(k, v);
       window.open(url.toString(), `desk-${id}`);
     },
     settings: {
