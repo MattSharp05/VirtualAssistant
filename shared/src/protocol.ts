@@ -179,6 +179,29 @@ export interface LayoutApplied {
   windows: string[];
 }
 
+// Screen awareness and clipboard help (JD-44): only when Matthew asks. The Desk captures the display
+// under the pointer (overlay hidden for the shot) or reads the clipboard, uploads images through
+// POST /api/desk/files and answers with the upload, so the brain Reads it like an attachment.
+
+/** rpc "screen.capture": payload {}, result ScreenCaptureResult. */
+export const SCREEN_RPC = "screen.capture";
+/** rpc "clipboard.read": payload {}, result ClipboardReadResult. */
+export const CLIPBOARD_RPC = "clipboard.read";
+/** Clipboard text longer than this is cut (and says so). */
+export const CLIPBOARD_MAX_CHARS = 20_000;
+
+export interface ScreenCaptureResult {
+  upload: UploadResponse;
+  /** The captured display's size in points. */
+  width: number;
+  height: number;
+}
+
+export type ClipboardReadResult =
+  | { kind: "text"; text: string; truncated: boolean }
+  | { kind: "image"; upload: UploadResponse }
+  | { kind: "empty" };
+
 /** A saved window layout (JD-37): the built-ins (Work mode, Focus) and Matthew's own. */
 export interface LayoutSummary {
   name: string;

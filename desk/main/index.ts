@@ -31,6 +31,7 @@ import { startHotkeyWithAccess } from "./permissions";
 import { MacFiles } from "./rpcHandlers/fs";
 import { askLayoutName, Layouts } from "./rpcHandlers/layout";
 import { answerRpc, type RpcHandler } from "./rpcHandlers";
+import { screenRpcHandlers } from "./rpcHandlers/screenNative";
 import { isSecretKey, Settings } from "./settings";
 import { StatusFileWriter } from "./statusFiles";
 import { createTray } from "./tray";
@@ -128,6 +129,12 @@ app.whenReady().then(() => {
   const rpcHandlers: Record<string, RpcHandler> = {
     "fs.list": (p) => macFiles.list(p as FsListRequest),
     "fs.read": (p) => macFiles.read(p as FsReadRequest),
+    // Screen and clipboard (JD-44), only when Matthew asks; a card beside the orb shows each look.
+    ...screenRpcHandlers({
+      overlay: () => overlay,
+      upload: (source) => uploader.upload(source),
+      publish: broadcast,
+    }),
   };
   const connection = new Connection({
     config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
