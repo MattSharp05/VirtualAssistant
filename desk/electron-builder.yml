@@ -8,7 +8,20 @@ files:
   - dist-electron/**
   - renderer/dist/**
   - package.json
+  # Voice's native modules (dependencies, ADR 0004) ship binaries for every platform; keep the Mac's.
+  - "!**/node_modules/onnxruntime-node/bin/napi-v*/{linux,win32}/**"
+  - "!**/node_modules/@picovoice/pvrecorder-node/lib/{linux,windows,raspberry-pi}/**"
 asar: true
+# Native code can't load from inside the asar.
+asarUnpack:
+  - "**/*.node"
+  - "**/*.dylib"
+# whisper-cli (arm64, Metal), built by CI into vendor/whisper (JD-24); looked up in Resources/whisper.
+extraResources:
+  - from: vendor/whisper
+    to: whisper
+    filter:
+      - whisper-cli
 mac:
   target:
     - target: dmg
