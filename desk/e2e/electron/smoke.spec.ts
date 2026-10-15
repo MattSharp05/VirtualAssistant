@@ -75,6 +75,10 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
     expect(
       await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered("CommandOrControl+Shift+Space")),
     ).toBe(true);
+    // JD-24: the debug listen shortcut (⌘⌥L) is registered.
+    expect(
+      await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered("CommandOrControl+Alt+L")),
+    ).toBe(true);
 
     const shot = testInfo.outputPath("electron-smoke.png");
     await window.screenshot({ path: shot });

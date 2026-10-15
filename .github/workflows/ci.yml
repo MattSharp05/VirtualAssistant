@@ -133,11 +133,38 @@ jobs:
       - uses: actions/setup-node@v5
         with: { node-version: 22, cache: npm }
       - run: npm ci
+      # whisper-cli for the Desk's speech to text (ADR 0004, JD-24): an arm64 Metal build, bundled into
+      # the app's Resources by electron-builder (extraResources). Static, no OpenMP (Homebrew's libomp
+      # isn't on Matthew's Mac), Metal shaders embedded. Cached by version.
+      - name: Cache whisper-cli
+        id: whisper-cache
+        uses: actions/cache@v4
+        with:
+          path: desk/vendor/whisper
+          key: whisper-cli-v1.9.5-metal-arm64-1
+      - name: Build whisper-cli
+        if: steps.whisper-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch v1.9.5 https://github.com/ggml-org/whisper.cpp "$RUNNER_TEMP/whisper.cpp"
+          cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper-build" -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_OPENMP=OFF \
+            -DGGML_NATIVE=OFF -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
+          cmake --build "$RUNNER_TEMP/whisper-build" -j"$(sysctl -n hw.ncpu)" --target whisper-cli
+          mkdir -p desk/vendor/whisper
+          cp "$RUNNER_TEMP/whisper-build/bin/whisper-cli" desk/vendor/whisper/whisper-cli
       - name: Build the .dmg
         working-directory: desk
         run: |
           npm version --no-git-tag-version "0.0.0-ci.${GITHUB_RUN_NUMBER}" >/dev/null
           npm run dist:mac
+      - name: whisper-cli runs from the app bundle
+        working-directory: desk
+        run: |
+          bin="release/mac-arm64/JARVIS Desk.app/Contents/Resources/whisper/whisper-cli"
+          test -x "$bin"
+          otool -L "$bin"
+          "$bin" --help > /dev/null
       - name: Upload the .dmg
         id: upload
         uses: actions/upload-artifact@v4

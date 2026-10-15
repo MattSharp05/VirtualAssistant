@@ -1,14 +1,25 @@
 // JARVIS Desk main process: an agent app (no Dock icon, LSUIElement) that lives in the menu bar
 // (tray.ts) and whose UI is the overlay with the orb (windows/overlay.ts) and the feature windows it
 // opens (windows/manager.ts). Main holds the connection to the server (connection.ts) and the settings
-// (settings.ts); renderers reach both only through the bridge (preload/index.ts). Voice arrives in
-// later tickets (docs/TDD.md).
+// (settings.ts); renderers reach both only through the bridge (preload/index.ts). Voice (voice/) listens
+// on the Mac and publishes its orb states and cards like server events.
 import { join } from "node:path";
-import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, safeStorage } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  safeStorage,
+  systemPreferences,
+} from "electron";
 import type { DeskEvent, DeskSecret, UsageResponse } from "@jarvis/shared";
 import { Connection } from "./connection";
 import { isSecretKey, Settings } from "./settings";
 import { createTray } from "./tray";
+import { createVoice } from "./voice";
 import { listVoices, speak } from "./voices";
 import { createAmbient } from "./windows/ambient";
 import { CommandBar, COMMAND_BAR_SHORTCUT } from "./windows/commandbar";
@@ -44,6 +55,24 @@ app.whenReady().then(() => {
   const broadcast = (event: DeskEvent) => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send("desk:event", event);
   };
+  const voice = createVoice({
+    modelsDir: join(userData, "models"),
+    whisper: {
+      resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+      appDir: app.getAppPath(),
+      env: process.env,
+    },
+    micDevice: () => settings.get("micDevice"),
+    micAllowed: () =>
+      process.platform === "darwin"
+        ? systemPreferences.askForMediaAccess("microphone")
+        : Promise.resolve(true),
+    publish: broadcast,
+  });
+  // Debug until push-to-talk (JD-31): ⌘⌥L listens once and shows the transcript (again: stop early).
+  globalShortcut.register("CommandOrControl+Alt+L", () => void voice.debugListen());
+  // First run downloads the models now, with a progress card (not on a scenario, e.g. the smoke test).
+  if (!scenario) voice.session.warmUp().catch((err) => console.error("voice models:", err));
   let usage: UsageResponse | undefined;
   const connection = new Connection({
     config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
