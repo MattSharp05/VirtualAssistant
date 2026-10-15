@@ -61,6 +61,17 @@ describe("Settings window", () => {
     );
   });
 
+  it("the status line follows the connection as it changes (e.g. Connecting… → Connected)", async () => {
+    const bridge = await renderOn("settings-offline");
+    expect(await screen.findByText(/Couldn't reach/)).toBeTruthy();
+    bridge.mac!.connection = async () => ({
+      state: "connected",
+      serverUrl: "http://localhost:8080",
+      deviceName: "Matthew's Mac",
+    });
+    expect(await screen.findByText("Connected as Matthew's Mac", {}, { timeout: 3000 })).toBeTruthy();
+  });
+
   it("first run: a bad URL is refused, a good one is tidied and saved; pasting the key enables the test", async () => {
     const bridge = await renderOn("settings-first-run");
     expect(await screen.findByText("Not paired yet")).toBeTruthy();
