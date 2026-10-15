@@ -1,6 +1,7 @@
 // window.desk in the browser: answers requests from the scenario's data, replays its events with
 // their timings (routes answer writes), and streams a canned chat reply as brain.* events (like the real server does).
 import { PROTOCOL_VERSION, type ChatResponse, type DeskBridge, type DeskEvent } from "@jarvis/shared";
+import { createMockMac, type MockMacLog } from "./mac";
 import type { Scenario } from "./types";
 
 const WORD_MS = 60;
@@ -21,12 +22,14 @@ export interface MockBridge extends DeskBridge {
   readonly frameActions: string[];
   /** Every request(path, body), in order (e2e checks POSTs reached the "server"). */
   readonly requests: { path: string; body?: unknown }[];
+  /** The Mac side (Settings): samples spoken. */
+  readonly mac: NonNullable<DeskBridge["mac"]> & MockMacLog;
 }
 
 export function createMockBridge(scenario: Scenario): MockBridge {
   const listeners = new Set<(event: DeskEvent) => void>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
-  const settings = new Map<string, unknown>();
+  const settings = new Map<string, unknown>(Object.entries(scenario.settings ?? {}));
   // Each bridge has its own copy, so routes can change it (functions are kept as they are).
   const data = Object.fromEntries(
     Object.entries(scenario.data).map(([k, v]) => [
@@ -135,6 +138,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     opened,
     frameActions,
     requests,
+    mac: createMockMac(scenario, settings),
     overlay: {
       setInteractive: (on) => void (interactive = on),
       orbClicked: () => void orbClicks++,

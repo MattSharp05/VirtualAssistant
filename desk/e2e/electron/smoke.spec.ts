@@ -59,6 +59,18 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
         ?.close(),
     );
 
+    // JD-26: the Settings window opens from the tray's "Settings…" (same IPC path as the launcher).
+    await app.evaluate(({ ipcMain }) => void ipcMain.emit("desk:open-window", {}, "settings"));
+    await expect
+      .poll(
+        () =>
+          app.evaluate(({ BrowserWindow }) =>
+            BrowserWindow.getAllWindows().some((w) => w.getTitle().startsWith("Settings") && w.isVisible()),
+          ),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
+
     const shot = testInfo.outputPath("electron-smoke.png");
     await window.screenshot({ path: shot });
     await testInfo.attach("app", { path: shot, contentType: "image/png" });

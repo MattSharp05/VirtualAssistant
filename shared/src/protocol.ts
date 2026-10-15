@@ -411,6 +411,17 @@ export interface SessionSendResponse {
   ms: number;
 }
 
+/** GET /api/desk/usage: how much of the Claude plan is spent (the tray's plan line). */
+export interface UsageResponse {
+  available: boolean;
+  /** Percent (0–100) of the 5-hour window. */
+  fiveHour?: number;
+  /** Percent (0–100) of the weekly window. */
+  weekly?: number;
+  reason?: string;
+  checkedAt: string;
+}
+
 /** A paired Mac, as the dashboard lists it (never includes the key). */
 export interface DeviceInfo {
   id: string;
@@ -418,6 +429,31 @@ export interface DeviceInfo {
   createdAt: string;
   lastSeen?: string;
 }
+
+// ── The Mac side of the Desk (JD-26): its own connection to JARVIS and what Settings needs ──
+
+/** Main's live connection to the server (the tray's status dot). */
+export interface DeskConnection {
+  state: "unconfigured" | "connecting" | "connected" | "offline" | "unauthorized";
+  serverUrl?: string;
+  /** The paired device's name, from GET /api/desk/me. */
+  deviceName?: string;
+  error?: string;
+}
+
+/** What Settings → Test connection shows. */
+export type ConnectionTest = { ok: true; deviceName: string } | { ok: false; error: string };
+
+/** A macOS voice (`say -v ?`). */
+export interface VoiceInfo {
+  name: string;
+  locale: string;
+  /** The voice's own sample sentence. */
+  sample: string;
+}
+
+/** Settings kept in the Keychain, never in settings.json; the renderer can store one but never read it. */
+export type DeskSecret = "deviceKey" | "picovoiceKey";
 
 // ── The Desk bridge (window.desk): the renderer's only door to the rest of the app ──
 // In Electron, preload implements it over IPC and main talks to the server; in the web preview
@@ -436,6 +472,7 @@ export interface DeskBridge {
    * query (`#/sessions?id=mk`), e.g. which session the Sessions window selects (JD-32).
    */
   openWindow(id: string, params?: Record<string, string>): void;
+  /** The Desk's settings (desk/main/settingsSchema.ts). A secret's get answers true when one is stored. */
   settings: {
     get<T = unknown>(key: string): Promise<T | undefined>;
     set(key: string, value: unknown): Promise<void>;
@@ -450,6 +487,20 @@ export interface DeskBridge {
   /** Voice input (JD-31): starts listening as if the hotkey was pressed. Absent until voice is set up. */
   voice?: {
     pushToTalk(): void;
+  };
+  /** The Mac itself (JD-26): connection status, Keychain secrets, voices, folder picker. */
+  mac?: {
+    connection(): Promise<DeskConnection>;
+    /** Asks the server who this device is, with the saved URL and key. */
+    testConnection(): Promise<ConnectionTest>;
+    /** Stores the clipboard as a secret (main reads it, so the key never passes through a page). */
+    pasteSecret(key: DeskSecret): Promise<void>;
+    clearSecret(key: DeskSecret): Promise<void>;
+    voices(): Promise<VoiceInfo[]>;
+    /** Speaks with `say` (rate in words per minute); a new call stops the previous one. */
+    speak(text: string, voice: string, rate: number): Promise<void>;
+    /** The macOS folder picker; undefined when cancelled. */
+    pickFolder(): Promise<string | undefined>;
   };
   /** The window this renderer is in (JD-20): the frame's minimise and close buttons. */
   frame?: {
