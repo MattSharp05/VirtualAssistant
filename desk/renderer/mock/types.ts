@@ -40,4 +40,6 @@ export interface Scenario extends Required<Omit<ScenarioPart, "routes">> {
 
 export interface ScenarioUi {
   launcherOpen?: boolean;
+  /** The preview's clock (ISO time): windows that show "today" start here instead of the real now. */
+  now?: string;
 }

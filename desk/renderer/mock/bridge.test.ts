@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeskEvent } from "@jarvis/shared";
-import { createMockBridge } from "./bridge";
+import { createMockBridge, PENDING } from "./bridge";
 import { findScenario, scenarios } from "./scenarios";
 import type { Scenario } from "./types";
 
@@ -72,6 +72,21 @@ describe("mock bridge", () => {
     expect(url.searchParams.get("window")).toBe("today");
     expect(url.searchParams.get("section")).toBe("inbox");
     open.mockRestore();
+    bridge.close();
+  });
+
+  it("answers a path with a query from the route's data, unless the exact path has its own", async () => {
+    const bridge = createMockBridge({
+      name: "t",
+      description: "",
+      data: { "/calendar": "any range", "/calendar?start=2026-10-12": "that week", "/slow": PENDING },
+      events: [],
+    });
+    expect(await bridge.request("/calendar?start=2026-10-19&end=2026-10-25")).toBe("any range");
+    expect(await bridge.request("/calendar?start=2026-10-12")).toBe("that week");
+    // PENDING never answers (loading states).
+    const slow = bridge.request("/slow").then(() => "answered");
+    expect(await Promise.race([slow, Promise.resolve("pending")])).toBe("pending");
     bridge.close();
   });
 
