@@ -15,6 +15,8 @@ const paths: Record<string, string> = {
   refresh: "M20 11a8 8 0 1 0-2 5.3M20 4v7h-7",
   minimize: "M6 12h12",
   close: "M6 6l12 12M18 6 6 18",
+  search: "M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5 20 20",
+  layout: "M4 5h16v14H4zM12 5v14M12 12h8",
 };
 
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {
