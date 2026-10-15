@@ -200,6 +200,8 @@ function Secret({
 
 // ── Connection ──
 
+const STATUS_REFRESH_MS = 1000;
+
 function statusText(c: DeskConnection): string {
   switch (c.state) {
     case "connected":
@@ -236,7 +238,13 @@ function ConnectionSection({
   const [test, setTest] = useState<ConnectionTest | "testing">();
 
   const refreshStatus = useCallback(() => void bridge.mac?.connection().then(setStatus, () => {}), [bridge]);
-  useEffect(refreshStatus, [refreshStatus]);
+  // Main's connection changes on its own (a new URL or key restarts it, the stream drops and
+  // retries), so keep the status line current while the window is open.
+  useEffect(() => {
+    refreshStatus();
+    const timer = setInterval(refreshStatus, STATUS_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [refreshStatus]);
 
   const saveUrl = async () => {
     let url: string;
