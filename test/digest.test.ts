@@ -138,7 +138,7 @@ test("schedule: every 30 min between 07:00 and 22:00 only; paused at ≥ 90% pla
   let usage: PlanUsage = { available: true, windows: [{ name: "five_hour", percent: 40 }], checkedAt: "" };
   let runs = 0;
   const worker = { chat: async () => undefined, reset: () => undefined };
-  const jobs = await discoverJobs();
+  const jobs = (await discoverJobs()).filter((j) => j.name === "digest"); // other jobs have their own schedules
   const runner = new JobRunner(jobs, worker, {} as never, { dataDir: dir, now: () => now, usage: async () => usage, timeoutMs: 50 });
   const digest = jobs.find((j) => j.name === "digest")!;
   const origRun = runner.run.bind(runner);

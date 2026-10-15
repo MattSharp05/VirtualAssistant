@@ -12,6 +12,7 @@ import { UploadStore } from "./uploads.js";
 import { createWorker } from "./brain/worker.js";
 import { discoverJobs, JobRunner, useJobRunner } from "./jobs/index.js";
 import { MEMORY_POLL_MS } from "./memory.js";
+import { suggesterFor } from "./suggest/index.js";
 import { DeviceStore } from "./desk/auth.js";
 import { DeskRpc } from "./desk/rpc.js";
 import { DeskRouter, type DeskContext } from "./desk/routes/index.js";
@@ -106,8 +107,8 @@ const worker = createWorker(
 const jobRunner = new JobRunner(await discoverJobs(), worker, toolContext, { dataDir: config.dataDir, bus, usage: () => jarvis.status().then((st) => st.usage) });
 useJobRunner(jarvis, jobRunner);
 scheduler.every("jobs", 60_000, () => void jobRunner.tick());
-// The morning brief (Desk POST /brief, the first Desk voice turn of the morning, Telegram /brief).
-useBrief(jarvis, new BriefService({ ctx: toolContext, brain, bus, runner: () => jobRunner }));
+// To-do suggestions: from session reports at once, Notion QA every 30 min (Slack + email is a job).
+suggesterFor(toolContext).start((name, ms, fn) => scheduler.every(name, ms, fn));
 
 // Uploaded files are kept for 7 days.
 const uploads = new UploadStore(config.dataDir);
