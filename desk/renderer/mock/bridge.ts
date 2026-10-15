@@ -5,6 +5,9 @@ import type { Scenario } from "./types";
 
 const WORD_MS = 60;
 
+/** Scenario data that never answers: the request stays pending (loading states). */
+export const PENDING = Symbol("pending");
+
 export interface MockBridge extends DeskBridge {
   /** Stops pending timers (tests, scenario switches). */
   close(): void;
@@ -26,7 +29,10 @@ export function createMockBridge(scenario: Scenario): MockBridge {
   const settings = new Map<string, unknown>();
   // Each bridge has its own copy, so routes can change it (functions are kept as they are).
   const data = Object.fromEntries(
-    Object.entries(scenario.data).map(([k, v]) => [k, typeof v === "function" ? v : structuredClone(v)]),
+    Object.entries(scenario.data).map(([k, v]) => [
+      k,
+      typeof v === "function" || v === PENDING ? v : structuredClone(v),
+    ]),
   );
   let chats = 0;
   let interactive = false;
@@ -67,9 +73,12 @@ export function createMockBridge(scenario: Scenario): MockBridge {
         const answer = route(path, body, ctx);
         if (answer !== undefined) return structuredClone(answer) as T;
       }
-      if (!(path in data)) throw new Error(`No mock data for ${path} in scenario "${scenario.name}"`);
+      // An exact key first ("/calendar?start=…"), then the route without its query ("/calendar").
+      const key = path in data ? path : path.split("?")[0]!;
+      if (!(key in data)) throw new Error(`No mock data for ${path} in scenario "${scenario.name}"`);
+      const entry = data[key];
+      if (entry === PENDING) return new Promise<T>(() => {});
       // A function answers from the request body (POSTs whose answer echoes what was sent).
-      const entry = data[path];
       return structuredClone(typeof entry === "function" ? entry(body) : entry) as T;
     },
     async chat(text, channel = "desk-typed"): Promise<ChatResponse> {
