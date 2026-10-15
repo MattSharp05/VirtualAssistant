@@ -4,13 +4,14 @@
 // (settings.ts); renderers reach both only through the bridge (preload/index.ts). Voice arrives in
 // later tickets (docs/TDD.md).
 import { join } from "node:path";
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, safeStorage } from "electron";
+import { app, BrowserWindow, clipboard, dialog, globalShortcut, ipcMain, Menu, safeStorage } from "electron";
 import type { DeskEvent, DeskSecret, UsageResponse } from "@jarvis/shared";
 import { Connection } from "./connection";
 import { isSecretKey, Settings } from "./settings";
 import { createTray } from "./tray";
 import { listVoices, speak } from "./voices";
 import { createAmbient } from "./windows/ambient";
+import { CommandBar, COMMAND_BAR_SHORTCUT } from "./windows/commandbar";
 import { WindowManager } from "./windows/manager";
 import { createOverlay } from "./windows/overlay";
 
@@ -36,6 +37,9 @@ app.whenReady().then(() => {
   const rendererIndex = join(__dirname, "../renderer/dist/index.html");
   const scenario = process.env.JARVIS_DESK_SCENARIO;
   const windows = new WindowManager(rendererIndex, settings, scenario);
+  const commandBar = new CommandBar(rendererIndex, scenario);
+  if (!globalShortcut.register(COMMAND_BAR_SHORTCUT, () => commandBar.toggle()))
+    console.warn(`${COMMAND_BAR_SHORTCUT} is taken by another app; the tray still opens the command bar`);
 
   const broadcast = (event: DeskEvent) => {
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send("desk:event", event);
@@ -60,9 +64,9 @@ app.whenReady().then(() => {
   setInterval(() => connection.status.state === "connected" && void refreshUsage(), USAGE_EVERY_MS);
 
   const tray = createTray(() => ({ settings: settings.all(), connection: connection.status, usage }), {
-    // The voice loop and the command bar arrive in later tickets; until then both open Chat.
+    // The voice loop arrives in a later ticket; until then Talk opens Chat.
     talk: () => windows.openWindow("chat"),
-    commandBar: () => windows.openWindow("chat"),
+    commandBar: () => commandBar.toggle(),
     layout: () => {}, // JD-37
     setFace: (face) => settings.set("face", face),
     setWakeWord: (on) => settings.set("wakeWordEnabled", on),
@@ -130,3 +134,4 @@ app.whenReady().then(() => {
     windows.openWindow("settings");
 });
 app.on("window-all-closed", () => app.quit());
+app.on("will-quit", () => globalShortcut.unregisterAll());

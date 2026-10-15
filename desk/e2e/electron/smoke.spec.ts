@@ -71,6 +71,11 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
       )
       .toBe(true);
 
+    // JD-28: ⌘⇧Space toggles the command bar from any app.
+    expect(
+      await app.evaluate(({ globalShortcut }) => globalShortcut.isRegistered("CommandOrControl+Shift+Space")),
+    ).toBe(true);
+
     const shot = testInfo.outputPath("electron-smoke.png");
     await window.screenshot({ path: shot });
     await testInfo.attach("app", { path: shot, contentType: "image/png" });
