@@ -18,6 +18,7 @@ import {
 } from "electron";
 import {
   LAYOUT_RPC,
+  type ChatResponse,
   type DeskEvent,
   type DeskSecret,
   type FsListRequest,
@@ -26,6 +27,7 @@ import {
   type UsageResponse,
 } from "@jarvis/shared";
 import { Connection } from "./connection";
+import { startHotkeyWithAccess } from "./permissions";
 import { MacFiles } from "./rpcHandlers/fs";
 import { askLayoutName, Layouts } from "./rpcHandlers/layout";
 import { answerRpc, type RpcHandler } from "./rpcHandlers";
@@ -34,6 +36,7 @@ import { StatusFileWriter } from "./statusFiles";
 import { createTray } from "./tray";
 import { createVoice } from "./voice";
 import { Uploader, type UploadSource } from "./uploads";
+import { pttHint } from "./voice/cards";
 import { listVoices, speak } from "./voices";
 import { createAmbient } from "./windows/ambient";
 import { CommandBar, COMMAND_BAR_SHORTCUT } from "./windows/commandbar";
@@ -88,9 +91,23 @@ app.whenReady().then(() => {
         ? systemPreferences.askForMediaAccess("microphone")
         : Promise.resolve(true),
     publish: broadcast,
+    pttKey: () => settings.get("pttKey"),
+    chat: (text) => connection.request<ChatResponse>("/chat", { text, channel: "desk-voice" }),
   });
-  // Debug until push-to-talk (JD-31): ⌘⌥L listens once and shows the transcript (again: stop early).
-  globalShortcut.register("CommandOrControl+Alt+L", () => void voice.debugListen());
+  // Push-to-talk (JD-31): the hotkey from any app, once macOS allows it (a card says how until then);
+  // ⌘⌥L does the same without that permission. Not on a scenario (e.g. the smoke test).
+  const talk = () => voice.ptt.signal("toggle");
+  globalShortcut.register("CommandOrControl+Alt+L", talk);
+  ipcMain.on("desk:voice-ptt", talk);
+  settings.onChange((key) => key === "pttKey" && voice.hotkey.setKey(settings.get("pttKey")));
+  if (!scenario)
+    startHotkeyWithAccess({
+      start: () => voice.hotkey.start(),
+      allowed: (p) => p !== "accessibility" || systemPreferences.isTrustedAccessibilityClient(false),
+      publish: broadcast,
+      hint: () => pttHint(settings.get("pttKey")),
+    });
+  app.on("will-quit", () => voice.hotkey.stop());
   // First run downloads the models now, with a progress card (not on a scenario, e.g. the smoke test).
   if (!scenario) voice.session.warmUp().catch((err) => console.error("voice models:", err));
   // Saved layouts (JD-37): the tray, the command bar and the server's apply_layout tool.
@@ -115,10 +132,14 @@ app.whenReady().then(() => {
   const connection = new Connection({
     config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
     onEvent: (event) => {
-      if (event.type !== "rpc") broadcast(event);
-      else if (event.kind === LAYOUT_RPC)
-        connection.request(`/rpc/${event.id}`, layouts.answer(event.payload)).catch(() => {});
-      else void answerRpc(event, rpcHandlers, (path, answer) => connection.request(path, answer));
+      if (event.type === "rpc") {
+        if (event.kind === LAYOUT_RPC)
+          connection.request(`/rpc/${event.id}`, layouts.answer(event.payload)).catch(() => {});
+        else void answerRpc(event, rpcHandlers, (path, answer) => connection.request(path, answer));
+        return;
+      }
+      broadcast(event);
+      voice.ptt.onEvent(event);
     },
     onStatus: (status) => {
       if (status.state === "connected") {
@@ -151,8 +172,7 @@ app.whenReady().then(() => {
       usage,
     }),
     {
-      // The voice loop arrives in a later ticket; until then Talk opens Chat.
-      talk: () => windows.openWindow("chat"),
+      talk,
       commandBar: () => commandBar.toggle(),
       layout: (name) => void layouts.apply(name),
       saveLayout: () => void layouts.saveCurrent(),

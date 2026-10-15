@@ -7,7 +7,8 @@ describe("dev.html index", () => {
     render(<DevIndex />);
     expect(screen.getByRole("heading", { name: "empty" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "demo-day" })).toBeTruthy();
-    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    // Plain selectors: role queries over every scenario × window link get slow as scenarios are added.
+    const hrefs = [...document.querySelectorAll("a")].map((a) => a.getAttribute("href"));
     expect(hrefs).toContain("index.html?scenario=demo-day&window=home");
     expect(hrefs).toContain("index.html?scenario=empty&window=overlay");
   });

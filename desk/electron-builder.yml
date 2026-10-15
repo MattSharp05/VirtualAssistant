@@ -11,6 +11,8 @@ files:
   # Voice's native modules (dependencies, ADR 0004) ship binaries for every platform; keep the Mac's.
   - "!**/node_modules/onnxruntime-node/bin/napi-v*/{linux,win32}/**"
   - "!**/node_modules/@picovoice/pvrecorder-node/lib/{linux,windows,raspberry-pi}/**"
+  - "!**/node_modules/uiohook-napi/prebuilds/{linux,win32}-*/**"
+  - "!**/node_modules/uiohook-napi/{libuiohook,src}/**"
 asar: true
 # Native code can't load from inside the asar.
 asarUnpack:

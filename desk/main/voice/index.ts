@@ -1,10 +1,14 @@
 // Voice wiring for main/index.ts: the real mic (PvRecorder), Silero VAD and whisper-cli behind a
-// VoiceSession, models fetched on first use with a progress card, and the debug listen (⌘⌥L, until
-// push-to-talk exists) that shows the transcript in a card. Electron stays in main/index.ts.
-import type { DeskEvent } from "@jarvis/shared";
+// VoiceSession, models fetched on first use with a progress card, and push-to-talk (JD-31): the
+// system-wide hotkey (hotkey.ts) driving the PushToTalk controller, which asks JARVIS what was heard.
+// Electron stays in main/index.ts.
+import type { ChatResponse, DeskEvent } from "@jarvis/shared";
+import type { PttKey } from "../settingsSchema";
 import { openMic } from "../audio/recorder";
 import { ensureModels, modelsReady } from "../models";
-import { MODELS_CARD_ID, modelsCard, progressThrottle, transcriptCard, voiceErrorCard } from "./cards";
+import { MODELS_CARD_ID, modelsCard, progressThrottle, pttHint } from "./cards";
+import { PushToTalk } from "./controller";
+import { createHotkey, type Hotkey } from "./hotkey";
 import { VoiceSession } from "./session";
 import { findWhisper, transcribe, type WhisperLocation } from "./stt";
 import { createSileroVad } from "./vad";
@@ -18,12 +22,18 @@ export interface VoiceOptions {
   /** Asks macOS for the microphone (the first time shows the permission prompt). */
   micAllowed(): Promise<boolean>;
   publish(event: DeskEvent): void;
+  /** Settings → pttKey. */
+  pttKey(): PttKey;
+  /** Asks JARVIS (POST /api/desk/chat, channel desk-voice). */
+  chat(text: string): Promise<ChatResponse>;
 }
 
 export interface Voice {
   session: VoiceSession;
-  /** Listens once and shows what was heard in a card. */
-  debugListen(): Promise<void>;
+  /** Push-to-talk: feed it the server's events; signal("toggle") is a press of the hotkey. */
+  ptt: PushToTalk;
+  /** The system-wide key hook (not started: permissions.ts starts it once macOS allows). */
+  hotkey: Hotkey;
 }
 
 const MIC_OFF =
@@ -54,17 +64,14 @@ export function createVoice(opts: VoiceOptions): Voice {
     },
   });
 
-  return {
-    session,
-    async debugListen() {
-      if (session.state !== "idle") return session.stop();
-      try {
-        const result = await session.listen();
-        opts.publish({ type: "card.show", card: transcriptCard(result, new Date()) });
-      } catch (err) {
-        console.error("voice:", err);
-        opts.publish({ type: "card.show", card: voiceErrorCard(err, new Date()) });
-      }
-    },
-  };
+  const ptt = new PushToTalk({
+    listen: (o) => session.listen(o),
+    stop: () => session.stop(),
+    cancel: () => session.cancel(),
+    chat: opts.chat,
+    publish: opts.publish,
+    hint: () => pttHint(opts.pttKey()),
+  });
+  const hotkey = createHotkey(opts.pttKey(), (signal) => ptt.signal(signal));
+  return { session, ptt, hotkey };
 }

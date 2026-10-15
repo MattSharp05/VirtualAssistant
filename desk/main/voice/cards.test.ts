@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
 import { SILERO_MODEL, WHISPER_MODEL, type DownloadProgress } from "../models";
-import { modelsCard, progressThrottle, transcriptCard, voiceErrorCard } from "./cards";
+import { missedCard, modelsCard, progressThrottle, pttHint, voiceErrorCard } from "./cards";
 
 const at = new Date("2026-10-15T09:00:00Z");
 
@@ -20,17 +20,21 @@ it("updates the card once per whole percent", () => {
   expect(shown).toEqual([0, 10, 20, 1000]);
 });
 
-it("shows the transcript, or why there isn't one", () => {
-  expect(
-    transcriptCard({ text: "what's on my calendar tomorrow", ms: 412, reason: "silence" }, at),
-  ).toMatchObject({
+it("says it didn't catch that, and why", () => {
+  expect(missedCard({ text: "", ms: 0, reason: "no-speech" }, pttHint("RightAlt-double"), at)).toMatchObject({
     id: "voice-transcript",
-    title: "Heard",
-    body: "“what's on my calendar tomorrow”\n\nTranscribed in 0.41 s.",
+    title: "Didn't catch that",
+    body: "No speech came through the microphone. Double-tap right ⌥ and try again.",
   });
-  expect(transcriptCard({ text: "", ms: 0, reason: "no-speech" }, at).body).toContain("No speech");
+  expect(missedCard({ text: "", ms: 420, reason: "silence" }, pttHint("F13"), at).body).toBe(
+    "Whisper couldn't make out any words. Press F13 and try again.",
+  );
+  expect(pttHint("RightAlt-hold")).toBe("hold right ⌥");
   expect(voiceErrorCard(new Error("Mic off"), at)).toMatchObject({
     title: "Voice isn't working",
     body: "Mic off",
   });
+  expect(voiceErrorCard(new Error("offline"), at, "Couldn't reach JARVIS").title).toBe(
+    "Couldn't reach JARVIS",
+  );
 });
