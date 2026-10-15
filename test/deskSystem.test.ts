@@ -115,6 +115,17 @@ test("GET /api/desk/system: plan, fires, container, chat vs worker today, device
     assert.deepEqual(body.brain.chatToday, { replies: 1, tokens: 1120, turns: 2, ms: 900 });
     assert.deepEqual(body.brain.workerToday, { replies: 1, tokens: 5400, turns: 4, ms: 6000 });
     assert.deepEqual(body.devices.map((d) => d.name), ["Matthew's Mac"]);
+    assert.deepEqual(body.voiceLatency, { turns: 0, p50: null, p90: null, stages: [] }, "no voice turns reported yet");
+    // The Desk reports a voice turn (JD-48); the next GET summarises it.
+    const reported = await fetch(`${base}/api/desk/system/latency`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+      body: JSON.stringify({ at: new Date().toISOString(), trigger: "ptt", speechMs: 1500, stages: { transcript: 400, audioStart: 2300 } }),
+    });
+    assert.equal(reported.status, 200);
+    const after = (await (await fetch(`${base}/api/desk/system`, { headers: { authorization: `Bearer ${key}` } })).json()) as SystemResponse;
+    assert.equal(after.voiceLatency?.turns, 1);
+    assert.equal(after.voiceLatency?.p50, 2300);
   } finally {
     ctx.hub.close();
     server.closeAllConnections();

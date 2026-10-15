@@ -94,11 +94,28 @@ describe("Endpointer", () => {
     const flushed = ep.flush();
     expect(flushed.reason).toBe("stopped");
     expect(flushed.audio!.length).toBeGreaterThan(0);
+    expect(flushed.silenceMs).toBe(0); // still talking when the key was let go
     expect(ep.push(frames[0], 0.9)).toEqual([]);
 
     const quiet = new Endpointer();
     quiet.push(new Int16Array(FRAME_LENGTH), 0);
-    expect(quiet.flush()).toEqual({ reason: "no-speech" });
+    expect(quiet.flush()).toEqual({ reason: "no-speech", silenceMs: 0 });
+  });
+
+  it("says how long ago the last word was when it ends on silence (JD-48), with a tunable wait", () => {
+    for (const silenceMs of [700, 500]) {
+      const ep = new Endpointer({ silenceMs });
+      const { frames, probabilities } = record([
+        ["speech", 900],
+        ["silence", 1500],
+      ]);
+      const end = frames
+        .flatMap((f, i) => ep.push(f, probabilities[i]))
+        .find((e): e is Extract<EndpointerEvent, { type: "end" }> => e.type === "end");
+      expect(end?.reason).toBe("silence");
+      expect(end!.silenceMs).toBeGreaterThanOrEqual(silenceMs);
+      expect(end!.silenceMs).toBeLessThan(silenceMs + 40); // within a frame
+    }
   });
 });
 

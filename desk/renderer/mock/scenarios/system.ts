@@ -1,5 +1,6 @@
 // The System window (JD-30): plan usage running hot (5-hour 75% amber, weekly 92% red), a quiet
-// container with no plan limits reported, and the first load still waiting.
+// container with no plan limits reported, and the first load still waiting. Voice latency (JD-48):
+// on target in "system", nothing timed yet in "system-quiet", and missing the target on a slow brain.
 import type { SystemResponse } from "@jarvis/shared";
 import { PENDING } from "../bridge";
 import { system } from "../data/system";
@@ -38,6 +39,34 @@ const quiet: SystemResponse = {
     workerToday: { replies: 0, tokens: 0, turns: 0, ms: 0 },
   },
   devices: [],
+  voiceLatency: { turns: 0, p50: null, p90: null, stages: [] },
+};
+
+/** The brain takes 1.7 s to its first words: p50 3.4 s and p90 4.6 s, both over the target. */
+const slow: SystemResponse = {
+  ...system,
+  voiceLatency: {
+    turns: 12,
+    p50: 3420,
+    p90: 4610,
+    stages: [
+      { stage: "endpoint", p50: 704 },
+      { stage: "transcript", p50: 1180 },
+      { stage: "sent", p50: 1186 },
+      { stage: "accepted", p50: 1240 },
+      { stage: "firstDelta", p50: 2950 },
+      { stage: "firstSentence", p50: 3090 },
+      { stage: "sayReady", p50: 3390 },
+      { stage: "audioStart", p50: 3420 },
+    ],
+    last: {
+      at: "2026-10-14T08:19:10Z",
+      trigger: "ptt",
+      speechMs: 2100,
+      model: "claude-sonnet-5-5",
+      stages: { endpoint: 704, transcript: 1210, sent: 1215, accepted: 1270, firstDelta: 3300 },
+    },
+  },
 };
 
 const scenarios: Scenario[] = [
@@ -50,6 +79,11 @@ const scenarios: Scenario[] = [
     "system-quiet",
     "System just after a restart: no plan limits reported, no routine, no memory limit or history, nothing used today.",
     quiet,
+  ),
+  one(
+    "system-latency-slow",
+    "System: voice latency over target (p50 3.4 s, p90 4.6 s), the brain's 1.7 s the biggest part; the last turn had no first word.",
+    slow,
   ),
   one("system-loading", "System while the first GET /system is still on its way.", PENDING),
 ];

@@ -1,12 +1,15 @@
 // The System window (JD-30): the dashboard's tiles for the Desk.
-//   GET /api/desk/system → SystemResponse (plan usage, routine fires, container, brain use today, devices)
+//   GET  /api/desk/system → SystemResponse (plan usage, routine fires, container, brain use today, devices,
+//        voice latency over the last 20 voice turns)
+//   POST /api/desk/system/latency VoiceLatencyTurn → { ok } (the Desk, after every voice turn; JD-48)
 // Plan usage and fires come from jarvis.status() (cached like the dashboard's), the container from the
 // SystemMonitor index.ts registers, the chat's and worker's use today from their message logs.
 import type { BrainUsageToday, SystemResponse } from "@jarvis/shared";
 import { WorkerState } from "../../brain/worker.js";
 import type { BrainMessage } from "../../store.js";
 import { systemMonitorFor } from "../../system.js";
-import type { DeskRoute } from "./index.js";
+import { parseLatencyTurn, VoiceLatencyLog } from "../../voiceLatency.js";
+import { DeskHttpError, type DeskRoute } from "./index.js";
 
 /** Midnight today in the server's time zone (TZ), as ms. */
 export function startOfDay(now: Date): number {
@@ -72,7 +75,22 @@ const routes: DeskRoute[] = [
           workerToday: usageSince(worker.messages, since),
         },
         devices: devices.list(),
+        voiceLatency: new VoiceLatencyLog(jarvis.config.dataDir).summary(),
       };
+    },
+  },
+  {
+    method: "POST",
+    path: "/system/latency",
+    handler: ({ body, ctx }) => {
+      let turn;
+      try {
+        turn = parseLatencyTurn(body);
+      } catch (err) {
+        throw new DeskHttpError(400, (err as Error).message);
+      }
+      new VoiceLatencyLog(ctx.jarvis.config.dataDir).add(turn);
+      return { ok: true };
     },
   },
 ];

@@ -29,6 +29,7 @@ import {
   type UsageResponse,
 } from "@jarvis/shared";
 import { Connection } from "./connection";
+import { describeTurn, latencyLine } from "./latency";
 import { startHotkeyWithAccess } from "./permissions";
 import { MacFiles } from "./rpcHandlers/fs";
 import { askLayoutName, Layouts } from "./rpcHandlers/layout";
@@ -98,7 +99,14 @@ app.whenReady().then(() => {
         : Promise.resolve(true),
     publish: broadcast,
     pttKey: () => settings.get("pttKey"),
-    chat: (text) => connection.request<ChatResponse>("/chat", { text, channel: "desk-voice" }),
+    chat: (text) => {
+      const model = settings.get("voiceModel");
+      return connection.request<ChatResponse>("/chat", {
+        text,
+        channel: "desk-voice",
+        ...(model ? { model } : {}),
+      });
+    },
     voice: () => settings.get("voice"),
     speechRate: () => settings.get("speechRate"),
     speakReplies: () => settings.get("speakReplies"),
@@ -113,6 +121,26 @@ app.whenReady().then(() => {
       ? join(process.resourcesPath, "chime.wav")
       : join(app.getAppPath(), "resources/chime.wav"),
     onWakeStatus: () => tray.refresh(),
+    // Voice latency (JD-48): the knobs, each turn into userData/voice-latency.jsonl and to the server
+    // (the System window's summary), and the brain woken as Matthew starts talking.
+    tuning: () => ({
+      endpointSilenceMs: settings.get("endpointSilenceMs"),
+      whisperThreads: settings.get("whisperThreads"),
+      whisperBeamSize: settings.get("whisperBeamSize"),
+      voiceModel: settings.get("voiceModel"),
+    }),
+    onLatency: (turn) => {
+      console.log(describeTurn(turn));
+      appendFile(join(userData, "voice-latency.jsonl"), latencyLine(turn)).catch((err) =>
+        console.error("voice latency log:", err),
+      );
+      connection.request("/system/latency", turn).catch(() => {});
+    },
+    warmBrain: () => {
+      if (connection.status.state !== "connected") return;
+      const model = settings.get("voiceModel");
+      connection.request("/chat/warm", model ? { model } : {}).catch(() => {});
+    },
   });
   // Push-to-talk (JD-31): the hotkey from any app, once macOS allows it (a card says how until then);
   // ⌘⌥L does the same without that permission. Not on a scenario (e.g. the smoke test).

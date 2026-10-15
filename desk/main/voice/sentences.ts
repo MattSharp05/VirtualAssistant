@@ -3,7 +3,9 @@
 // a sentence too (list items, headings, "Here's your day:"). A full stop isn't an ending after an
 // abbreviation ("e.g.", "Dr."), inside a number ("3.5", "10.30") or a URL, or after a list's "1.";
 // "a.m." and "etc." end one only before a capital. Fenced code blocks are skipped whole, and
-// speakable() strips what shouldn't be read out: markdown, links' URLs, bare URLs, emoji. Pure.
+// speakable() strips what shouldn't be read out: markdown, links' URLs, bare URLs, emoji. With
+// firstClauseChars (JD-48), a reply's first sentence that is still going at that length is handed out
+// up to its last comma (or ; : —), so JARVIS starts talking sooner. Pure.
 
 /** Never end a sentence. */
 const ABBREVIATIONS = new Set([
@@ -19,24 +21,48 @@ const TERMINATORS = ".!?…";
 const CLOSERS = `"'”’)]*_`;
 const FENCE = /^\s*(```|~~~)/;
 
+export interface SplitterOptions {
+  /** Hand out the first sentence's first clause once it is this long without ending (off by default). */
+  firstClauseChars?: number;
+}
+
 export class SentenceSplitter {
   /** Text not yet handed out (from the start of a line, or from just after the last sentence). */
   private pending = "";
   private atLineStart = true;
   private inCode = false;
+  private saidCount = 0;
+  private ended = false;
+
+  constructor(private readonly opts: SplitterOptions = {}) {}
+
+  /** Sentences handed out for this reply so far (including the last push's or flush's). */
+  get said(): number {
+    return this.saidCount;
+  }
 
   /** Feeds a chunk of the reply; returns the sentences it completed, ready to speak. */
   push(chunk: string): string[] {
+    if (this.ended) {
+      this.ended = false;
+      this.saidCount = 0;
+    }
     this.pending += chunk;
-    return this.take(false);
+    return this.count(this.take(false));
   }
 
   /** The reply is done: whatever is left is the last sentence. Resets for the next reply. */
   flush(): string[] {
-    const out = this.take(true);
+    const out = this.count(this.take(true));
     this.pending = "";
     this.atLineStart = true;
     this.inCode = false;
+    this.ended = true;
+    return out;
+  }
+
+  private count(out: string[]): string[] {
+    this.saidCount += out.length;
     return out;
   }
 
@@ -73,6 +99,14 @@ export class SentenceSplitter {
           const last = speakable(rest);
           if (last) out.push(last);
           this.pending = "";
+        } else if (!final && this.opts.firstClauseChars && this.saidCount === 0 && !out.length) {
+          const clause = firstClause(rest, this.opts.firstClauseChars);
+          const said = clause && speakable(clause.text);
+          if (clause && said) {
+            out.push(said);
+            this.pending = clause.rest;
+            this.atLineStart = false;
+          }
         }
         break;
       }
@@ -83,6 +117,30 @@ export class SentenceSplitter {
     }
     return out;
   }
+}
+
+/** Clause breaks: a comma, semicolon, colon or dash before a space ("1,000" and "10:30" aren't). */
+const CLAUSE_BREAK = /[,;:\u2013\u2014](?=\s)/g;
+/** A clause shorter than this isn't worth its own `say` ("Sure, …", "Well, …"). */
+const MIN_CLAUSE = 20;
+
+/**
+ * A long unfinished sentence's first part, up to its last clause break, and the rest; undefined
+ * while it's shorter than `minChars`, has no break past MIN_CLAUSE characters, or the break would cut
+ * through a link, code or emphasis.
+ */
+export function firstClause(text: string, minChars: number): { text: string; rest: string } | undefined {
+  if (text.length < minChars) return undefined;
+  let cut: number | undefined;
+  for (const m of text.matchAll(CLAUSE_BREAK)) {
+    const head = text.slice(0, m.index + 1);
+    const open = (a: string, b: string) => head.split(a).length > head.split(b).length;
+    const odd = (mark: string) => head.split(mark).length % 2 === 0;
+    if (m.index + 1 < MIN_CLAUSE || open("[", "]") || open("(", ")") || odd("`") || odd("**")) continue;
+    cut = m.index + 1;
+  }
+  if (cut === undefined) return undefined;
+  return { text: text.slice(0, cut).trim(), rest: text.slice(cut).replace(/^\s+/, "") };
 }
 
 /**

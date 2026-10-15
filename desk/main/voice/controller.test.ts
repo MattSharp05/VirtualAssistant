@@ -2,6 +2,7 @@
 import type { DeskEvent } from "@jarvis/shared";
 import { describe, expect, it } from "vitest";
 import { PushToTalk, REPLY_TIMEOUT_MS, type PushToTalkDeps, type SpeechLike } from "./controller";
+import type { TurnTiming } from "../latency";
 import type { ListenResult } from "./session";
 
 const at = new Date("2026-10-15T09:00:00Z");
@@ -54,8 +55,21 @@ function setup(over: Partial<PushToTalkDeps> = {}) {
   const orb = () =>
     events.filter((e) => e.type === "orb.state").map((e) => (e.type === "orb.state" ? e.state : ""));
   const cards = () => events.flatMap((e) => (e.type === "card.show" ? [e.card] : []));
-  return { ptt, events, asked, timers, log, hear, orb, cards, fail: (e: Error) => fail!(e) };
+  return {
+    ptt,
+    events,
+    asked,
+    timers,
+    log,
+    hear,
+    orb,
+    cards,
+    fail: (e: Error) => fail!(e),
+    finish: (r: ListenResult) => finish!(r),
+  };
 }
+
+const finishWith = (t: { finish(r: ListenResult): void }, r: ListenResult) => t.finish(r);
 
 describe("PushToTalk", () => {
   it("the wake word (JD-43) starts the same turn with its pre-roll, only when idle", async () => {
@@ -207,6 +221,42 @@ describe("PushToTalk", () => {
     expect(t.ptt.state).toBe("listening");
     await t.hear("second");
     expect(t.asked).toEqual(["first", "second"]);
+  });
+
+  it("tells the latency tracker (JD-48) where each turn has got to", async () => {
+    const calls: string[] = [];
+    const timing: TurnTiming = {
+      start: (trigger) => void calls.push(`start ${trigger}`),
+      heard: (h) => void calls.push(`heard ${h.speechEndAt} ${h.endpointMs} ${h.speechMs}`),
+      sent: () => void calls.push("sent"),
+      accepted: (id) => void calls.push(`accepted ${id}`),
+      cancel: () => void calls.push("cancel"),
+    };
+    const t = setup({ timing });
+    t.ptt.signal("toggle");
+    await tick();
+    finishWith(t, {
+      text: "what's on today",
+      ms: 300,
+      reason: "silence",
+      speechEndAt: 5000,
+      endpointMs: 704,
+      speechMs: 1200,
+    });
+    await tick();
+    expect(calls).toEqual(["start ptt", "heard 5000 704 1200", "sent", "accepted m1"]);
+
+    // Cancelled, nothing heard, or a wake-word turn.
+    calls.length = 0;
+    t.ptt.onEvent({ type: "brain.done", messageId: "m1", text: "x", metrics: {} as never });
+    t.ptt.signal("toggle");
+    t.ptt.signal("toggle");
+    await tick();
+    expect(calls).toEqual(["start ptt", "cancel"]);
+    calls.length = 0;
+    t.ptt.wake([new Int16Array(512)]);
+    await t.hear("");
+    expect(calls).toEqual(["start wake", "cancel"]);
   });
 
   describe("with spoken replies (JD-38)", () => {

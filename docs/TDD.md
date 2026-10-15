@@ -83,7 +83,7 @@ Every window is a folder under `desk/renderer/features/` with its own CSS, a `fe
 - **Desk e2e** (Playwright, Chromium) against the web build + scenarios: one desktop project. Visual snapshots of each window (CI only, 0.2% tolerance).
 - **Electron smoke** (Playwright `_electron`, macOS runner): launch with a scenario, assert overlay + a window render, screenshot artifacts.
 - **Manual (QA block):** overlay feel, click-through, Spaces/full-screen, mic/wake word/voice quality, latency, camera hands.
-- **Perf:** a latency probe logs speech-end → first audio; budget ≤ 2.5 s (warm, simple question). Idle CPU/RAM sampled in the smoke test.
+- **Perf:** a latency probe logs speech-end → first audio; budget ≤ 2.5 s (warm, simple question). Idle CPU/RAM sampled in the smoke test. JD-48: `desk/main/latency.ts` times every voice turn (endpoint, transcript, sent, accepted, first delta, first sentence, say ready, first audio) into `userData/voice-latency.jsonl` and `POST /api/desk/system/latency`; the System window shows p50/p90 of the last 20 and a waterfall. Knobs in settings.json: `endpointSilenceMs`, `whisperThreads`, `whisperBeamSize`, `voiceModel` (sent as the voice turn's `model`). `POST /api/desk/chat/warm` starts the warm brain as listening begins; `say` is prewarmed then too. `desk/main/voice/pipeline.test.ts` is the synthetic benchmark on fakes.
 - **CI pipeline** (two levels, PR jobs ≤ 5 min each):
   - PR gate, in parallel: server typecheck + unit; desk lint + typecheck + unit; desk e2e on web build (sharded ×2); Vercel preview (Vercel's Git integration).
   - "What changed" job adds: macOS `.dmg` build + Electron smoke when `desk/main|preload|package` change; visual snapshots when renderer CSS/components change.

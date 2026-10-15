@@ -3,9 +3,12 @@
 // system-wide hotkey (hotkey.ts) driving the PushToTalk controller, which asks JARVIS what was heard,
 // the Speaker (JD-38) that says voice replies out loud, and the wake word "Jarvis" (JD-43, wake.ts)
 // starting the same turn hands-free. The wake word and the
-// endpointer share one recorder (SharedMic). Electron stays in main/index.ts.
+// endpointer share one recorder (SharedMic). Voice latency (JD-48): a LatencyTracker follows every
+// turn (push-to-talk, the server's events, the speaker) and hands it to onLatency; as listening starts
+// the server's warm brain is woken (warmBrain) and `say` prewarmed. Electron stays in main/index.ts.
 import { execFile } from "node:child_process";
-import type { ChatResponse, DeskEvent } from "@jarvis/shared";
+import type { ChatResponse, DeskEvent, VoiceLatencyTurn } from "@jarvis/shared";
+import { LatencyTracker } from "../latency";
 import type { PttKey } from "../settingsSchema";
 import { openMic, SharedMic } from "../audio/recorder";
 import { ensureModels, modelsReady } from "../models";
@@ -40,6 +43,17 @@ export interface VoiceOptions {
   /** resources/chime.wav, played when "Jarvis" is heard. */
   chimePath: string;
   onWakeStatus?(status: WakeStatus): void;
+  /** Settings → endpointSilenceMs, whisperThreads, whisperBeamSize and voiceModel (JD-48). */
+  tuning(): {
+    endpointSilenceMs: number;
+    whisperThreads: number;
+    whisperBeamSize: number;
+    voiceModel: string;
+  };
+  /** Each voice turn's latency (JD-48): main logs it and reports it to the server. */
+  onLatency(turn: VoiceLatencyTurn): void;
+  /** POST /chat/warm, as Matthew starts talking (JD-48). */
+  warmBrain(): void;
 }
 
 export interface Voice {
@@ -56,6 +70,8 @@ export interface Voice {
   wake: WakeWord;
   /** JARVIS is speaking (JD-38): the wake word pauses so it can't trigger itself. */
   setSpeaking(on: boolean): void;
+  /** Voice latency (JD-48). */
+  latency: LatencyTracker;
 }
 
 const MIC_OFF =
@@ -94,9 +110,24 @@ export function createVoice(opts: VoiceOptions): Voice {
         if (firstRun) opts.publish({ type: "card.dismiss", id: MODELS_CARD_ID });
       }
       const vad = await createSileroVad(paths.silero);
-      return { vad, transcribe: (audio) => transcribe(audio, { binary, model: paths.whisper }) };
+      return {
+        vad,
+        transcribe: (audio) => {
+          const t = opts.tuning();
+          return transcribe(audio, {
+            binary,
+            model: paths.whisper,
+            tuning: { threads: t.whisperThreads, beamSize: t.whisperBeamSize },
+          });
+        },
+      };
     },
     openMic: acquireMic,
+    endpointer: () => ({ silenceMs: opts.tuning().endpointSilenceMs }),
+  });
+  const latency = new LatencyTracker({
+    record: opts.onLatency,
+    model: () => opts.tuning().voiceModel,
   });
 
   const speaker = createMacSpeaker({
@@ -104,6 +135,7 @@ export function createVoice(opts: VoiceOptions): Voice {
     rate: opts.speechRate,
     speakReplies: opts.speakReplies,
     publish,
+    onMark: (stage, messageId) => latency.speech(stage, messageId),
   });
   const ptt = new PushToTalk({
     listen: (o) => session.listen(o),
@@ -113,7 +145,14 @@ export function createVoice(opts: VoiceOptions): Voice {
     publish,
     hint: () => pttHint(opts.pttKey()),
     speech: speaker,
-    onState: () => wake.sync(),
+    timing: latency,
+    onState: (state) => {
+      wake.sync();
+      if (state !== "listening") return;
+      // While Matthew talks: wake the brain if it idled out, and load the voice.
+      opts.warmBrain();
+      speaker.prewarm();
+    },
   });
   const hotkey = createHotkey(opts.pttKey(), (signal) => ptt.signal(signal));
   const wake = new WakeWord({
@@ -131,8 +170,9 @@ export function createVoice(opts: VoiceOptions): Voice {
     onStatus: opts.onWakeStatus,
   });
   const onEvent = (event: DeskEvent) => {
+    latency.onEvent(event); // first: the speaker's marks need the reply it claims from brain.start
     speaker.onEvent(event);
     ptt.onEvent(event);
   };
-  return { session, ptt, hotkey, speaker, onEvent, wake, setSpeaking };
+  return { session, ptt, hotkey, speaker, onEvent, wake, setSpeaking, latency };
 }

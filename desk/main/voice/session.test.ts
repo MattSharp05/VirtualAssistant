@@ -55,7 +55,15 @@ describe("VoiceSession.listen", () => {
   it("listens until the silence, transcribes, and drives the orb", async () => {
     const { session, events, log, orb } = setup(speech);
     const result = await session.listen();
-    expect(result).toEqual({ text: "what's on my calendar tomorrow", ms: 350, reason: "silence" });
+    // JD-48: speech ended 704 ms (22 frames of silence) before the endpointer decided, at clock 1000.
+    expect(result).toEqual({
+      text: "what's on my calendar tomorrow",
+      ms: 350,
+      reason: "silence",
+      speechEndAt: 1000 - 704,
+      endpointMs: 704,
+      speechMs: 1216,
+    });
     expect(log).toEqual(["prepare", "vad reset", "mic stop", expect.stringMatching(/^transcribe \d+$/)]);
     // listening (with the level ~20/s) → thinking → idle, compressed to the changes:
     expect(orb().filter((s, i, a) => s !== a[i - 1])).toEqual(["listening", "thinking", "idle"]);
@@ -65,6 +73,15 @@ describe("VoiceSession.listen", () => {
       0.5,
     );
     expect(session.state).toBe("idle");
+  });
+
+  it("reads the endpointer's tuning at every listen (Settings → endpointSilenceMs, JD-48)", async () => {
+    let silenceMs = 700;
+    const first = setup(speech, { endpointer: () => ({ silenceMs }) });
+    expect((await first.session.listen()).endpointMs).toBe(704);
+    silenceMs = 400;
+    const second = setup(speech, { endpointer: () => ({ silenceMs }) });
+    expect((await second.session.listen()).endpointMs).toBe(416);
   });
 
   it("can leave the orb thinking for the server's reply", async () => {

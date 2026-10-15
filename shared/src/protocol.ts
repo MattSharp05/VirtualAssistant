@@ -215,6 +215,8 @@ export interface ChatRequest {
   channel: "desk-voice" | "desk-typed";
   /** Upload ids from POST /api/desk/files. */
   attachments?: string[];
+  /** The model for this turn (JD-48: Settings → voiceModel for voice turns); default the chat's model. */
+  model?: string;
 }
 
 /** POST /api/desk/files (multipart, field "file", ≤ 20 MB) */
@@ -585,6 +587,57 @@ export interface SystemResponse {
   };
   brain: { chatToday: BrainUsageToday; workerToday: BrainUsageToday };
   devices: DeviceInfo[];
+  /** Voice latency over the last voice turns the Desk reported (JD-48); absent on an older server. */
+  voiceLatency?: VoiceLatencySummary;
+}
+
+// ── Voice latency (JD-48): how long from Matthew's last word to JARVIS's first ──
+
+/**
+ * One voice turn's stages, as ms after the end of speech (the last speech frame). A stage the turn
+ * never reached is absent (cancelled, nothing heard, an error, spoken replies off).
+ *   endpoint: the endpointer decided he'd finished (its silence wait) · transcript: Whisper done ·
+ *   sent: POST /chat went out · accepted: the server answered with the messageId · firstDelta: the
+ *   reply's first brain.delta · firstSentence: the first sentence (or clause) complete · sayReady:
+ *   `say` has written it · audioStart: afplay started = the first word heard.
+ */
+export interface VoiceLatencyStages {
+  endpoint?: number;
+  transcript?: number;
+  sent?: number;
+  accepted?: number;
+  firstDelta?: number;
+  firstSentence?: number;
+  sayReady?: number;
+  audioStart?: number;
+}
+
+export type VoiceLatencyStage = keyof VoiceLatencyStages;
+
+/** POST /api/desk/system/latency (the Desk, after every voice turn) → { ok: true } */
+export interface VoiceLatencyTurn {
+  /** When speech ended (ISO). */
+  at: string;
+  /** Push-to-talk (hotkey, tray, Chat's mic) or the wake word. */
+  trigger: "ptt" | "wake";
+  /** How long Matthew spoke. */
+  speechMs: number;
+  /** The model asked (Settings → voiceModel, or the chat's). */
+  model?: string;
+  stages: VoiceLatencyStages;
+}
+
+/** p50/p90 over the last 20 turns that reached audioStart; each stage's p50 shows where time goes. */
+export interface VoiceLatencySummary {
+  /** Turns with a first word among the last 20 reported. */
+  turns: number;
+  /** ms from the end of speech to the first word; null with no turns yet. */
+  p50: number | null;
+  p90: number | null;
+  /** Each stage's median, in pipeline order (only stages some turn reached). */
+  stages: { stage: VoiceLatencyStage; p50: number }[];
+  /** The most recent turn reported (also one that never got to a first word). */
+  last?: VoiceLatencyTurn;
 }
 
 // ── Notion window (JD-34): search, pinned + recent pages, and a read view of one page ──

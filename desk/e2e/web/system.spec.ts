@@ -58,7 +58,8 @@ test("system: a fresh container with nothing reported", async ({ page }) => {
   await expect(page.getByText("This login doesn't report plan limits.")).toBeVisible();
   await expect(page.getByText("No routine set up (ROUTINE_ID)")).toBeVisible();
   await expect(page.getByText("History builds up while JARVIS runs.")).toBeVisible();
-  await expect(page.getByText("No Macs paired.")).toBeVisible();
+  await expect(page.getByText("No Macs paired.")).toBeAttached();
+  await expect(page.getByText(/No voice turns timed yet/)).toBeVisible();
   await expectWindowSnapshot(page, "system-quiet");
 });
 
@@ -66,4 +67,27 @@ test("system: loading", async ({ page }) => {
   await openWindow(page, "system", "system-loading");
   await expect(page.getByText("Loading…")).toBeVisible();
   await expect(page.getByRole("meter")).toHaveCount(0);
+});
+
+test("system: voice latency on target, with where the time goes (JD-48)", async ({ page }) => {
+  await openWindow(page, "system", "system");
+  await waitForBridgeIdle(page);
+  const panel = page.locator(".system-latency");
+  await expect(panel.getByRole("heading", { name: "VOICE · FIRST WORD" })).toBeVisible();
+  await expect(panel.locator('.latency-stat[data-verdict="met"]')).toHaveCount(2);
+  await expect(panel.locator(".latency-stat-value").first()).toHaveCSS("color", "rgb(95, 212, 154)");
+  await expect(panel.getByRole("img", { name: /^Where the time goes: Silence wait 704 ms/ })).toBeVisible();
+  await expect(panel.locator(".latency-segment")).toHaveCount(7);
+  await expect(panel).toContainText("Biggest: Brain (720 ms).");
+});
+
+test("system: voice latency over target on a slow brain", async ({ page }) => {
+  await openWindow(page, "system", "system-latency-slow");
+  await waitForBridgeIdle(page);
+  const panel = page.locator(".system-latency");
+  await expect(panel.locator('.latency-stat[data-verdict="missed"]')).toHaveCount(2);
+  await expect(panel.locator(".latency-stat-value").first()).toHaveCSS("color", RED);
+  await expect(panel).toContainText("3.4 s");
+  await expect(panel).toContainText("Last turn: no first word · push-to-talk · sonnet.");
+  await expectWindowSnapshot(page, "system-latency-slow");
 });

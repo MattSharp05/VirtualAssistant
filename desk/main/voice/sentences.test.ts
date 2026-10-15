@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { SentenceSplitter, speakable, splitLine } from "./sentences";
+import { firstClause, SentenceSplitter, speakable, splitLine } from "./sentences";
 
 /** Streams `text` in chunks of `size` characters, then flushes: every sentence, in order. */
 function stream(text: string, size = 3): string[] {
@@ -111,5 +111,46 @@ describe("speakable", () => {
   it("drops stray markdown symbols but keeps dashes", () => {
     expect(speakable("Use 2*3 today")).toBe("Use 2 3 today");
     expect(speakable("Plan - then act.")).toBe("Plan - then act.");
+  });
+});
+
+describe("first clause (JD-48)", () => {
+  const long = "You have three meetings this afternoon, starting with the design review at two";
+
+  it("hands out a long first sentence up to its last comma, then carries on as usual", () => {
+    const s = new SentenceSplitter({ firstClauseChars: 60 });
+    expect(s.push(long.slice(0, 50))).toEqual([]);
+    expect(s.push(long.slice(50))).toEqual(["You have three meetings this afternoon,"]);
+    expect(s.said).toBe(1);
+    expect(s.push(", then the standup, then lunch")).toEqual([]); // only the first sentence is cut
+    expect(s.push(". Anything else?")).toEqual([
+      "starting with the design review at two, then the standup, then lunch.",
+    ]);
+    expect(s.flush()).toEqual(["Anything else?"]);
+    expect(s.said).toBe(3);
+    // The next reply (after a flush) may cut its first sentence again.
+    expect(s.push(long)).toEqual(["You have three meetings this afternoon,"]);
+  });
+
+  it("leaves short sentences, and splitters without the option, alone", () => {
+    expect(new SentenceSplitter({ firstClauseChars: 60 }).push("Sure, one moment")).toEqual([]);
+    expect(new SentenceSplitter().push(long)).toEqual([]);
+  });
+
+  it("cuts only after 20 characters, never inside a link, code or emphasis, or in 1,000 or 10:30", () => {
+    expect(firstClause(long, 60)).toEqual({
+      text: "You have three meetings this afternoon,",
+      rest: "starting with the design review at two",
+    });
+    expect(firstClause(long, 100)).toBeUndefined();
+    expect(firstClause("Yes, so that's 1,000 people at 10:30 in the main hall today", 40)).toBeUndefined();
+    expect(
+      firstClause("Look at [the plan, the draft, and the notes](https://x.y) before Friday", 40),
+    ).toBeUndefined();
+    expect(firstClause("The **budget, as agreed, is** still open for the whole team", 40)).toBeUndefined();
+    expect(firstClause("Your calendar is clear this morning; the afternoon is busy with calls", 40)).toEqual({
+      text: "Your calendar is clear this morning;",
+      rest: "the afternoon is busy with calls",
+    });
   });
 });
