@@ -1,8 +1,8 @@
 // The Today digest (JD-17), typed as the server's Digest so the preview and the real thing match.
-import type { TodayResponse } from "@jarvis/shared";
+import type { BriefResponse, TaskItem, TasksResponse, TodayResponse } from "@jarvis/shared";
 import type { ScenarioPart } from "../types";
 
-const today: TodayResponse = {
+export const today: TodayResponse = {
   running: false,
   ageSeconds: 420,
   digest: {
@@ -81,6 +81,24 @@ const today: TodayResponse = {
   },
 };
 
-const part: ScenarioPart = { data: { "/today": today } };
+const due = today.digest!.tasksDue;
+const withStatus = (t: TaskItem, status: TaskItem["status"]): TaskItem => ({ ...t, status });
+const brief: BriefResponse = { messageId: "brief-1" };
+const dueToday: TasksResponse = { view: "today", tasks: due };
+
+/** What the Today window's buttons call (JD-33): refresh, tick or untick a to-do, play the brief. */
+export const todayActions: Record<string, unknown> = {
+  "/today/refresh": { started: true },
+  "/tasks?view=today": dueToday,
+  ...Object.fromEntries(
+    due.flatMap((t) => [
+      [`/tasks/${t.id}/done`, withStatus(t, "Done")],
+      [`/tasks/${t.id}/reopen`, withStatus(t, "Open")],
+    ]),
+  ),
+  "/brief": brief,
+};
+
+const part: ScenarioPart = { data: { "/today": today, ...todayActions } };
 
 export default part;
