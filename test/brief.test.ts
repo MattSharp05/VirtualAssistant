@@ -7,7 +7,9 @@ import type { BrainChannel, BriefResponse, ChatResponse, DeskEvent, Digest } fro
 import type { BrainReply, ChatOptions } from "../src/brain/index.js";
 import { briefPrompt, BriefService, dayIn, overnightSince, useBrief, type BriefBrain } from "../src/brief.js";
 import briefRoute from "../src/desk/routes/brief.js";
-import chatRoute from "../src/desk/routes/chat.js";
+import chatRoutes from "../src/desk/routes/chat.js";
+
+const chatRoute = chatRoutes.find((r) => r.method === "POST" && r.path === "/chat")!;
 import type { DeskContext } from "../src/desk/routes/index.js";
 import { EventBus } from "../src/events.js";
 import type { JobResult, JobRunner } from "../src/jobs/index.js";

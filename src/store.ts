@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import type { BrainChannel, BrainMetrics } from "@jarvis/shared";
+import type { BrainChannel, BrainMetrics, ChatStep } from "@jarvis/shared";
 import { join } from "node:path";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -52,10 +52,14 @@ export interface BrainMessage {
   channel: BrainChannel;
   text: string;
   metrics?: BrainMetrics;
+  /** The tools JARVIS used for this reply (warm brain only). */
+  steps?: ChatStep[];
 }
 
 export interface BrainState {
   sessionId?: string;
+  /** When "new conversation" last ran; the Desk's chat history starts here. */
+  conversationStartedAt?: string;
   model?: string;
   messages: BrainMessage[];
   totals: { replies: number; inputTokens: number; outputTokens: number; ms: number; apiEquivalentUsd: number };

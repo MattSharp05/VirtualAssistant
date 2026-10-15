@@ -16,7 +16,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { BrainChannel, BrainMetrics } from "@jarvis/shared";
+import type { BrainChannel, BrainMetrics, ChatStep } from "@jarvis/shared";
 import type { EventBus } from "../events.js";
 import type { BrainMessage, BrainState } from "../store.js";
 import type { BrainSetup } from "../tools/index.js";
@@ -133,6 +133,8 @@ export class Brain {
   private readonly cwd: string;
   private readonly mcpPath = fileURLToPath(new URL("../mcp.js", import.meta.url));
   private readonly toolListeners = new Set<(e: BrainToolEvent) => void>();
+  /** The tools used so far by each turn in flight, kept with the reply (chat window chips). */
+  private readonly steps = new Map<string, ChatStep[]>();
   private proc?: WarmProcess;
   private idleTimer?: NodeJS.Timeout;
   /** Turns in flight (warm mode); a restart waits for 0. */
@@ -181,7 +183,7 @@ export class Brain {
 
   /** Starts a fresh conversation; the next message no longer re-reads the old one. */
   reset(): void {
-    this.store.updateBrain({ sessionId: undefined });
+    this.store.updateBrain({ sessionId: undefined, conversationStartedAt: new Date().toISOString() });
     this.stop();
   }
 
@@ -240,13 +242,15 @@ export class Brain {
         apiEquivalentUsd: result.total_cost_usd,
       };
       const reply = (result.result ?? "").trim() || (result.is_error ? "Something went wrong on my side." : "(no reply)");
-      this.store.addBrainMessage({ at: new Date().toISOString(), from: "jarvis", channel, text: reply, metrics });
+      const steps = this.steps.get(messageId);
+      this.store.addBrainMessage({ at: new Date().toISOString(), from: "jarvis", channel, text: reply, metrics, ...(steps?.length ? { steps } : {}) });
       this.publish({ type: "brain.done", messageId, text: reply, metrics });
       return { messageId, reply, metrics };
     } catch (err) {
       this.publish({ type: "brain.error", messageId, error: (err as Error).message });
       throw err;
     } finally {
+      this.steps.delete(messageId);
       this.publish({ type: "orb.state", state: "idle" });
     }
   }
@@ -317,6 +321,11 @@ export class Brain {
 
   private toolEvent(e: BrainToolEvent): void {
     this.publish({ type: "brain.tool", messageId: e.messageId, phase: e.phase, name: e.name, input: e.input, summary: e.summary, isError: e.isError });
+    if (e.phase === "result") {
+      const steps = this.steps.get(e.messageId) ?? [];
+      steps.push({ name: e.name, ...(e.summary ? { summary: e.summary } : {}), ...(e.isError ? { isError: true } : {}) });
+      this.steps.set(e.messageId, steps);
+    }
     for (const fn of this.toolListeners) {
       try {
         fn(e);

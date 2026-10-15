@@ -16,6 +16,8 @@ export interface MockBridge extends DeskBridge {
   /** Windows asked for with openWindow, and the frame buttons pressed ("minimize" | "close"), in order. */
   readonly opened: string[];
   readonly frameActions: string[];
+  /** Every request(path, body), in order (e2e checks POSTs reached the "server"). */
+  readonly requests: { path: string; body?: unknown }[];
 }
 
 export function createMockBridge(scenario: Scenario): MockBridge {
@@ -27,6 +29,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
   let orbClicks = 0;
   const opened: string[] = [];
   const frameActions: string[] = [];
+  const requests: { path: string; body?: unknown }[] = [];
 
   const emit = (event: DeskEvent) => {
     for (const fn of listeners) fn(event);
@@ -52,10 +55,13 @@ export function createMockBridge(scenario: Scenario): MockBridge {
       listeners.add(fn);
       return () => listeners.delete(fn);
     },
-    async request<T>(path: string) {
+    async request<T>(path: string, body?: unknown) {
+      requests.push(body === undefined ? { path } : { path, body });
       if (!(path in scenario.data))
         throw new Error(`No mock data for ${path} in scenario "${scenario.name}"`);
-      return structuredClone(scenario.data[path]) as T;
+      // A function answers from the request body (POSTs whose answer echoes what was sent).
+      const entry = scenario.data[path];
+      return structuredClone(typeof entry === "function" ? entry(body) : entry) as T;
     },
     async chat(text, channel = "desk-typed"): Promise<ChatResponse> {
       const messageId = `mock-${++chats}`;
@@ -106,6 +112,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     },
     opened,
     frameActions,
+    requests,
     overlay: {
       setInteractive: (on) => void (interactive = on),
       orbClicked: () => void orbClicks++,
