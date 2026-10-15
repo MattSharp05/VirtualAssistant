@@ -1,5 +1,5 @@
 // JARVIS Tasks for the Desk's To-do window:
-//   GET  /api/desk/tasks?view=today|upcoming|project|done|suggested   → TasksResponse
+//   GET  /api/desk/tasks?view=today|upcoming|project|done|suggested   → TasksResponse (+ notionUrl)
 //   POST /api/desk/tasks { name, due?, project?, priority? }          → TaskItem
 //   POST /api/desk/tasks/:id/done | /reopen                          → TaskItem
 //   POST /api/desk/tasks/:id/accept (→ Open) | /dismiss (→ Dismissed) → TaskItem (suggestions)
@@ -32,7 +32,9 @@ const routes: DeskRoute[] = [
     handler: async ({ url, ctx }): Promise<TasksResponse> => {
       const view = (url.searchParams.get("view") ?? "today") as TaskView;
       if (!VIEWS.includes(view)) throw new DeskHttpError(400, `view must be one of ${VIEWS.join(", ")}`);
-      return { view, tasks: await friendly(() => service(ctx).list(view)) };
+      const tasks = await friendly(() => service(ctx).list(view));
+      const notionUrl = service(ctx).databaseUrl();
+      return { view, tasks, ...(notionUrl ? { notionUrl } : {}) };
     },
   },
   {

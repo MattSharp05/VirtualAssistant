@@ -1,5 +1,5 @@
 // window.desk in the browser: answers requests from the scenario's data, replays its events with
-// their timings, and streams a canned chat reply as brain.* events (like the real server does).
+// their timings (routes answer writes), and streams a canned chat reply as brain.* events (like the real server does).
 import { PROTOCOL_VERSION, type ChatResponse, type DeskBridge, type DeskEvent } from "@jarvis/shared";
 import type { Scenario } from "./types";
 
@@ -24,6 +24,10 @@ export function createMockBridge(scenario: Scenario): MockBridge {
   const listeners = new Set<(event: DeskEvent) => void>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const settings = new Map<string, unknown>();
+  // Each bridge has its own copy, so routes can change it (functions are kept as they are).
+  const data = Object.fromEntries(
+    Object.entries(scenario.data).map(([k, v]) => [k, typeof v === "function" ? v : structuredClone(v)]),
+  );
   let chats = 0;
   let interactive = false;
   let orbClicks = 0;
@@ -57,10 +61,15 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     },
     async request<T>(path: string, body?: unknown) {
       requests.push(body === undefined ? { path } : { path, body });
-      if (!(path in scenario.data))
-        throw new Error(`No mock data for ${path} in scenario "${scenario.name}"`);
+      // A route's events arrive just after its answer, like the server's live stream.
+      const ctx = { data, emit: (event: DeskEvent) => later(0, () => emit(event)) };
+      for (const route of scenario.routes ?? []) {
+        const answer = route(path, body, ctx);
+        if (answer !== undefined) return structuredClone(answer) as T;
+      }
+      if (!(path in data)) throw new Error(`No mock data for ${path} in scenario "${scenario.name}"`);
       // A function answers from the request body (POSTs whose answer echoes what was sent).
-      const entry = scenario.data[path];
+      const entry = data[path];
       return structuredClone(typeof entry === "function" ? entry(body) : entry) as T;
     },
     async chat(text, channel = "desk-typed"): Promise<ChatResponse> {

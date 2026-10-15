@@ -120,6 +120,12 @@ export class TasksService {
     return localDay(this.now());
   }
 
+  /** JARVIS Tasks in Notion (the To-do window's open-in-Notion button), once setup has run. */
+  databaseUrl(): string | undefined {
+    const id = this.currentIds().tasksDatabaseId;
+    return id ? `https://www.notion.so/${id.replace(/-/g, "")}` : undefined;
+  }
+
   /** Every task except dismissed ones (cached 60 s). */
   async all(fresh = false): Promise<TaskItem[]> {
     if (!fresh && this.cache && Date.now() - this.cache.at < CACHE_MS) return this.cache.tasks;

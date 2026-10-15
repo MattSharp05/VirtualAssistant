@@ -146,7 +146,16 @@ describe("Today window", () => {
 
   it("refreshes, then re-reads the digest on today.updated and the to-dos on tasks.changed", async () => {
     const base = findScenario("today")!;
-    const scenario: Scenario = { ...base, data: { ...base.data } };
+    // The bridge copies scenario data when it's made, so the live answers are functions of `live`.
+    const live: Record<string, unknown> = { ...base.data };
+    const scenario: Scenario = {
+      ...base,
+      data: {
+        ...base.data,
+        "/today": () => live["/today"],
+        "/tasks?view=today": () => live["/tasks?view=today"],
+      },
+    };
     const mock = createMockBridge(scenario);
     const listeners = new Set<(e: DeskEvent) => void>();
     const emit = (e: DeskEvent) => act(async () => listeners.forEach((fn) => fn(e)));
@@ -162,16 +171,16 @@ describe("Today window", () => {
     expect(screen.getByRole("button", { name: "Refresh" }).getAttribute("aria-busy")).toBe("true");
 
     // The worker finishes: a new Slack mention.
-    const fresh = structuredClone(scenario.data["/today"] as TodayResponse);
+    const fresh = structuredClone(live["/today"] as TodayResponse);
     fresh.digest!.slack = [{ who: "Alex", where: "DM", line: "New logo is up", at: "2026-10-14T08:59:00Z" }];
-    scenario.data["/today"] = fresh;
+    live["/today"] = fresh;
     await emit({ type: "today.updated", generatedAt: fresh.digest!.generatedAt });
     await settle();
     expect(screen.getByText("New logo is up")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Refresh" }).getAttribute("aria-busy")).toBe("false");
 
     // A to-do was done elsewhere: it leaves the list.
-    scenario.data["/tasks?view=today"] = { view: "today", tasks: fresh.digest!.tasksDue.slice(1) };
+    live["/tasks?view=today"] = { view: "today", tasks: fresh.digest!.tasksDue.slice(1) };
     await emit({ type: "tasks.changed" });
     await settle();
     expect(screen.queryByText("Answer trip: hotel budget")).toBeNull();
