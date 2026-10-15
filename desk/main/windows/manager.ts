@@ -20,8 +20,6 @@ function featureMeta(id: string): FeatureMeta | undefined {
   }
 }
 
-const boundsKey = (id: string) => `window.${id}.bounds`;
-
 export class WindowManager {
   private readonly windows = new Map<string, BrowserWindow>();
 
@@ -76,7 +74,7 @@ export class WindowManager {
       event.preventDefault();
       void shell.openExternal(url);
     });
-    const save = () => this.settings.set(boundsKey(id), win.getBounds());
+    const save = () => this.settings.setBounds(id, win.getBounds());
     win.on("moved", save);
     win.on("resized", save);
     win.on("closed", () => this.windows.delete(id));
@@ -99,7 +97,7 @@ export class WindowManager {
 
   private initialBounds(id: string, meta: FeatureMeta): Rect {
     const primary = screen.getPrimaryDisplay().workArea;
-    const saved = this.settings.get<Rect>(boundsKey(id));
+    const saved = this.settings.bounds(id);
     if (!saved) return centred(meta.defaultSize ?? DEFAULT_SIZE, primary);
     return restoreBounds(
       saved,

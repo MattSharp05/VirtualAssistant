@@ -17,6 +17,15 @@ const bridge: DeskBridge = {
     get: (key) => ipcRenderer.invoke("desk:settings-get", key),
     set: (key, value) => ipcRenderer.invoke("desk:settings-set", key, value),
   },
+  mac: {
+    connection: () => ipcRenderer.invoke("desk:mac-connection"),
+    testConnection: () => ipcRenderer.invoke("desk:mac-test"),
+    pasteSecret: (key) => ipcRenderer.invoke("desk:mac-paste-secret", key),
+    clearSecret: (key) => ipcRenderer.invoke("desk:mac-clear-secret", key),
+    voices: () => ipcRenderer.invoke("desk:mac-voices"),
+    speak: (text, voice, rate) => ipcRenderer.invoke("desk:mac-speak", text, voice, rate),
+    pickFolder: () => ipcRenderer.invoke("desk:mac-pick-folder"),
+  },
   overlay: {
     setInteractive: (on) => ipcRenderer.send("desk:hit", on),
     orbClicked: () => ipcRenderer.send("desk:orb-click"),

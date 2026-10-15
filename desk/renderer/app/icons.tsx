@@ -8,6 +8,7 @@ const paths: Record<string, string> = {
   todo: "M4 4h16v16H4zM8 12l3 3 5-6",
   notion: "M6 3h9l3 3v15H6zM9 9h6M9 13h6M9 17h4",
   system: "M3 12h4l2-6 4 12 2-6h6",
+  settings: "M4 7h9M17 7h3M15 4.5v5M4 17h3M11 17h9M9 14.5v5",
   calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   spark: "M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z",
   orb: "M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z",

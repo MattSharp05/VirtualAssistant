@@ -1,6 +1,6 @@
 // Scenarios drive the mock bridge (web preview, e2e, JARVIS_DESK_SCENARIO): a named, deterministic
 // state plus events replayed with timings (docs/TDD.md → Scenario system).
-import type { DeskEvent } from "@jarvis/shared";
+import type { ConnectionTest, DeskConnection, DeskEvent, VoiceInfo } from "@jarvis/shared";
 
 /** An event replayed `after` ms after the previous one (or after the bridge starts). */
 export interface TimedEvent {
@@ -36,6 +36,19 @@ export interface Scenario extends Required<Omit<ScenarioPart, "routes">> {
   chatReply?: string;
   /** How the UI starts, for states no event leads to (e.g. the launcher ring already open). */
   ui?: ScenarioUi;
+  /** Settings the bridge starts with (a secret's value is true when one is "stored"). */
+  settings?: Record<string, unknown>;
+  /** How the Mac side answers (Settings window, JD-26); see mock/mac.ts for the defaults. */
+  mac?: MockMac;
+}
+
+export interface MockMac {
+  connection?: DeskConnection;
+  /** What Test connection answers once a URL and key are set. */
+  test?: ConnectionTest;
+  voices?: VoiceInfo[];
+  /** What the folder picker returns, in turn (then it's cancelled). */
+  folders?: string[];
 }
 
 export interface ScenarioUi {

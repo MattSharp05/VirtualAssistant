@@ -125,6 +125,11 @@ export class Jarvis {
     return { job, ms: Date.now() - sentAt.getTime() };
   }
 
+  /** The plan's 5-hour and weekly usage (cached for a minute; the Desk's tray polls it). */
+  planUsage(): Promise<PlanUsage> {
+    return this.usage.get();
+  }
+
   /** Cached for 30s: the dashboard polls, and each check spawns the CLI (~1-2s). */
   private async authStatus(): Promise<AuthStatus> {
     if (!this.auth || Date.now() - this.auth.at > 30_000) {

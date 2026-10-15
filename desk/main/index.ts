@@ -1,30 +1,113 @@
-// JARVIS Desk main process: an agent app (no Dock icon, LSUIElement) whose UI is the overlay with
-// the orb (windows/overlay.ts) and the feature windows it opens (windows/manager.ts). Tray and voice
-// arrive in later tickets (docs/TDD.md).
+// JARVIS Desk main process: an agent app (no Dock icon, LSUIElement) that lives in the menu bar
+// (tray.ts) and whose UI is the overlay with the orb (windows/overlay.ts) and the feature windows it
+// opens (windows/manager.ts). Main holds the connection to the server (connection.ts) and the settings
+// (settings.ts); renderers reach both only through the bridge (preload/index.ts). Voice arrives in
+// later tickets (docs/TDD.md).
 import { join } from "node:path";
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
-import { Settings } from "./settings";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, safeStorage } from "electron";
+import type { DeskEvent, DeskSecret, UsageResponse } from "@jarvis/shared";
+import { Connection } from "./connection";
+import { isSecretKey, Settings } from "./settings";
+import { createTray } from "./tray";
+import { listVoices, speak } from "./voices";
 import { WindowManager } from "./windows/manager";
 import { createOverlay } from "./windows/overlay";
 
+const USAGE_EVERY_MS = 5 * 60_000;
+
 app.whenReady().then(() => {
   app.dock?.hide();
-  // No visible menu bar for an agent app, but ⌘Q still quits while JARVIS is focused (tray: JD-26).
+  // No visible menu bar for an agent app, but ⌘Q still quits while JARVIS is focused.
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "JARVIS Desk", submenu: [{ role: "quit" }] }]));
 
-  const settings = new Settings(join(app.getPath("userData"), "settings.json"));
+  const userData = app.getPath("userData");
+  const settings = new Settings({
+    file: join(userData, "settings.json"),
+    secretsFile: join(userData, "secrets.json"),
+    // safeStorage encrypts with a key kept in the macOS Keychain.
+    cipher: {
+      available: () => safeStorage.isEncryptionAvailable(),
+      encrypt: (s) => safeStorage.encryptString(s),
+      decrypt: (b) => safeStorage.decryptString(b),
+    },
+  });
   app.on("before-quit", () => settings.flush());
   const rendererIndex = join(__dirname, "../renderer/dist/index.html");
   const scenario = process.env.JARVIS_DESK_SCENARIO;
   const windows = new WindowManager(rendererIndex, settings, scenario);
 
-  // The bridge's main side (preload/index.ts). Talking to the server needs pairing (JD-26); until
-  // then requests fail clearly.
-  ipcMain.handle("desk:request", () => {
-    throw new Error("Not connected to JARVIS yet: pair this Mac in Settings.");
+  const broadcast = (event: DeskEvent) => {
+    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("desk:event", event);
+  };
+  let usage: UsageResponse | undefined;
+  const connection = new Connection({
+    config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
+    onEvent: broadcast,
+    onStatus: (status) => {
+      if (status.state === "connected") void refreshUsage();
+      tray.refresh();
+    },
   });
-  ipcMain.handle("desk:settings-get", (_e, key: string) => settings.get(key));
-  ipcMain.handle("desk:settings-set", (_e, key: string, value: unknown) => settings.set(key, value));
+  const refreshUsage = async () => {
+    try {
+      usage = await connection.request<UsageResponse>("/usage");
+    } catch {
+      usage = undefined;
+    }
+    tray.refresh();
+  };
+  setInterval(() => connection.status.state === "connected" && void refreshUsage(), USAGE_EVERY_MS);
+
+  const tray = createTray(() => ({ settings: settings.all(), connection: connection.status, usage }), {
+    // The voice loop and the command bar arrive in later tickets; until then both open Chat.
+    talk: () => windows.openWindow("chat"),
+    commandBar: () => windows.openWindow("chat"),
+    layout: () => {}, // JD-37
+    setFace: (face) => settings.set("face", face),
+    setWakeWord: (on) => settings.set("wakeWordEnabled", on),
+    setCameraHands: (on) => settings.set("cameraHands", on),
+    setDnd: (on) => {
+      settings.set("dnd", on);
+      // The server holds Do Not Disturb for Telegram notices too.
+      connection.request("/dnd", { on }).catch(() => {});
+    },
+    openSettings: () => windows.openWindow("settings"),
+    quit: () => app.quit(),
+  });
+  settings.onChange((key) => {
+    if (key === "serverUrl" || key === "deviceKey") connection.restart();
+    tray.refresh();
+  });
+  connection.restart();
+
+  // The bridge's main side (preload/index.ts).
+  ipcMain.handle("desk:request", (_e, path: string, body?: unknown) => connection.request(path, body));
+  ipcMain.handle("desk:settings-get", (_e, key: string) => settings.forRenderer(key));
+  ipcMain.handle("desk:settings-set", (_e, key: string, value: unknown) =>
+    settings.setFromRenderer(key, value),
+  );
+  ipcMain.handle("desk:mac-connection", () => connection.status);
+  ipcMain.handle("desk:mac-test", () => connection.test());
+  ipcMain.handle("desk:mac-paste-secret", async (_e, key: DeskSecret) => {
+    if (!isSecretKey(key)) throw new Error(`Not a secret: ${key}`);
+    settings.setSecret(key, await clipboard.readText());
+  });
+  ipcMain.handle("desk:mac-clear-secret", (_e, key: DeskSecret) => {
+    if (!isSecretKey(key)) throw new Error(`Not a secret: ${key}`);
+    settings.setSecret(key, undefined);
+  });
+  ipcMain.handle("desk:mac-voices", () => listVoices());
+  ipcMain.handle("desk:mac-speak", (_e, text: string, voice: string, rate: number) =>
+    speak(String(text).slice(0, 500), String(voice), Number(rate) || settings.get("speechRate")),
+  );
+  ipcMain.handle("desk:mac-pick-folder", async (e) => {
+    const parent = BrowserWindow.fromWebContents(e.sender);
+    const options: Electron.OpenDialogOptions = { properties: ["openDirectory", "createDirectory"] };
+    const picked = parent
+      ? await dialog.showOpenDialog(parent, options)
+      : await dialog.showOpenDialog(options);
+    return picked.canceled ? undefined : picked.filePaths[0];
+  });
   ipcMain.on("desk:open-window", (_e, id: string, params?: Record<string, string>) =>
     windows.openWindow(id, params),
   );
@@ -36,5 +119,9 @@ app.whenReady().then(() => {
   const overlay = createOverlay(rendererIndex, scenario);
   // The launcher ring opens in the overlay; focus it so Esc reaches the ring.
   ipcMain.on("desk:orb-click", () => overlay.focus());
+
+  // First launch: nothing to connect to yet, so Settings opens (not on a scenario, e.g. the smoke test).
+  if (!scenario && (!settings.get("serverUrl") || !settings.hasSecret("deviceKey")))
+    windows.openWindow("settings");
 });
 app.on("window-all-closed", () => app.quit());
