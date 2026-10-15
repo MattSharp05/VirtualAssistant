@@ -22,7 +22,7 @@ import { authStatus } from "./cloud.js";
 import { loadConfig } from "./config.js";
 import { Jarvis } from "./jarvis.js";
 import { Store } from "./store.js";
-import { SystemMonitor } from "./system.js";
+import { SystemMonitor, useSystemMonitor } from "./system.js";
 import { ToolRegistry, type ToolContext } from "./tools/index.js";
 import { createDashboard, createReportsServer } from "./web.js";
 
@@ -35,6 +35,7 @@ useScheduler(jarvis, scheduler);
 
 const monitor = new SystemMonitor();
 monitor.start();
+useSystemMonitor(jarvis, monitor);
 // The brain's tool server reaches JARVIS on loopback with a token that lives only in this process.
 const internalToken = randomBytes(32).toString("hex");
 const registry = await ToolRegistry.discover();

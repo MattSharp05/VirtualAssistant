@@ -157,3 +157,20 @@ export class SystemMonitor {
     };
   }
 }
+
+/** The process's monitor, registered by index.ts (keyed by the JARVIS instance, so tests get their own). */
+const monitors = new WeakMap<object, SystemMonitor>();
+
+export function useSystemMonitor(owner: object, monitor: SystemMonitor): void {
+  monitors.set(owner, monitor);
+}
+
+/** The registered monitor, or one started on first use (no history yet). */
+export function systemMonitorFor(owner: object): SystemMonitor {
+  let monitor = monitors.get(owner);
+  if (!monitor) {
+    monitor = new SystemMonitor();
+    monitors.set(owner, monitor);
+  }
+  return monitor;
+}
