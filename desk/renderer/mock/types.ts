@@ -20,4 +20,10 @@ export interface Scenario extends Required<ScenarioPart> {
   description: string;
   /** What JARVIS answers in chat (streamed word by word). */
   chatReply?: string;
+  /** How the UI starts, for states no event leads to (e.g. the launcher ring already open). */
+  ui?: ScenarioUi;
+}
+
+export interface ScenarioUi {
+  launcherOpen?: boolean;
 }

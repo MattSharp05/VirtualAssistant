@@ -1,0 +1,116 @@
+/* The glass window frame (mockups 3–10). The BrowserWindow is transparent with macOS vibrancy, so the
+   frame's tinted glass sits on a blurred desktop; the web preview fakes the desktop underneath. */
+html.framed-window,
+html.framed-window body {
+  background: transparent;
+}
+
+html.framed-window.preview body {
+  background:
+    radial-gradient(circle at 20% 80%, #2b3a4a 0, transparent 45%),
+    radial-gradient(circle at 75% 30%, #3a2f45 0, transparent 40%), linear-gradient(160deg, #1d2732, #0f141a);
+}
+
+html.framed-window.preview #root {
+  display: grid;
+  place-items: center;
+}
+
+html.framed-window.preview .window-frame {
+  width: min(var(--window-width), 100vw - 32px);
+  height: min(var(--window-height), 100vh - 32px);
+}
+
+.window-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  /* Matches the native rounded corners of the macOS window it sits in. */
+  border-radius: 12px;
+  background: var(--glass);
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+.window-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 48px;
+  padding: 0 10px 0 16px;
+  border-bottom: 1px solid var(--glass-border);
+  /* Electron: the title bar drags the window; its buttons opt out. */
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.window-icon {
+  display: grid;
+  color: var(--accent);
+}
+
+.window-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+.window-controls {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.window-controls button,
+.window-actions button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.window-controls button:hover,
+.window-actions button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+.window-controls .window-close:hover {
+  background: color-mix(in srgb, var(--red) 70%, transparent);
+  color: white;
+}
+
+.window-controls button:focus-visible,
+.window-actions button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.window-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}

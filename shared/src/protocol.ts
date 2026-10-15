@@ -267,7 +267,12 @@ export interface DeskBridge {
   overlay?: {
     /** True while the pointer is over the orb (or another interactive region): clicks land on JARVIS. */
     setInteractive(on: boolean): void;
-    /** The orb was clicked (the launcher ring arrives in JD-20). */
+    /** The orb was clicked (the overlay opens its launcher ring itself). */
     orbClicked(): void;
+  };
+  /** The window this renderer is in (JD-20): the frame's minimise and close buttons. */
+  frame?: {
+    minimize(): void;
+    close(): void;
   };
 }

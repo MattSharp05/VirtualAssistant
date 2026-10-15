@@ -171,3 +171,81 @@ html.overlay-window #root {
     animation: none !important;
   }
 }
+
+/* The launcher ring (JD-20, mockup 2): buttons on an arc around the orb's centre. */
+.launcher-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+}
+
+.launcher {
+  position: absolute;
+  top: calc(var(--orb-size) / 2);
+  right: calc(var(--orb-size) / 2);
+  width: 0;
+  height: 0;
+}
+
+.launcher-button {
+  --x: 0px;
+  --y: 0px;
+  pointer-events: auto;
+  position: absolute;
+  left: -22px;
+  top: -22px;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: var(--glass);
+  backdrop-filter: blur(16px);
+  color: var(--accent-ink);
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  transform: translate(var(--x), var(--y));
+  animation: launcher-in 180ms ease-out backwards;
+  animation-delay: calc(var(--i) * 25ms);
+}
+
+.launcher-button:hover,
+.launcher-button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--glass));
+  outline: none;
+}
+
+.launcher-label {
+  position: absolute;
+  top: 48px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(10, 14, 18, 0.8);
+  color: var(--ink);
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.launcher-button:hover .launcher-label,
+.launcher-button:focus-visible .launcher-label {
+  opacity: 1;
+}
+
+@keyframes launcher-in {
+  from {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launcher-button {
+    animation: none;
+  }
+}

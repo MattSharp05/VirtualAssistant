@@ -60,7 +60,7 @@ desk/                Electron app (npm workspace)
   e2e/               Playwright: web build specs, electron smoke
 docs/TDD.md, docs/decisions/
 ```
-Every window is a folder under `desk/renderer/features/` with its own CSS and a registry entry (`features/registry.ts`), so tickets adding windows don't collide.
+Every window is a folder under `desk/renderer/features/` with its own CSS, a `feature.ts` (id, title, icon, min/default size; plain data the main process also reads) and an `index.tsx` (the component). `features/registry.ts` discovers them by glob, so tickets adding windows don't collide. Main's window manager (`desk/main/windows/manager.ts`) opens each in a frameless vibrancy window with the shared glass frame (`app/WindowFrame.tsx`) and remembers its bounds.
 
 ## Data & state
 - **Server store** (`/data/jarvis/state.json`, existing): adds `devices` (hashed keys), `calendarLog`, `timers`, `digest` cache, `suggestionSeen` (dedupe keys), brain session ids (chat + worker).

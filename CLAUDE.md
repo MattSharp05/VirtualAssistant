@@ -33,12 +33,12 @@ Full design: `docs/TDD.md` + ADRs in `docs/decisions/`.
 ## Structure
 - `src/` server · `src/brain/` warm brain + worker · `src/desk/` Desk API (auth, SSE, REST)
 - `shared/` protocol types used by both sides
-- `desk/main` Electron main · `desk/preload` bridge · `desk/renderer` React (`features/<window>/` each with its own CSS + registry entry; `mock/scenarios/` for preview and e2e) · `desk/e2e`
+- `desk/main` Electron main · `desk/preload` bridge · `desk/renderer` React (`features/<window>/` each with its own CSS, `feature.ts` metadata and `index.tsx` component; `mock/scenarios/` for preview and e2e) · `desk/e2e`
 - `docs/TDD.md`, `docs/decisions/`
 
 ## Conventions
 - One ticket → one branch → one PR; conventional commits with the ticket ID.
-- Renderer features are self-contained folders registered in `features/registry.ts`; no cross-feature imports.
+- Renderer features are self-contained folders (`feature.ts` + `index.tsx`), discovered by glob in `features/registry.ts` (never edit it to add one); windows render in `app/WindowFrame.tsx`; no cross-feature imports.
 - Changing `shared/protocol.ts` updates both server and desk in the same PR.
 - Never print or open `.env` or tokens; secrets go in `.env` (server) or the Keychain (Mac). Notion writes only to the JARVIS Memory page and JARVIS Tasks database.
 
