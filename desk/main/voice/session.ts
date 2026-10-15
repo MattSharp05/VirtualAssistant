@@ -36,6 +36,8 @@ export interface VoiceSessionDeps {
 export interface ListenOptions {
   /** Leave the orb on "thinking" afterwards (JD-31 hands over to the server's reply); default idle. */
   keepThinking?: boolean;
+  /** Frames heard just before listening began (the wake word's last 500 ms, JD-43), run first. */
+  preRoll?: Int16Array[];
 }
 
 export class VoiceSession {
@@ -118,9 +120,10 @@ export class VoiceSession {
     engine.vad.reset();
     let audio: Int16Array | undefined;
     let reason: EndReason;
+    const preRoll = [...(opts.preRoll ?? [])];
     try {
       outer: for (;;) {
-        const frame = await mic.read();
+        const frame = preRoll.shift() ?? (await mic.read());
         const p = await engine.vad.probability(frame);
         for (const e of endpointer.push(frame, p)) {
           if (e.type === "level") this.orb("listening", e.level);

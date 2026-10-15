@@ -7,7 +7,7 @@
   "main": "dist-electron/main.cjs",
   "scripts": {
     "build": "npm run build:main && npm run build:renderer",
-    "build:main": "esbuild main/index.ts --bundle --platform=node --format=cjs --external:electron --external:@picovoice/pvrecorder-node --external:onnxruntime-node --external:uiohook-napi --alias:@jarvis/shared=../shared/src/protocol.ts --outfile=dist-electron/main.cjs && esbuild preload/index.ts --bundle --platform=node --format=cjs --external:electron --alias:@jarvis/shared=../shared/src/protocol.ts --outfile=dist-electron/preload.cjs",
+    "build:main": "esbuild main/index.ts --bundle --platform=node --format=cjs --external:electron --external:@picovoice/pvrecorder-node --external:@picovoice/porcupine-node --external:onnxruntime-node --external:uiohook-napi --alias:@jarvis/shared=../shared/src/protocol.ts --outfile=dist-electron/main.cjs && esbuild preload/index.ts --bundle --platform=node --format=cjs --external:electron --alias:@jarvis/shared=../shared/src/protocol.ts --outfile=dist-electron/preload.cjs",
     "build:renderer": "vite build",
     "build:web": "vite build --mode web",
     "dev": "vite",
@@ -49,6 +49,7 @@
   },
   "author": "Matthew Sharp",
   "dependencies": {
+    "@picovoice/porcupine-node": "4.0.2",
     "@picovoice/pvrecorder-node": "1.2.9",
     "onnxruntime-node": "1.30.0",
     "uiohook-napi": "1.5.5"

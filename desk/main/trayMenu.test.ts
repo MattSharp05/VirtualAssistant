@@ -13,6 +13,7 @@ const actions = (): TrayActions => ({
   setWakeWord: vi.fn(),
   setCameraHands: vi.fn(),
   setDnd: vi.fn(),
+  notMe: vi.fn(),
   openSettings: vi.fn(),
   checkForUpdates: vi.fn(),
   installUpdate: vi.fn(),
@@ -45,6 +46,7 @@ describe("tray menu (mockup 8)", () => {
       "Ambient (full screen)",
       "—",
       "Wake word “Jarvis”",
+      "That wasn't me",
       "Camera hands",
       "Do not disturb",
       "—",
@@ -122,6 +124,43 @@ describe("tray menu (mockup 8)", () => {
     expect(connectionLine({ state: "unauthorized" })).toBe("Device key not accepted");
     expect(planLine({ available: true, weekly: 7, checkedAt: "" })).toBe("Plan: weekly 7%");
     expect(planLine({ available: false, checkedAt: "" })).toBeUndefined();
+  });
+});
+
+describe("tray menu: wake word (JD-43)", () => {
+  const labels = (s: TrayState) => trayMenu(s, actions()).map((i) => i.label ?? "—");
+
+  it("shows why the wake word can't listen, under its toggle", () => {
+    const items = labels(state({ wake: { line: "Wake word: add Picovoice key in Settings" } }));
+    const at = items.indexOf("Wake word “Jarvis”");
+    expect(items.slice(at, at + 3)).toEqual([
+      "Wake word “Jarvis”",
+      "Wake word: add Picovoice key in Settings",
+      "That wasn't me",
+    ]);
+  });
+
+  it("“That wasn't me” is enabled once there was a trigger, and reports it", () => {
+    const act = actions();
+    const before = trayMenu(state(), act).find((i) => i.label === "That wasn't me")!;
+    expect(before.enabled).toBe(false);
+    const after = trayMenu(state({ wake: { lastTrigger: 1_000 } }), act).find(
+      (i) => i.label === "That wasn't me",
+    )!;
+    expect(after.enabled).toBe(true);
+    after.click!();
+    expect(act.notMe).toHaveBeenCalledOnce();
+  });
+
+  it("hides both when the wake word is off", () => {
+    const off = labels(
+      state({
+        settings: { ...DEFAULT_SETTINGS, wakeWordEnabled: false },
+        wake: { line: "Wake word: add Picovoice key in Settings", lastTrigger: 1 },
+      }),
+    );
+    expect(off).not.toContain("That wasn't me");
+    expect(off).not.toContain("Wake word: add Picovoice key in Settings");
   });
 });
 

@@ -65,3 +65,42 @@ export async function openMic(device: string, pv?: PvRecorderModule): Promise<Mi
     },
   };
 }
+
+/**
+ * One recorder for the wake word and the endpointer (JD-43), never both at once: each acquire() is a
+ * lease that ends the previous holder's (its reads reject). The recorder keeps running across that
+ * hand-over, so the words right after "Jarvis" aren't lost; it stops when the holder stops its lease.
+ */
+export class SharedMic {
+  private mic?: Promise<Mic>;
+  private holder = 0;
+  /** Reads go to the recorder one at a time, also across a hand-over. */
+  private reads: Promise<unknown> = Promise.resolve();
+
+  constructor(private readonly open: () => Promise<Mic>) {}
+
+  async acquire(): Promise<Mic> {
+    const id = ++this.holder;
+    const opening = (this.mic ??= this.open().catch((err) => {
+      this.mic = undefined;
+      throw err;
+    }));
+    const mic = await opening;
+    const current = () => id === this.holder && this.mic === opening;
+    const handedOver = () => Promise.reject(new Error("The mic was handed over."));
+    return {
+      read: () => {
+        if (!current()) return handedOver();
+        const next = this.reads.then(() => (current() ? mic.read() : handedOver()));
+        this.reads = next.catch(() => undefined);
+        return next;
+      },
+      stop: () => {
+        if (!current()) return;
+        this.holder++;
+        this.mic = undefined;
+        mic.stop();
+      },
+    };
+  }
+}

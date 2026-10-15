@@ -11,6 +11,9 @@ files:
   # Voice's native modules (dependencies, ADR 0004) ship binaries for every platform; keep the Mac's.
   - "!**/node_modules/onnxruntime-node/bin/napi-v*/{linux,win32}/**"
   - "!**/node_modules/@picovoice/pvrecorder-node/lib/{linux,windows,raspberry-pi}/**"
+  - "!**/node_modules/@picovoice/porcupine-node/lib/{linux,windows,raspberry-pi}/**"
+  - "!**/node_modules/@picovoice/porcupine-node/resources/keyword_files/{linux,windows,raspberry-pi}/**"
+  - "!**/node_modules/@picovoice/porcupine-node/{src,test}/**"
   - "!**/node_modules/uiohook-napi/prebuilds/{linux,win32}-*/**"
   - "!**/node_modules/uiohook-napi/{libuiohook,src}/**"
 asar: true
@@ -18,6 +21,9 @@ asar: true
 asarUnpack:
   - "**/*.node"
   - "**/*.dylib"
+  # Porcupine's model and keyword files are read by its native code (JD-43).
+  - "**/node_modules/@picovoice/porcupine-node/lib/common/**"
+  - "**/node_modules/@picovoice/porcupine-node/resources/keyword_files/mac/**"
   # Camera hands' MediaPipe runtime and model (JD-42), loaded by the overlay renderer.
   - "renderer/dist/mediapipe/**"
 # whisper-cli (arm64, Metal), built by CI into vendor/whisper (JD-24); looked up in Resources/whisper.
@@ -26,6 +32,9 @@ extraResources:
     to: whisper
     filter:
       - whisper-cli
+  # The wake word's chime (JD-43), played with afplay.
+  - from: resources/chime.wav
+    to: chime.wav
 mac:
   target:
     - target: dmg
