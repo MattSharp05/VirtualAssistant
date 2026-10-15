@@ -8,6 +8,8 @@ type Mac = NonNullable<DeskBridge["mac"]>;
 export interface MockMacLog {
   /** Every sample spoken, in order. */
   spoken: { text: string; voice: string; rate: number }[];
+  /** How many times Settings → Test ran the status files (JD-45). */
+  statusTests: number;
 }
 
 const VOICES: VoiceInfo[] = [
@@ -20,9 +22,13 @@ const VOICES: VoiceInfo[] = [
 
 export function createMockMac(scenario: Scenario, settings: Map<string, unknown>): Mac & MockMacLog {
   const spoken: MockMacLog["spoken"] = [];
+  let statusTests = 0;
   const folders = [...(scenario.mac?.folders ?? [])];
   return {
     spoken,
+    get statusTests() {
+      return statusTests;
+    },
     connection: async () => scenario.mac?.connection ?? { state: "unconfigured" },
     async testConnection() {
       if (!settings.get("serverUrl")) return { ok: false, error: "Add the server URL first." };
@@ -35,5 +41,14 @@ export function createMockMac(scenario: Scenario, settings: Map<string, unknown>
     voices: async () => structuredClone(scenario.mac?.voices ?? VOICES),
     speak: async (text, voice, rate) => void spoken.push({ text, voice, rate }),
     pickFolder: async () => folders.shift(),
+    async testStatusFiles() {
+      const dirs = settings.get("statusFiles") as
+        { barehandsDir?: string; visualizerDir?: string } | undefined;
+      if (!dirs?.barehandsDir && !dirs?.visualizerDir)
+        throw new Error("Choose a barehands or visualizer folder first.");
+      statusTests++;
+      // Main takes ~6 s (four states × 1.5 s); the preview stays quick.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    },
   };
 }

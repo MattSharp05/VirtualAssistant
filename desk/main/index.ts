@@ -22,6 +22,7 @@ import {
   type DeskSecret,
   type FsListRequest,
   type FsReadRequest,
+  type MoodResponse,
   type UsageResponse,
 } from "@jarvis/shared";
 import { Connection } from "./connection";
@@ -29,6 +30,7 @@ import { MacFiles } from "./rpcHandlers/fs";
 import { askLayoutName, Layouts } from "./rpcHandlers/layout";
 import { answerRpc, type RpcHandler } from "./rpcHandlers";
 import { isSecretKey, Settings } from "./settings";
+import { StatusFileWriter } from "./statusFiles";
 import { createTray } from "./tray";
 import { createVoice } from "./voice";
 import { Uploader, type UploadSource } from "./uploads";
@@ -65,7 +67,12 @@ app.whenReady().then(() => {
   if (!globalShortcut.register(COMMAND_BAR_SHORTCUT, () => commandBar.toggle()))
     console.warn(`${COMMAND_BAR_SHORTCUT} is taken by another app; the tray still opens the command bar`);
 
+  // barehands / ai-visualizer status files (JD-45) follow every orb state and mood main broadcasts.
+  const statusFiles = new StatusFileWriter({ dirs: () => settings.get("statusFiles") });
+  statusFiles.refresh(); // a face starts from idle, not from where the last run left it
+  settings.onChange((key) => key === "statusFiles" && statusFiles.refresh());
   const broadcast = (event: DeskEvent) => {
+    statusFiles.onEvent(event);
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send("desk:event", event);
   };
   const voice = createVoice({
@@ -114,7 +121,14 @@ app.whenReady().then(() => {
       else void answerRpc(event, rpcHandlers, (path, answer) => connection.request(path, answer));
     },
     onStatus: (status) => {
-      if (status.state === "connected") void refreshUsage();
+      if (status.state === "connected") {
+        void refreshUsage();
+        // mood.json starts from the server's current mood; mood.changed keeps it current.
+        connection
+          .request<MoodResponse>("/mood")
+          .then((m) => statusFiles.setMood(m.mood))
+          .catch(() => {});
+      }
       tray.refresh();
     },
   });
@@ -200,6 +214,7 @@ app.whenReady().then(() => {
       if (!e.sender.isDestroyed()) e.sender.send("desk:upload-progress", token, fraction);
     }),
   );
+  ipcMain.handle("desk:mac-status-test", () => statusFiles.test());
   ipcMain.on("desk:open-window", (_e, id: string, params?: Record<string, string>) =>
     // The command bar has its own window; the drop card's Ask opens it prefilled (JD-40).
     id === "commandbar" ? commandBar.open(params) : windows.openWindow(id, params),

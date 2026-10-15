@@ -8,6 +8,7 @@ import {
   type PttKey,
   type StatusFiles,
 } from "../../../main/settingsSchema";
+import { StatusFilesTest } from "./Faces";
 import { errorText, useSettings, type SecretsStored } from "./useSettings";
 import "./settings.css";
 
@@ -615,12 +616,12 @@ function FacesSection({
     {
       key: "barehandsDir",
       label: "Barehands status",
-      hint: "Optional: a folder whose status files the face shows.",
+      hint: "Optional: barehands' state/ folder. JARVIS writes its state, mood and voice wave there.",
     },
     {
       key: "visualizerDir",
       label: "Visualizer status",
-      hint: "Optional: a folder whose status files the face shows.",
+      hint: "Optional: ai-visualizer's folder. JARVIS writes .voice_state and .voice_waveform there.",
     },
   ];
   return (
@@ -677,6 +678,7 @@ function FacesSection({
           </Row>
         );
       })}
+      <StatusFilesTest bridge={bridge} dirs={values.statusFiles} />
       <ErrorText>{errors.statusFiles ?? errors.face}</ErrorText>
     </Section>
   );
