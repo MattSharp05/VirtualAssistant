@@ -2,10 +2,11 @@
 // behind the renderer's glass frame (app/WindowFrame.tsx). One window per feature id; its bounds are
 // saved as it moves or resizes and restored next time, clamped to the displays that are connected.
 import { join } from "node:path";
-import { BrowserWindow, screen } from "electron";
+import { BrowserWindow, screen, shell } from "electron";
 import { DEFAULT_MIN_SIZE, DEFAULT_SIZE, type FeatureMeta } from "../../renderer/features/types";
 import type { Settings } from "../settings";
 import { centred, restoreBounds, type Rect } from "./bounds";
+import { isExternalLink, parseWindowId } from "./target";
 
 /** A feature's metadata, read from renderer/features/<id>/feature.ts (esbuild bundles every match). */
 function featureMeta(id: string): FeatureMeta | undefined {
@@ -29,7 +30,10 @@ export class WindowManager {
     private readonly scenario?: string,
   ) {}
 
-  /** Opens the feature's window, or shows and focuses it when it's already open. */
+  /**
+   * Opens the feature's window, or shows and focuses it when it's already open. The id may carry
+   * options ("today?section=inbox"): a separate window, given them in its hash.
+   */
   openWindow(id: string): void {
     const existing = this.windows.get(id);
     if (existing && !existing.isDestroyed()) {
@@ -37,7 +41,8 @@ export class WindowManager {
       existing.focus();
       return;
     }
-    const meta = featureMeta(id);
+    const target = parseWindowId(id);
+    const meta = target && featureMeta(target.feature);
     if (!meta || meta.framed === false) {
       console.warn(`No window called "${id}"`);
       return;
@@ -57,6 +62,16 @@ export class WindowManager {
     });
     this.windows.set(id, win);
     win.once("ready-to-show", () => win.show());
+    // Links (emails, Slack messages, events) open in the default browser, never in a new app window.
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      if (isExternalLink(url)) void shell.openExternal(url);
+      return { action: "deny" };
+    });
+    win.webContents.on("will-navigate", (event, url) => {
+      if (!isExternalLink(url)) return;
+      event.preventDefault();
+      void shell.openExternal(url);
+    });
     const save = () => this.settings.set(boundsKey(id), win.getBounds());
     win.on("moved", save);
     win.on("resized", save);

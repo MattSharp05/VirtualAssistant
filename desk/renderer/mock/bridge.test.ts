@@ -48,6 +48,26 @@ describe("mock bridge", () => {
     bridge.close();
   });
 
+  it("logs every request with its body", async () => {
+    const bridge = createMockBridge(findScenario("demo-day")!);
+    await bridge.request("/today");
+    await bridge.request("/today/refresh", {});
+    expect(bridge.requests).toEqual([{ path: "/today" }, { path: "/today/refresh", body: {} }]);
+    bridge.close();
+  });
+
+  it("opens a window id with options as query parameters", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const bridge = createMockBridge(findScenario("demo-day")!);
+    bridge.openWindow("today?section=inbox");
+    expect(bridge.opened).toEqual(["today?section=inbox"]);
+    const url = new URL(String(open.mock.calls[0][0]));
+    expect(url.searchParams.get("window")).toBe("today");
+    expect(url.searchParams.get("section")).toBe("inbox");
+    open.mockRestore();
+    bridge.close();
+  });
+
   it("streams a canned chat reply as brain.* events", async () => {
     const bridge = createMockBridge({
       name: "t",

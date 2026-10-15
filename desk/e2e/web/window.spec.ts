@@ -20,7 +20,7 @@ test("a launcher button asks for its window", async ({ page }) => {
   await openWindow(page, "overlay", "orb-idle");
   await page.locator("[data-orb-state]").click();
   const popup = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Today", exact: true }).click();
+  await page.getByRole("button", { name: "System", exact: true }).click();
   // Not built yet, so the placeholder window opens.
   await expect(await popup).toHaveURL(/window=hello/);
   await expect(page.locator("[data-launcher-id]")).toHaveCount(0);
