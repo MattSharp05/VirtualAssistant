@@ -59,6 +59,9 @@ const bridge: DeskBridge = {
       }
     },
   },
+  voice: {
+    pushToTalk: () => ipcRenderer.send("desk:voice-ptt"),
+  },
   frame: {
     minimize: () => ipcRenderer.send("desk:frame-minimize"),
     close: () => ipcRenderer.send("desk:frame-close"),

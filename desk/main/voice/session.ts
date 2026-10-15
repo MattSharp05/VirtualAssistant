@@ -11,11 +11,11 @@ import type { Vad } from "./vad";
 export type VoiceState = "idle" | "preparing" | "listening" | "transcribing";
 
 export interface ListenResult {
-  /** "" when nothing was said (or nothing Whisper could write down). */
+  /** "" when nothing was said (or nothing Whisper could write down), or when it was cancelled. */
   text: string;
   /** How long transcription took after Matthew stopped talking. */
   ms: number;
-  reason: EndReason;
+  reason: EndReason | "cancelled";
 }
 
 /** What listen() needs once the models are on disk. */
@@ -43,6 +43,7 @@ export class VoiceSession {
   private engine?: Promise<VoiceEngine>;
   private current?: Promise<ListenResult>;
   private stopRequested = false;
+  private cancelled = false;
 
   constructor(private readonly deps: VoiceSessionDeps) {}
 
@@ -62,6 +63,13 @@ export class VoiceSession {
   /** Ends the current listen early (what was said so far is still transcribed). */
   stop(): void {
     if (this.stateNow === "listening" || this.stateNow === "preparing") this.stopRequested = true;
+  }
+
+  /** Ends the current listen and throws away what was said (push-to-talk's second double-tap). */
+  cancel(): void {
+    if (this.stateNow === "idle") return;
+    this.cancelled = true;
+    this.stopRequested = true;
   }
 
   /** Loads the models now (first run: downloads them) so the first listen() starts at once. */
@@ -84,6 +92,7 @@ export class VoiceSession {
   private async run(opts: ListenOptions): Promise<ListenResult> {
     const now = this.deps.now ?? Date.now;
     this.stopRequested = false;
+    this.cancelled = false;
     this.stateNow = "preparing";
     let engine: VoiceEngine;
     try {
@@ -91,6 +100,10 @@ export class VoiceSession {
     } catch (err) {
       this.orb("idle");
       throw err;
+    }
+    if (this.cancelled) {
+      this.orb("idle");
+      return { text: "", ms: 0, reason: "cancelled" };
     }
     let mic: Mic;
     try {
@@ -129,15 +142,20 @@ export class VoiceSession {
       mic.stop();
     }
 
-    if (!audio) {
+    if (this.cancelled || !audio) {
       this.orb("idle");
-      return { text: "", ms: 0, reason };
+      return { text: "", ms: 0, reason: this.cancelled ? "cancelled" : reason };
     }
     this.stateNow = "transcribing";
     this.orb("thinking");
     const started = now();
     try {
       const text = await engine.transcribe(audio);
+      // Cancelled while Whisper was busy: the words are dropped, not sent.
+      if (this.cancelled) {
+        this.orb("idle");
+        return { text: "", ms: now() - started, reason: "cancelled" };
+      }
       if (!opts.keepThinking || !text) this.orb("idle");
       return { text, ms: now() - started, reason };
     } catch (err) {

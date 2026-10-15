@@ -25,4 +25,13 @@ describe("isExternalLink", () => {
     expect(isExternalLink("file:///etc/passwd")).toBe(false);
     expect(isExternalLink("javascript:alert(1)")).toBe(false);
   });
+
+  it("lets the Privacy & Security panes of System Settings out (permission cards)", () => {
+    expect(
+      isExternalLink("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent"),
+    ).toBe(true);
+    expect(isExternalLink("x-apple.systempreferences:com.apple.preference.security")).toBe(true);
+    expect(isExternalLink("x-apple.systempreferences:com.apple.preference.network")).toBe(false);
+    expect(isExternalLink("x-apple.systempreferences:com.apple.preference.security?a=1&b")).toBe(false);
+  });
 });

@@ -6,7 +6,7 @@ import { record, type Segment } from "./fixtures";
 import { VoiceSession, type VoiceSessionDeps } from "./session";
 
 /** A mic that plays a recording; the fake VAD looks each frame's probability up. */
-function setup(segments: Segment[], over: Partial<VoiceSessionDeps> = {}) {
+function setup(segments: Segment[], over: Partial<VoiceSessionDeps> = {}, onTranscribe?: () => void) {
   const { frames, probabilities } = record(segments);
   const prob = new Map(frames.map((f, i) => [f, probabilities[i]]));
   const events: DeskEvent[] = [];
@@ -29,6 +29,7 @@ function setup(segments: Segment[], over: Partial<VoiceSessionDeps> = {}) {
         vad: { probability: async (f) => prob.get(f) ?? 0, reset: () => void log.push("vad reset") },
         transcribe: async (audio) => {
           log.push(`transcribe ${audio.length}`);
+          onTranscribe?.();
           clock += 350;
           return "what's on my calendar tomorrow";
         },
@@ -105,6 +106,28 @@ describe("VoiceSession.listen", () => {
     expect(result.reason).toBe("stopped");
     expect(result.text).not.toBe("");
     expect(i).toBe(32);
+  });
+
+  it("cancel() ends at once and drops what was said, even mid-transcription", async () => {
+    let i = 0;
+    const t = setup([["speech", 5000]], {
+      openMic: async () => ({
+        read: async () => {
+          if (i === 31) t.session.cancel();
+          return t.frames[i++];
+        },
+        stop: () => {},
+      }),
+    });
+    expect(await t.session.listen({ keepThinking: true })).toEqual({ text: "", ms: 0, reason: "cancelled" });
+    expect(t.log.some((l) => l.startsWith("transcribe"))).toBe(false);
+    expect(t.orb().at(-1)).toBe("idle");
+
+    // Whisper is already running when the cancel comes: its words are thrown away.
+    const late: ReturnType<typeof setup> = setup(speech, {}, () => late.session.cancel());
+    const result = await late.session.listen({ keepThinking: true });
+    expect(result).toMatchObject({ text: "", reason: "cancelled" });
+    expect(late.orb().at(-1)).toBe("idle");
   });
 
   it("puts the orb back to idle and rethrows when something breaks", async () => {

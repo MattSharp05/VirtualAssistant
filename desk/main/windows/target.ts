@@ -20,7 +20,13 @@ export function parseWindowId(id: string): WindowTarget | undefined {
   return { feature, query };
 }
 
-/** Links in a window (emails, Slack messages, events) open in the default browser; nothing else does. */
+/**
+ * Links in a window (emails, Slack messages, events) open in the default browser; nothing else does,
+ * except System Settings' Privacy & Security panes (permission cards' Open Settings, JD-31).
+ */
 export function isExternalLink(url: string): boolean {
-  return /^(https?|mailto):/i.test(url);
+  return (
+    /^(https?|mailto):/i.test(url) ||
+    /^x-apple\.systempreferences:com\.apple\.preference\.security(\?Privacy_[A-Za-z]+)?$/.test(url)
+  );
 }
