@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useBridgeChoice } from "../../app/bridge";
 import { Icon } from "../../app/icons";
+import { useWindowParam } from "../../app/useWindowParam";
 import { buildResults, type CommandResult } from "./results";
 import { useSources } from "./useSources";
 import "./commandbar.css";
@@ -42,7 +43,12 @@ export function describeResult(r: CommandResult): string {
  */
 export default function CommandBar() {
   const { bridge, scenario } = useBridgeChoice();
-  const [text, setText] = useState("");
+  // Opened from a dropped file's Ask… (JD-40): the question is started and the file goes with it.
+  const prefill = useWindowParam("ask");
+  const attach = useWindowParam("attach");
+  const fileName = useWindowParam("file");
+  const input = useRef<HTMLInputElement>(null);
+  const [text, setText] = useState(prefill ?? "");
   const [active, setActive] = useState(0);
   const [error, setError] = useState<string>();
   const sources = useSources(bridge, text);
@@ -56,6 +62,12 @@ export default function CommandBar() {
     return () => document.documentElement.classList.remove("commandbar-window");
   }, []);
 
+  // Typing carries on after the prefilled words.
+  useEffect(() => {
+    const el = input.current;
+    if (el && prefill) el.setSelectionRange(el.value.length, el.value.length);
+  }, [prefill]);
+
   const close = useCallback(() => bridge.frame?.close(), [bridge]);
 
   const ask = useCallback(
@@ -63,13 +75,13 @@ export default function CommandBar() {
       const q = question.trim();
       if (!q) return;
       try {
-        await bridge.chat(q, "desk-typed");
+        await bridge.chat(q, "desk-typed", attach ? [attach] : undefined);
         close();
       } catch (err) {
         setError(`Couldn't reach JARVIS: ${(err as Error).message}`);
       }
     },
-    [bridge, close],
+    [bridge, close, attach],
   );
 
   const run = useCallback(
@@ -125,7 +137,13 @@ export default function CommandBar() {
       <section className="commandbar-panel" aria-label="Command bar">
         <div className="commandbar-field">
           <Icon name="search" size={20} />
+          {attach && (
+            <span className="commandbar-file" title="Goes with your question">
+              {fileName ?? "file"}
+            </span>
+          )}
           <input
+            ref={input}
             className="commandbar-input"
             aria-label="Ask JARVIS or open a window"
             placeholder="Open a window, a session, a Notion page… or ask JARVIS"

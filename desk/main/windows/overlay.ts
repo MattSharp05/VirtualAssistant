@@ -3,6 +3,7 @@
 // the apps underneath, except while the renderer reports the pointer over the orb (desk:hit).
 import { join } from "node:path";
 import { BrowserWindow, ipcMain, screen, shell } from "electron";
+import { DROP_POLL_MS, inside, orbZone, OverlayMouse } from "./dropZone";
 import { isExternalLink } from "./target";
 
 export function createOverlay(rendererIndex: string, scenario?: string): BrowserWindow {
@@ -27,10 +28,19 @@ export function createOverlay(rendererIndex: string, scenario?: string): Browser
   // Click-through by default; `forward` keeps mouse-move events coming so hover can be detected.
   win.setIgnoreMouseEvents(true, { forward: true });
 
+  const mouse = new OverlayMouse((on) => {
+    if (!win.isDestroyed()) win.setIgnoreMouseEvents(!on, { forward: true });
+  });
   const onHit = (e: Electron.IpcMainEvent, interactive: boolean) => {
-    if (e.sender === win.webContents) win.setIgnoreMouseEvents(!interactive, { forward: true });
+    if (e.sender === win.webContents) mouse.setHit(interactive);
   };
   ipcMain.on("desk:hit", onHit);
+  // File drop (JD-40): the orb's spot takes the mouse while the pointer is on it, so a drag reaches it.
+  const watch = setInterval(
+    () => mouse.setNear(inside(screen.getCursorScreenPoint(), orbZone(win.getBounds()))),
+    DROP_POLL_MS,
+  );
+  win.on("closed", () => clearInterval(watch));
   // Links on cards (JD-27) open in the default browser, never in a new app window.
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (isExternalLink(url)) void shell.openExternal(url);

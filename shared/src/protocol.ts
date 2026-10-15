@@ -643,8 +643,11 @@ export interface DeskBridge {
   subscribe(fn: (event: DeskEvent) => void): () => void;
   /** A Desk API route under /api/desk, e.g. request("/me"); GET without a body, POST with one. */
   request<T = unknown>(path: string, body?: unknown): Promise<T>;
-  /** Talk to JARVIS; the reply arrives through subscribe() as brain.* events with this messageId. */
-  chat(text: string, channel?: ChatRequest["channel"]): Promise<ChatResponse>;
+  /**
+   * Talk to JARVIS; the reply arrives through subscribe() as brain.* events with this messageId.
+   * Attachments are upload ids from files.upload (JD-40).
+   */
+  chat(text: string, channel?: ChatRequest["channel"], attachments?: string[]): Promise<ChatResponse>;
   /**
    * Opens (or focuses) one of the Desk's windows by feature id. Params reach the window as its hash
    * query (`#/sessions?id=mk`), e.g. which session the Sessions window selects (JD-32).
@@ -684,6 +687,13 @@ export interface DeskBridge {
   layouts?: {
     list(): Promise<LayoutSummary[]>;
     apply(name: string): Promise<void>;
+  };
+  /**
+   * Files dropped on the orb or a window (JD-40): main uploads them to POST /api/desk/files (HEIC as
+   * JPEG). Progress is 0…1; rejects with a readable sentence (too big, wrong type, the server's error).
+   */
+  files?: {
+    upload(file: File, onProgress?: (fraction: number) => void): Promise<UploadResponse>;
   };
   /** The window this renderer is in (JD-20): the frame's minimise and close buttons. */
   frame?: {

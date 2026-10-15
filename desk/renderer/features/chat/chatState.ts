@@ -21,6 +21,8 @@ export interface MessageItem {
   at: string;
   metrics?: BrainMetrics;
   steps: ChatStep[];
+  /** Names of the files sent with it (dropped on the window, JD-40). */
+  files?: string[];
   /** The reply is still being written. */
   streaming?: boolean;
   error?: string;
@@ -52,7 +54,7 @@ export const initialChat = (): ChatState => ({ items: [], hasMore: false, today:
 
 export type ChatAction =
   | { type: "history"; messages: ChatMessage[]; hasMore: boolean; today?: ChatTotals }
-  | { type: "sent"; key: string; text: string; at: string }
+  | { type: "sent"; key: string; text: string; at: string; files?: string[] }
   | { type: "acked"; key: string; messageId: string }
   | { type: "failed"; key: string; error: string }
   | { type: "reset" }
@@ -181,6 +183,7 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
         text: action.text,
         at: action.at,
         steps: [],
+        ...(action.files?.length ? { files: action.files } : {}),
       };
       return { ...state, items: [...state.items, mine] };
     }

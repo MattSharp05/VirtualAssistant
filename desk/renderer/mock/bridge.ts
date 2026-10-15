@@ -1,10 +1,21 @@
 // window.desk in the browser: answers requests from the scenario's data, replays its events with
 // their timings (routes answer writes), and streams a canned chat reply as brain.* events (like the real server does).
-import { PROTOCOL_VERSION, type ChatResponse, type DeskBridge, type DeskEvent } from "@jarvis/shared";
+import {
+  PROTOCOL_VERSION,
+  type ChatRequest,
+  type ChatResponse,
+  type DeskBridge,
+  type DeskEvent,
+  type UploadResponse,
+} from "@jarvis/shared";
 import { createMockMac, type MockMacLog } from "./mac";
 import type { Scenario } from "./types";
 
 const WORD_MS = 60;
+/** A mock upload reports progress in these steps, this far apart (JD-40). */
+const UPLOAD_STEPS = [0.3, 0.65, 1];
+const UPLOAD_STEP_MS = 150;
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 /** Scenario data that never answers: the request stays pending (loading states). */
 export const PENDING = Symbol("pending");
@@ -22,6 +33,8 @@ export interface MockBridge extends DeskBridge {
   readonly frameActions: string[];
   /** Every request(path, body), in order (e2e checks POSTs reached the "server"). */
   readonly requests: { path: string; body?: unknown }[];
+  /** Every chat(text, channel, attachments), in order (JD-40 checks a dropped file went with it). */
+  readonly chats: { text: string; channel: ChatRequest["channel"]; attachments?: string[] }[];
   /** The Mac side (Settings): samples spoken. */
   readonly mac: NonNullable<DeskBridge["mac"]> & MockMacLog;
 }
@@ -43,6 +56,8 @@ export function createMockBridge(scenario: Scenario): MockBridge {
   const opened: string[] = [];
   const frameActions: string[] = [];
   const requests: { path: string; body?: unknown }[] = [];
+  const chatLog: MockBridge["chats"] = [];
+  let uploads = 0;
 
   const emit = (event: DeskEvent) => {
     for (const fn of listeners) fn(event);
@@ -84,7 +99,8 @@ export function createMockBridge(scenario: Scenario): MockBridge {
       // A function answers from the request body (POSTs whose answer echoes what was sent).
       return structuredClone(typeof entry === "function" ? entry(body) : entry) as T;
     },
-    async chat(text, channel = "desk-typed"): Promise<ChatResponse> {
+    async chat(text, channel = "desk-typed", attachments): Promise<ChatResponse> {
+      chatLog.push(attachments?.length ? { text, channel, attachments } : { text, channel });
       const messageId = `mock-${++chats}`;
       const reply = scenario.chatReply ?? `(preview) You said: “${text}”. The real JARVIS answers here.`;
       const words = reply.split(/(?<= )/);
@@ -128,6 +144,24 @@ export function createMockBridge(scenario: Scenario): MockBridge {
       get: async <T>(key: string) => settings.get(key) as T | undefined,
       set: async (key, value) => void settings.set(key, value),
     },
+    // Like main + the server: recorded as a POST /files, progress in steps, the server's 20 MB cap.
+    files: {
+      async upload(file, onProgress): Promise<UploadResponse> {
+        requests.push({ path: "/files", body: { name: file.name, size: file.size, type: file.type } });
+        if (file.size > MAX_UPLOAD_BYTES) throw new Error("Files can be up to 20 MB.");
+        const id = `upload-${++uploads}`;
+        onProgress?.(0);
+        await new Promise<void>((resolve) =>
+          UPLOAD_STEPS.forEach((f, i) =>
+            later(UPLOAD_STEP_MS * (i + 1), () => {
+              onProgress?.(f);
+              if (f === 1) resolve();
+            }),
+          ),
+        );
+        return { id, path: `/data/jarvis/uploads/${id}/${file.name}`, name: file.name };
+      },
+    },
     pending: () => timers.size,
     get interactive() {
       return interactive;
@@ -138,6 +172,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     opened,
     frameActions,
     requests,
+    chats: chatLog,
     mac: createMockMac(scenario, settings),
     overlay: {
       setInteractive: (on) => void (interactive = on),

@@ -31,6 +31,7 @@ import { answerRpc, type RpcHandler } from "./rpcHandlers";
 import { isSecretKey, Settings } from "./settings";
 import { createTray } from "./tray";
 import { createVoice } from "./voice";
+import { Uploader, type UploadSource } from "./uploads";
 import { listVoices, speak } from "./voices";
 import { createAmbient } from "./windows/ambient";
 import { CommandBar, COMMAND_BAR_SHORTCUT } from "./windows/commandbar";
@@ -190,8 +191,18 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("desk:layouts-list", () => layouts.list());
   ipcMain.handle("desk:layouts-apply", (_e, name: string) => void layouts.apply(String(name)));
+  // Files dropped on the orb or a window (JD-40); progress goes back to the window that asked.
+  const uploader = new Uploader({
+    config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
+  });
+  ipcMain.handle("desk:upload", (e, source: UploadSource, token: string) =>
+    uploader.upload(source, (fraction) => {
+      if (!e.sender.isDestroyed()) e.sender.send("desk:upload-progress", token, fraction);
+    }),
+  );
   ipcMain.on("desk:open-window", (_e, id: string, params?: Record<string, string>) =>
-    windows.openWindow(id, params),
+    // The command bar has its own window; the drop card's Ask opens it prefilled (JD-40).
+    id === "commandbar" ? commandBar.open(params) : windows.openWindow(id, params),
   );
   // A window's own frame buttons. Minimise hides it (an agent app has no Dock to minimise to); the
   // launcher brings it back where it was.

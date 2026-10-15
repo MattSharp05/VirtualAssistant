@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useBridgeChoice } from "../../app/bridge";
-import { CardsLayer } from "./cards/CardsLayer";
+import { CardsLayer, Hit } from "./cards/CardsLayer";
+import { DropCard, DropRing, useFileDrop } from "./DropZone";
 import { HitRegions } from "./hitRegions";
 import { Launcher } from "./Launcher";
 import { Orb } from "./Orb";
@@ -8,14 +9,15 @@ import { useOrb } from "./useOrb";
 import "./overlay.css";
 
 /**
- * The see-through layer over every app, with the orb in the top-right corner, its launcher ring and
- * the cards beside it (JD-27).
+ * The see-through layer over every app, with the orb in the top-right corner, its launcher ring, the
+ * cards beside it (JD-27) and file drop on the orb (JD-40).
  */
 export function Overlay() {
   const { bridge, scenario, ui } = useBridgeChoice();
   const orb = useOrb(bridge);
   const hits = useMemo(() => new HitRegions((on) => bridge.overlay?.setInteractive(on)), [bridge]);
   const [ring, setRing] = useState(ui?.launcherOpen ?? false);
+  const drop = useFileDrop(bridge, hits);
 
   // The window itself must be see-through.
   useEffect(() => {
@@ -43,6 +45,7 @@ export function Overlay() {
   return (
     <main className={`overlay${scenario ? " overlay-preview" : ""}`}>
       <div className="overlay-corner" style={{ "--orb-size": `${orbSize}px` } as CSSProperties}>
+        {drop.dragging && <DropRing orbSize={orbSize} />}
         {ring && <Launcher orbSize={orbSize} onOpen={open} onClose={close} />}
         <Orb
           {...orb}
@@ -54,7 +57,17 @@ export function Overlay() {
           }}
         />
       </div>
-      <CardsLayer bridge={bridge} hits={hits} />
+      <CardsLayer
+        bridge={bridge}
+        hits={hits}
+        pinned={
+          drop.card && (
+            <Hit hits={hits} id="drop-card">
+              <DropCard drop={drop} />
+            </Hit>
+          )
+        }
+      />
     </main>
   );
 }

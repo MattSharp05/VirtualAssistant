@@ -147,3 +147,18 @@ html.commandbar-window #root {
   letter-spacing: 0.04em;
   color: var(--ink-3);
 }
+
+/* A dropped file the question goes with (the drop card's Ask…, JD-40). */
+.commandbar-file {
+  flex: none;
+  max-width: 200px;
+  padding: 3px 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

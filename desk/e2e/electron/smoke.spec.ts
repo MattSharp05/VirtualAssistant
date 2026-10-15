@@ -100,6 +100,13 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
     await applyLayout("Focus");
     await expect.poll(titles, { timeout: 10_000 }).toEqual([]);
 
+    // JD-40: the bridge uploads files dropped on the orb or a window.
+    expect(
+      await window.evaluate(
+        () => typeof (globalThis as unknown as { desk: { files?: { upload?: unknown } } }).desk.files?.upload,
+      ),
+    ).toBe("function");
+
     const shot = testInfo.outputPath("electron-smoke.png");
     await window.screenshot({ path: shot });
     await testInfo.attach("app", { path: shot, contentType: "image/png" });
