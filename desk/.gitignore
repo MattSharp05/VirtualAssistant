@@ -6,3 +6,6 @@ renderer/dist-web
 test-results
 playwright-report
 vendor
+# Camera hands' model, downloaded at build time (resources/mediapipe/assets.ts)
+resources/mediapipe/*.task
+resources/mediapipe/*.part

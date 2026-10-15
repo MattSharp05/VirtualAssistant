@@ -64,6 +64,8 @@ export type DeskEvent =
   | { type: "reminder.due"; id: string; text: string; late: boolean }
   /** A session reported in or was messaged (JD-32); the Sessions window re-fetches /sessions. */
   | { type: "sessions.changed" }
+  /** A Desk setting changed on this Mac (main → its windows; never from the server): re-read it with settings.get. */
+  | { type: "settings.changed"; key: string }
   /** The server asks the Mac for something (a file, the clipboard…); the Desk answers with POST /api/desk/rpc/:id. */
   | { type: "rpc"; id: string; kind: string; payload: unknown };
 

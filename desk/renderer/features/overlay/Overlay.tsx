@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useBridgeChoice } from "../../app/bridge";
+import { HandsLayer } from "../hands/HandsLayer";
 import { CardsLayer, Hit } from "./cards/CardsLayer";
 import { DropCard, DropRing, useFileDrop } from "./DropZone";
 import { HitRegions } from "./hitRegions";
@@ -10,7 +11,8 @@ import "./overlay.css";
 
 /**
  * The see-through layer over every app, with the orb in the top-right corner, its launcher ring, the
- * cards beside it (JD-27) and file drop on the orb (JD-40).
+ * cards beside it (JD-27), file drop on the orb (JD-40) and the hand pointers while Camera hands is on
+ * (JD-42).
  */
 export function Overlay() {
   const { bridge, scenario, ui } = useBridgeChoice();
@@ -68,6 +70,7 @@ export function Overlay() {
           )
         }
       />
+      <HandsLayer bridge={bridge} />
     </main>
   );
 }

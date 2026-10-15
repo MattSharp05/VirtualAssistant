@@ -142,7 +142,10 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     },
     settings: {
       get: async <T>(key: string) => settings.get(key) as T | undefined,
-      set: async (key, value) => void settings.set(key, value),
+      set: async (key, value) => {
+        settings.set(key, value);
+        emit({ type: "settings.changed", key });
+      },
     },
     // Like main + the server: recorded as a POST /files, progress in steps, the server's 20 MB cap.
     files: {
