@@ -21,17 +21,19 @@ export interface JobDef<T = unknown, R = T> {
   name: string;
   /** The structured-output tool the worker must call exactly once. */
   submitTool: { name: string; description: string; inputSchema: JsonSchema };
-  /** The worker's instructions for one run. */
-  prompt(now: Date, ctx: ToolContext): string;
+  /** The worker's instructions for one run (`params`: what the caller asked for, e.g. a date range). */
+  prompt(now: Date, ctx: ToolContext, params?: JobParams): string;
   /** Checks the submitted input; throws with a reason the worker can read. */
   validate(input: unknown): T;
   /** Adds what the server knows itself (tasks, reports…) to the worker's result. */
-  finish?(data: T, ctx: ToolContext, now: Date): Promise<R>;
+  finish?(data: T, ctx: ToolContext, now: Date, params?: JobParams): Promise<R>;
   /** Runs every `minutes` between `fromHour` and `toHour` (local time, TZ). */
   schedule?: { minutes: number; fromHour: number; toHour: number };
   /** Published after a successful run. */
   event?(result: R): DeskEvent;
 }
+
+export type JobParams = Record<string, string>;
 
 export interface JobResult<R = unknown> {
   at: string;
@@ -111,15 +113,15 @@ export class JobRunner {
   }
 
   /** Runs a job now (queued behind any running one). Keeps the last good result on failure. */
-  run(name: string): Promise<JobResult | undefined> {
+  run(name: string, params?: JobParams): Promise<JobResult | undefined> {
     const job = this.jobs.get(name);
     if (!job) return Promise.reject(new JarvisError(`No job ${name}.`));
-    const run = this.queue.then(() => this.runOne(job));
+    const run = this.queue.then(() => this.runOne(job, params));
     this.queue = run.catch(() => undefined);
     return run;
   }
 
-  private async runOne(job: JobDef): Promise<JobResult | undefined> {
+  private async runOne(job: JobDef, params?: JobParams): Promise<JobResult | undefined> {
     this.running.add(job.name);
     const started = this.now();
     void this.file.update((f) => ({ ...f, lastRun: { ...f.lastRun, [job.name]: started.toISOString() } }));
@@ -127,7 +129,7 @@ export class JobRunner {
     try {
       const submitted = new Promise<unknown>((resolve) => (this.pending = { job: job.name, resolve }));
       this.worker.reset(); // a fresh conversation every run
-      const turn = this.worker.chat(job.prompt(started, this.ctx), "worker");
+      const turn = this.worker.chat(job.prompt(started, this.ctx, params), "worker");
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error(`${job.name} took longer than ${(this.opts.timeoutMs ?? TIMEOUT_MS) / 1000}s`)), this.opts.timeoutMs ?? TIMEOUT_MS);
       });
@@ -141,7 +143,7 @@ export class JobRunner {
         }),
         timeout,
       ]);
-      const finished = job.finish ? await job.finish(data, this.ctx, started) : data;
+      const finished = job.finish ? await job.finish(data, this.ctx, started, params) : data;
       const result: JobResult = { at: this.now().toISOString(), data: finished };
       await this.file.update((f) => ({ ...f, results: { ...f.results, [job.name]: result }, lastError: { ...f.lastError, [job.name]: "" } }));
       const event = job.event?.(finished);

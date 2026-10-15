@@ -7,7 +7,7 @@ import type { DeskEvent } from "@jarvis/shared";
 import { Brain } from "../src/brain/index.js";
 import { CalendarLog, useCalendarLog } from "../src/calendarLog.js";
 import type { Config } from "../src/config.js";
-import calendarRoute from "../src/desk/routes/calendar.js";
+import calendarRoutes from "../src/desk/routes/calendar.js";
 import type { DeskContext } from "../src/desk/routes/index.js";
 import { EventBus } from "../src/events.js";
 import { Jarvis } from "../src/jarvis.js";
@@ -94,7 +94,7 @@ test("an update preceded by get_event is logged with before and after; undo hand
   assert.equal(log.recent()[0].summary, "respond_to_event: ev2 → accepted");
   assert.equal(log.recent()[0].before, undefined);
 
-  const res = (await calendarRoute.handler({ ctx: { jarvis } as unknown as DeskContext } as never)) as { changes: { tool: string }[] };
+  const res = (await calendarRoutes.find((r) => r.path === "/calendar/log")!.handler({ ctx: { jarvis } as unknown as DeskContext } as never)) as { changes: { tool: string }[] };
   assert.deepEqual(res.changes.map((c) => c.tool), ["respond_to_event", "update_event", "update_event"]);
 });
 
