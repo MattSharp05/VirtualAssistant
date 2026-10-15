@@ -2,7 +2,8 @@
 // the primary display's work area, on every Space and over full-screen apps. Clicks pass through to
 // the apps underneath, except while the renderer reports the pointer over the orb (desk:hit).
 import { join } from "node:path";
-import { BrowserWindow, ipcMain, screen } from "electron";
+import { BrowserWindow, ipcMain, screen, shell } from "electron";
+import { isExternalLink } from "./target";
 
 export function createOverlay(rendererIndex: string, scenario?: string): BrowserWindow {
   const { workArea } = screen.getPrimaryDisplay();
@@ -30,6 +31,11 @@ export function createOverlay(rendererIndex: string, scenario?: string): Browser
     if (e.sender === win.webContents) win.setIgnoreMouseEvents(!interactive, { forward: true });
   };
   ipcMain.on("desk:hit", onHit);
+  // Links on cards (JD-27) open in the default browser, never in a new app window.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isExternalLink(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
   win.on("closed", () => ipcMain.off("desk:hit", onHit));
 
   // Follow the display if its size or the Dock/menu bar changes.

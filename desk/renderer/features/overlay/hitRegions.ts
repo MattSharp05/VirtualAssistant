@@ -1,5 +1,5 @@
 // Click-through bookkeeping: the overlay passes clicks to the apps underneath unless the pointer is
-// over at least one interactive region (the orb now; cards and the launcher later).
+// over at least one interactive region (the orb, the launcher ring, cards and the DND badge).
 export class HitRegions {
   private readonly inside = new Set<string>();
 

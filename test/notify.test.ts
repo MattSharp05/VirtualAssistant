@@ -59,6 +59,8 @@ test("mood: red on a blocked report, green again when that session's next report
   assert.match(s.watcher.mood.reason, /mk is blocked/);
   const alert = s.events.find((e) => e.type === "notice");
   assert.ok(alert?.type === "notice" && alert.level === "alert" && alert.title === "⛔ mk is blocked" && alert.link === "https://claude.ai/code/session_01MK");
+  assert.ok(alert?.type === "notice");
+  assert.deepEqual(alert.actions, [{ label: "Open session", window: "sessions", params: { id: "mk" } }, { label: "Later" }], "the Desk card opens the session or waits");
   assert.equal(s.telegram[0], "⛔ mk is blocked\n⛔ MK-52 blocked: needs a Vercel token\nhttps://claude.ai/code/session_01MK");
   assert.deepEqual(s.events.filter((e) => e.type === "mood.changed").at(-1), { type: "mood.changed", mood: "red", reason: "mk is blocked" });
 

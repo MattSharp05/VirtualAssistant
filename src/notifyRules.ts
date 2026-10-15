@@ -81,7 +81,9 @@ export class ReportWatcher {
     if (cls !== "info") {
       const n = NOTICE[cls];
       const body = report.text.split("\n").find((l) => l.trim())?.trim().slice(0, 300);
-      await this.notifier.notify({ title: n.title(report.jobId), body, level: n.level, link: this.store.getJob(report.jobId)?.url, telegram: true });
+      // The Desk's card opens the session in the Sessions window, or waits.
+      const actions = [{ label: "Open session", window: "sessions", params: { id: report.jobId } }, { label: "Later" }];
+      await this.notifier.notify({ title: n.title(report.jobId), body, level: n.level, link: this.store.getJob(report.jobId)?.url, actions, telegram: true });
     }
     await this.recompute();
   }

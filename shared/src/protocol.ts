@@ -34,7 +34,7 @@ export interface BrainMetrics {
  */
 export type DeskEvent =
   | { type: "orb.state"; state: OrbState; amplitude?: number }
-  | { type: "notice"; at: string; level: NoticeLevel; title: string; body?: string; link?: string }
+  | { type: "notice"; at: string; level: NoticeLevel; title: string; body?: string; link?: string; actions?: NoticeAction[] }
   /** How things are, for the orb's colour (JD-11). */
   | { type: "mood.changed"; mood: Mood; reason: string }
   // The brain's reply as it's written (JD-6). One messageId per user turn; deltas are chunks to append.
@@ -43,6 +43,8 @@ export type DeskEvent =
   | { type: "brain.tool"; messageId: string; phase: "call" | "result"; name: string; input?: unknown; summary?: string; isError?: boolean }
   | { type: "brain.done"; messageId: string; text: string; metrics: BrainMetrics }
   | { type: "brain.error"; messageId: string; error: string }
+  /** What the Mac heard (JD-31's voice loop): partial while listening, final once he stops. The overlay's "You said" bubble (JD-27). */
+  | { type: "voice.transcript"; text: string; final: boolean }
   /** JARVIS Tasks changed (added, completed, edited); windows re-fetch /tasks. */
   | { type: "tasks.changed" }
   /** JARVIS changed Matthew's calendar (JD-14); the Calendar window's "Changed by JARVIS" log. */
@@ -64,6 +66,15 @@ export type DeskEvent =
   | { type: "sessions.changed" }
   /** The server asks the Mac for something (a file, the clipboard…); the Desk answers with POST /api/desk/rpc/:id. */
   | { type: "rpc"; id: string; kind: string; payload: unknown };
+
+/** A button on a notice's card (JD-27): opens a Desk window or a link; neither just dismisses ("Later"). */
+export interface NoticeAction {
+  label: string;
+  /** A Desk window id (openWindow), with its params, e.g. { window: "sessions", params: { id: "mk" } }. */
+  window?: string;
+  params?: Record<string, string>;
+  url?: string;
+}
 
 /** What JARVIS puts on screen with show_on_screen. Body is short markdown. */
 export interface ScreenCard {
