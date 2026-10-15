@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { DeskSession } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { useWindowParam } from "../../app/useWindowParam";
-import { QuickView } from "./QuickView";
+import { QuickView, type SessionView } from "./QuickView";
 import { SessionList } from "./SessionList";
 import "./sessions.css";
 
@@ -16,6 +16,8 @@ export default function SessionsWindow() {
   const [sessions, setSessions] = useState<DeskSession[]>();
   const [error, setError] = useState<string>();
   const [selected, setSelected] = useState<string | undefined>(wanted);
+  // Kept while picking another session, so Full view stays Full view.
+  const [view, setView] = useState<SessionView>("quick");
   // Bumped on sessions.changed so the open session's detail re-fetches too.
   const [version, setVersion] = useState(0);
 
@@ -64,7 +66,7 @@ export default function SessionsWindow() {
         onRefresh={refresh}
       />
       {current ? (
-        <QuickView key={current.id} session={current} version={version} />
+        <QuickView key={current.id} session={current} version={version} view={view} onView={setView} />
       ) : (
         <section className="sessions-main sessions-blank" aria-live="polite">
           {sessions?.length === 0 ? (

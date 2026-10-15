@@ -101,8 +101,9 @@ describe("Notion window", () => {
       "Asked JARVIS about “Mario Kart PRD”. Open Chat",
     );
     fireEvent.click(screen.getByRole("tab", { name: "Full view (notion.so, editable)" }));
+    expect(screen.getByRole("heading", { name: "Full view works in the app" })).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Open “Mario Kart PRD” in Notion" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Open “Mario Kart PRD” on notion.so" }).getAttribute("href"),
     ).toMatch(/notion\.so/);
   });
 

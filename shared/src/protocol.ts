@@ -669,4 +669,13 @@ export interface DeskBridge {
     minimize(): void;
     close(): void;
   };
+  /**
+   * Full views (JD-39): the real claude.ai session or notion.so page laid over a rect of this window
+   * (CSS px from its top-left), signed in through a login shared by every window. show() again with
+   * the same url only moves it; hide() keeps it loaded. Absent in the web preview.
+   */
+  webview?: {
+    show(url: string, bounds: { x: number; y: number; width: number; height: number }): void;
+    hide(): void;
+  };
 }
