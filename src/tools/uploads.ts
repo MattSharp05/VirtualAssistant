@@ -8,7 +8,7 @@ import type { ToolGroup } from "./types.js";
 const group: ToolGroup = {
   name: "uploads",
   tools: [],
-  promptHint: "- Files: when a message says \"Attached: <path> (<name>)\", Read that file (PDFs and images too) and use it. You can only read files Matthew attached; say so if he asks for anything else on disk.",
+  promptHint: "- Files: when a message says \"Attached: <path> (<name>)\", Read that file (PDFs and images too) and use it. You can only read files Matthew attached (or ones mac_read copied from his Mac); say so if he asks for anything else on disk.",
   cli: (ctx) => {
     const dir = uploadsDir(ctx.config.dataDir);
     return { builtinTools: ["Read"], allowRules: [`Read(/${dir}/**)`], extraArgs: ["--add-dir", dir] };
