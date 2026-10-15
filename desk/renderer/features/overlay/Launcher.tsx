@@ -21,7 +21,13 @@ export function Launcher({ orbSize, onOpen, onClose }: LauncherProps) {
   const positions = ringPositions(items.length, orbSize / 2 + 140);
   return (
     <>
-      <div className="launcher-backdrop" data-testid="launcher-backdrop" onClick={onClose} />
+      {/* A pinch anywhere else closes the ring too (camera hands, JD-47). */}
+      <div
+        className="launcher-backdrop"
+        data-testid="launcher-backdrop"
+        data-hand-click=""
+        onClick={onClose}
+      />
       <nav className="launcher" aria-label="Open a window">
         {items.map((item, i) => (
           <button

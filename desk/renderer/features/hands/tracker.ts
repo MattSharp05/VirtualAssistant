@@ -2,11 +2,14 @@
 // runs the landmarker on each new frame at up to 30 fps and reports each hand's index and thumb tips
 // (normalised camera coordinates). stop() releases the camera (its light goes off) and the model.
 // The browser parts are injectable so the loop's lifecycle is unit-tested without a camera.
-import type { Point } from "./mapping";
+import { cameraDistance, type Point } from "./mapping";
 
 /** MediaPipe's hand landmark indices. */
 const THUMB_TIP = 4;
 const INDEX_TIP = 8;
+/** The knuckles at the base of the index and little fingers: the palm's width (JD-47's pinch scale). */
+const INDEX_MCP = 5;
+const PINKY_MCP = 17;
 
 export const TARGET_FPS = 30;
 const FRAME_MS = 1000 / TARGET_FPS;
@@ -17,6 +20,8 @@ export interface HandSample {
   hand: string;
   index: Point;
   thumb: Point;
+  /** Index knuckle to little-finger knuckle (cameraDistance): pinches are measured against it. */
+  palm?: number;
 }
 
 /** The part of MediaPipe's HandLandmarker the loop uses. */
@@ -49,7 +54,7 @@ export interface TrackerCallbacks {
   onState?(state: TrackerState, error?: unknown): void;
 }
 
-/** Index + thumb tips of every hand MediaPipe found. */
+/** Index + thumb tips (and the palm's width) of every hand MediaPipe found. */
 export function samplesFrom(result: ReturnType<Landmarker["detectForVideo"]>): HandSample[] {
   const seen = new Set<string>();
   return result.landmarks.flatMap((points, i) => {
@@ -60,7 +65,16 @@ export function samplesFrom(result: ReturnType<Landmarker["detectForVideo"]>): H
     // MediaPipe now and then labels both hands the same; keep them apart.
     if (seen.has(hand)) hand = `${hand}-2`;
     seen.add(hand);
-    return [{ hand, index: { x: index.x, y: index.y }, thumb: { x: thumb.x, y: thumb.y } }];
+    const a = points[INDEX_MCP];
+    const b = points[PINKY_MCP];
+    return [
+      {
+        hand,
+        index: { x: index.x, y: index.y },
+        thumb: { x: thumb.x, y: thumb.y },
+        ...(a && b ? { palm: cameraDistance(a, b) } : {}),
+      },
+    ];
   });
 }
 

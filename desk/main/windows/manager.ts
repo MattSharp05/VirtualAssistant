@@ -7,6 +7,7 @@ import { DEFAULT_MIN_SIZE, DEFAULT_SIZE, type FeatureMeta } from "../../renderer
 import { windowHash } from "../../renderer/app/router";
 import type { Settings } from "../settings";
 import { centred, restoreBounds, type Rect } from "./bounds";
+import type { StackedWindow } from "./handWindows";
 import { isExternalLink, parseWindowId } from "./target";
 
 /** A feature's metadata, read from renderer/features/<id>/feature.ts (esbuild bundles every match). */
@@ -23,6 +24,8 @@ function featureMeta(id: string): FeatureMeta | undefined {
 export class WindowManager {
   private readonly windows = new Map<string, BrowserWindow>();
   private readonly listeners = new Set<() => void>();
+  /** Window ids, most recently focused first (the front-to-back order camera hands pick from). */
+  private order: string[] = [];
 
   constructor(
     private readonly rendererIndex: string,
@@ -64,6 +67,8 @@ export class WindowManager {
       webPreferences: { preload: join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true },
     });
     this.windows.set(id, win);
+    this.raise(id);
+    win.on("focus", () => this.raise(id));
     win.once("ready-to-show", () => win.show());
     // Links (emails, Slack messages, events) open in the default browser, never in a new app window.
     win.webContents.setWindowOpenHandler(({ url }) => {
@@ -80,6 +85,7 @@ export class WindowManager {
     win.on("resized", save);
     win.on("closed", () => {
       this.windows.delete(id);
+      this.order = this.order.filter((o) => o !== id);
       this.changed();
     });
     win.on("show", () => this.changed());
@@ -129,10 +135,37 @@ export class WindowManager {
     return (target && featureMeta(target.feature)?.minSize) ?? DEFAULT_MIN_SIZE;
   }
 
+  /** The windows showing now, front to back, with their min sizes (camera hands, JD-47). */
+  stack(): StackedWindow[] {
+    return this.order.flatMap((id) => {
+      const w = this.windows.get(id);
+      if (!w || w.isDestroyed() || !w.isVisible()) return [];
+      return [{ id, bounds: w.getBounds(), minSize: this.minSize(id) }];
+    });
+  }
+
+  /** Moves or resizes a window for a hand gesture; `save` (the gesture's end) remembers the bounds. */
+  setBounds(id: string, bounds: Rect, save: boolean): void {
+    const win = this.windows.get(id);
+    if (!win || win.isDestroyed()) return;
+    win.setBounds(bounds);
+    if (save) this.settings.setBounds(id, win.getBounds());
+  }
+
+  /** Hides a window like its frame's minimise button (a flick, JD-47). */
+  minimize(id: string): void {
+    const win = this.windows.get(id);
+    if (win && !win.isDestroyed()) win.hide();
+  }
+
   /** Called when a window opens, closes, shows or hides (moves reach settings.windowBounds). */
   onChange(fn: () => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+
+  private raise(id: string): void {
+    this.order = [id, ...this.order.filter((o) => o !== id)];
   }
 
   private changed(): void {

@@ -13,6 +13,14 @@ export interface Size {
   height: number;
 }
 
+/** The camera frame's width / height (640×480): normalised x and y aren't the same length. */
+export const CAMERA_ASPECT = 640 / 480;
+
+/** The distance between two normalised camera points, in units of the frame's height. */
+export function cameraDistance(a: Point, b: Point, aspect = CAMERA_ASPECT): number {
+  return Math.hypot((a.x - b.x) * aspect, a.y - b.y);
+}
+
 /** The share of the camera frame (each axis, centred) that maps to the whole screen. */
 export const ACTIVE_REGION = 0.7;
 

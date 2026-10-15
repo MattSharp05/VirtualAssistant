@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { DeskBridge, NoticeAction, ScreenCard } from "@jarvis/shared";
+import { HAND_FLICK } from "../../../app/handTargets";
 import type { HitRegions } from "../hitRegions";
 import { Markdown } from "./markdown";
 import { AUTO_DISMISS_MS, countdown, popOutWindow, visibleCards, type OverlayCard } from "./model";
@@ -105,10 +106,19 @@ interface CardProps {
   dismiss(key: string): void;
 }
 
-/** One card. It leaves after a minute unless the pointer (or focus) is on it; running timers stay. */
+/**
+ * One card. It leaves after a minute unless the pointer (or focus) is on it; running timers stay.
+ * Camera hands (JD-47) can pick it up and move it, and a flick throws it away.
+ */
 function Card({ card, bridge, dismiss }: CardProps) {
   const [held, setHeld] = useState(false);
   const onDismiss = useCallback(() => dismiss(card.key), [dismiss, card.key]);
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    el?.addEventListener(HAND_FLICK, onDismiss);
+    return () => el?.removeEventListener(HAND_FLICK, onDismiss);
+  }, [onDismiss]);
   const running = card.type === "timer" && !card.done;
   useEffect(() => {
     if (held || running) return;
@@ -119,6 +129,8 @@ function Card({ card, bridge, dismiss }: CardProps) {
   const level = card.type === "notice" ? card.level : card.type === "timer" && card.done ? "done" : undefined;
   return (
     <article
+      ref={ref}
+      data-hand-grab=""
       className={`glass-card card card-${card.type}`}
       data-card-kind={card.type === "screen" ? card.card.kind : card.type}
       {...(level ? { "data-level": level } : {})}
