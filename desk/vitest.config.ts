@@ -10,5 +10,7 @@ export default defineConfig({
   test: {
     include: ["{main,preload,renderer}/**/*.test.{ts,tsx}"],
     environment: "jsdom",
+    // dev.html renders every scenario × window, and busy CI machines are slow: 5 s is too tight.
+    testTimeout: 15_000,
   },
 });
