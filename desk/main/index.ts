@@ -194,6 +194,16 @@ app.whenReady().then(() => {
     tray.refresh();
   });
   connection.restart();
+  // Windows re-read a setting when told (e.g. the overlay starts or stops Camera hands, JD-42). macOS
+  // asks for the camera once, before the overlay opens it.
+  const askCamera = () =>
+    process.platform === "darwin" ? systemPreferences.askForMediaAccess("camera") : Promise.resolve(true);
+  settings.onChange((key) => {
+    if (key !== "cameraHands" || !settings.get("cameraHands"))
+      return broadcast({ type: "settings.changed", key });
+    void askCamera().finally(() => broadcast({ type: "settings.changed", key }));
+  });
+  if (settings.get("cameraHands")) void askCamera();
 
   // The bridge's main side (preload/index.ts).
   ipcMain.handle("desk:request", (_e, path: string, body?: unknown) => connection.request(path, body));

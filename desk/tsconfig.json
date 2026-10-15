@@ -12,5 +12,5 @@
     "types": ["node", "vite/client"],
     "paths": { "@jarvis/shared": ["../shared/src/protocol.ts"] }
   },
-  "include": ["main", "preload", "renderer", "e2e", "*.config.ts"]
+  "include": ["main", "preload", "renderer", "resources", "e2e", "*.config.ts"]
 }

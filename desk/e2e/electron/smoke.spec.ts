@@ -123,3 +123,40 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
     await app.close();
   }
 });
+
+// JD-42: Camera hands' CPU while tracking (budget ≤ 15% on Apple Silicon), with Chromium's fake
+// camera (no hands in it, so the palm detector runs every frame, the costlier path). Recorded in the
+// job summary (or why it couldn't track); a CI VM's numbers are a guide, Matthew's Mac is the real measurement (manual QA).
+// eslint-disable-next-line no-empty-pattern
+test("Camera hands: CPU while tracking", async ({}) => {
+  test.skip(
+    process.platform !== "darwin" && !process.env.ELECTRON_SMOKE,
+    "Electron runs on the macOS runner only",
+  );
+  test.setTimeout(120_000);
+  const app = await electron.launch({
+    args: [".", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+    cwd: fileURLToPath(new URL("../..", import.meta.url)),
+    env: { ...process.env, JARVIS_DESK_SCENARIO: "hands-on" },
+  });
+  try {
+    const window = await app.firstWindow();
+    const layer = window.locator(".hands-layer");
+    await expect(layer).toHaveAttribute("data-hands-state", /tracking|error/, { timeout: 60_000 });
+    const state = await layer.getAttribute("data-hands-state");
+    let line = `Camera hands: ${state}, ${await layer.getAttribute("data-hands-error")} (no CPU reading)`;
+    if (state === "tracking") {
+      await app.evaluate(({ app }) => app.getAppMetrics()); // starts the CPU interval
+      await window.waitForTimeout(10_000);
+      const metrics = await app.evaluate(({ app }) => app.getAppMetrics());
+      const cpu = metrics.reduce((sum, m) => sum + m.cpu.percentCPUUsage, 0);
+      const byType = metrics.map((m) => `${m.type} ${m.cpu.percentCPUUsage.toFixed(1)}%`).join(", ");
+      line = `Camera hands tracking for 10 s: ${cpu.toFixed(1)}% CPU (${byType})`;
+    }
+    console.log(line);
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${line}\n`);
+    // Not asserted: a CI VM may refuse the camera; the reason is in the summary line.
+  } finally {
+    await app.close();
+  }
+});

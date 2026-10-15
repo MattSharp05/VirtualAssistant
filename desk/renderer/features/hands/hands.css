@@ -1,0 +1,50 @@
+/* Hand pointers (JD-42): a cyan ring at each index fingertip, a dot at the thumb tip. Never clickable. */
+.hands-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 10;
+}
+
+.hand {
+  transition: opacity 250ms ease-out;
+}
+
+.hand-faded {
+  opacity: 0;
+}
+
+/* Positioned by transform only (cheap to update 30× a second); the negative offsets centre them. */
+.hand-ring,
+.hand-dot {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+.hand-ring {
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  background: rgba(95, 212, 230, 0.12);
+  /* The dark hairline keeps it visible over white apps too. */
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 10px rgba(95, 212, 230, 0.55),
+    inset 0 0 6px rgba(95, 212, 230, 0.35);
+}
+
+.hand-dot {
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  background: var(--accent-ink);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35),
+    0 0 6px rgba(95, 212, 230, 0.6);
+}

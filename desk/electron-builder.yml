@@ -18,6 +18,8 @@ asar: true
 asarUnpack:
   - "**/*.node"
   - "**/*.dylib"
+  # Camera hands' MediaPipe runtime and model (JD-42), loaded by the overlay renderer.
+  - "renderer/dist/mediapipe/**"
 # whisper-cli (arm64, Metal), built by CI into vendor/whisper (JD-24); looked up in Resources/whisper.
 extraResources:
   - from: vendor/whisper
