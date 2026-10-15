@@ -14,6 +14,7 @@ import {
   Menu,
   safeStorage,
   screen,
+  shell,
   systemPreferences,
 } from "electron";
 import {
@@ -35,6 +36,7 @@ import { screenRpcHandlers } from "./rpcHandlers/screenNative";
 import { isSecretKey, Settings } from "./settings";
 import { StatusFileWriter } from "./statusFiles";
 import { createTray } from "./tray";
+import { Updater } from "./updater";
 import { createVoice } from "./voice";
 import { Uploader, type UploadSource } from "./uploads";
 import { pttHint } from "./voice/cards";
@@ -133,6 +135,16 @@ app.whenReady().then(() => {
     },
     askName: () => askLayoutName(),
   });
+  // The updater (JD-46): newest desk-v* release on GitHub, on launch and daily; tray + notice to install.
+  const updater = new Updater({
+    currentVersion: app.getVersion(),
+    enabled: () => settings.get("checkForUpdates"),
+    downloadsDir: app.getPath("downloads"),
+    publish: broadcast,
+    openPath: (path) => shell.openPath(path),
+    quit: () => app.quit(),
+    onChange: () => tray.refresh(),
+  });
   let usage: UsageResponse | undefined;
   // Server→Mac requests (rpcHandlers/): folder access reads Settings → Folders on every call.
   const macFiles = new MacFiles({ allowedFolders: () => settings.get("allowedFolders") });
@@ -187,6 +199,11 @@ app.whenReady().then(() => {
       activeLayout: layouts.active(),
       connection: connection.status,
       usage,
+      update: {
+        version: updater.state.available?.version,
+        downloading: updater.state.downloading,
+        checking: updater.state.checking,
+      },
     }),
     {
       talk,
@@ -202,6 +219,8 @@ app.whenReady().then(() => {
         connection.request("/dnd", { on }).catch(() => {});
       },
       openSettings: () => windows.openWindow("settings"),
+      checkForUpdates: () => void updater.check({ forced: true }),
+      installUpdate: () => void updater.install(),
       quit: () => app.quit(),
     },
   );
@@ -273,7 +292,14 @@ app.whenReady().then(() => {
   // Full views (JD-39): claude.ai sessions and notion.so pages inside their windows.
   registerWebViews();
 
-  const overlay = createOverlay(rendererIndex, scenario);
+  const overlay = createOverlay(rendererIndex, scenario, (url) => {
+    if (!updater.isInstallLink(url)) return false;
+    void updater.install();
+    return true;
+  });
+  // Not on a scenario (e.g. the smoke test): no network checks there.
+  if (!scenario) updater.start();
+  app.on("will-quit", () => updater.stop());
   // The launcher ring opens in the overlay; focus it so Esc reaches the ring.
   ipcMain.on("desk:orb-click", () => overlay.focus());
   // The ambient face (JD-25) follows the Face setting; closing it (Esc) puts Face back to corner.
