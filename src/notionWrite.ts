@@ -149,9 +149,10 @@ export class NotionWriter {
     return out;
   }
 
-  async createRow(databaseId: string, properties: Json): Promise<Json> {
+  /** A new row; `children` are blocks for the row's own page (e.g. why a suggestion was made). */
+  async createRow(databaseId: string, properties: Json, children?: Json[]): Promise<Json> {
     const id = this.tasksDb(databaseId);
-    return this.api.call("POST", "/pages", { parent: { database_id: id }, properties });
+    return this.api.call("POST", "/pages", { parent: { database_id: id }, properties, ...(children?.length ? { children } : {}) });
   }
 
   async updateRow(pageId: string, properties: Json): Promise<Json> {

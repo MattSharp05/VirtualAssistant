@@ -2,8 +2,10 @@
 //   GET  /api/desk/tasks?view=today|upcoming|project|done|suggested   → TasksResponse
 //   POST /api/desk/tasks { name, due?, project?, priority? }          → TaskItem
 //   POST /api/desk/tasks/:id/done | /reopen                          → TaskItem
+//   POST /api/desk/tasks/:id/accept (→ Open) | /dismiss (→ Dismissed) → TaskItem (suggestions)
+//   POST /api/desk/tasks/accept-all                                  → AcceptAllResponse
 // Changes publish tasks.changed on the live stream.
-import type { NewTask, TaskPriority, TasksResponse, TaskView } from "@jarvis/shared";
+import type { AcceptAllResponse, NewTask, TaskPriority, TasksResponse, TaskView } from "@jarvis/shared";
 import { JarvisError } from "../../jarvis.js";
 import { TasksService, tasksFor } from "../../tasks.js";
 import { DeskHttpError, type DeskContext, type DeskRoute } from "./index.js";
@@ -48,6 +50,13 @@ const routes: DeskRoute[] = [
   },
   { method: "POST", path: "/tasks/:id/done", handler: ({ params, ctx }) => friendly(() => service(ctx).complete(params.id)) },
   { method: "POST", path: "/tasks/:id/reopen", handler: ({ params, ctx }) => friendly(() => service(ctx).reopen(params.id)) },
+  { method: "POST", path: "/tasks/:id/accept", handler: ({ params, ctx }) => friendly(() => service(ctx).accept(params.id)) },
+  { method: "POST", path: "/tasks/:id/dismiss", handler: ({ params, ctx }) => friendly(() => service(ctx).dismiss(params.id)) },
+  {
+    method: "POST",
+    path: "/tasks/accept-all",
+    handler: async ({ ctx }): Promise<AcceptAllResponse> => ({ accepted: await friendly(() => service(ctx).acceptAll()) }),
+  },
 ];
 
 export default routes;

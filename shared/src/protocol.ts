@@ -149,6 +149,8 @@ export interface TaskItem {
   priority?: TaskPriority;
   source: TaskSource;
   sourceLink?: string;
+  /** Suggested tasks: why JARVIS proposes it (one line). */
+  why?: string;
   createdAt: string;
   /** The row in Notion. */
   url?: string;
@@ -159,6 +161,11 @@ export type TaskView = "today" | "upcoming" | "project" | "done" | "suggested";
 export interface TasksResponse {
   view: TaskView;
   tasks: TaskItem[];
+}
+
+/** POST /api/desk/tasks/accept-all: every suggestion made Open. */
+export interface AcceptAllResponse {
+  accepted: TaskItem[];
 }
 
 /** POST /api/desk/tasks */
