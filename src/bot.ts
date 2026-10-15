@@ -1,7 +1,8 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Bot, InlineKeyboard, type Context } from "grammy";
-import { formatMetrics, type Brain } from "./brain/index.js";
+import { formatMetrics, type Brain, type BrainReply } from "./brain/index.js";
+import { briefFor } from "./brief.js";
 import { LiveReply } from "./liveReply.js";
 import { MAX_UPLOAD_BYTES, UploadStore, type Upload } from "./uploads.js";
 import { transcribe as whisperTranscribe, type Transcript } from "./voice/stt.js";
@@ -15,6 +16,7 @@ const HELP = [
   "/jarvis — talk to me (default)",
   "/model [name] — see or switch my model",
   "/newchat — start a fresh conversation",
+  "/brief — your morning brief: today's events, overnight reports, what's blocked",
   "/new <task> — start a cloud session on the task",
   "/sessions — pick a cloud session to talk to directly",
   "/jobs — sessions I'm tracking",
@@ -186,6 +188,12 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     await ctx.reply("Fresh conversation started.");
   });
 
+  bot.command("brief", async (ctx) => {
+    const brief = brain && briefFor(jarvis);
+    if (!brief) return ctx.reply("The brain isn't running.");
+    await askBrain(ctx, "", [], (onDelta) => brief.start("telegram", { onDelta }).done);
+  });
+
   bot.command("model", async (ctx) => {
     if (!brain) return ctx.reply("The brain isn't running.");
     const wanted = ctx.match.trim().toLowerCase();
@@ -270,7 +278,7 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
   });
 
   /** One message to the brain, with the reply growing in place (src/liveReply.ts). */
-  async function askBrain(ctx: Context, text: string, attachments: Upload[] = []): Promise<void> {
+  async function askBrain(ctx: Context, text: string, attachments: Upload[] = [], ask?: (onDelta: (chunk: string) => void) => Promise<BrainReply>): Promise<void> {
     if (!brain) {
       await ctx.reply("The brain isn't running. Use /sessions to message a session directly.");
       return;
@@ -284,7 +292,8 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     const typing = setInterval(() => void (live.started || ctx.replyWithChatAction("typing").catch(() => {})), 4500);
     void ctx.replyWithChatAction("typing").catch(() => {});
     try {
-      const { reply, metrics } = await brain.chat(text, "telegram", { onDelta: (chunk) => live.push(chunk), attachments });
+      const onDelta = (chunk: string) => live.push(chunk);
+      const { reply, metrics } = await (ask ? ask(onDelta) : brain.chat(text, "telegram", { onDelta, attachments }));
       clearInterval(typing);
       await live.finish(`${reply}\n\n${formatMetrics(metrics)}`);
     } catch (err) {

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { PROTOCOL_VERSION } from "@jarvis/shared";
 import { Brain } from "./brain/index.js";
 import { createBot } from "./bot.js";
+import { BriefService, useBrief } from "./brief.js";
 import { notifier, notify } from "./notify.js";
 import { Scheduler, useScheduler } from "./scheduler.js";
 import { ReportWatcher, useReportWatcher } from "./notifyRules.js";
@@ -105,6 +106,8 @@ const worker = createWorker(
 const jobRunner = new JobRunner(await discoverJobs(), worker, toolContext, { dataDir: config.dataDir, bus, usage: () => jarvis.status().then((st) => st.usage) });
 useJobRunner(jarvis, jobRunner);
 scheduler.every("jobs", 60_000, () => void jobRunner.tick());
+// The morning brief (Desk POST /brief, the first Desk voice turn of the morning, Telegram /brief).
+useBrief(jarvis, new BriefService({ ctx: toolContext, brain, bus, runner: () => jobRunner }));
 
 // Uploaded files are kept for 7 days.
 const uploads = new UploadStore(config.dataDir);
@@ -143,6 +146,7 @@ if (!bot) {
             { command: "sessions", description: "Pick a cloud session to talk to directly" },
             { command: "model", description: "See or switch JARVIS's model" },
             { command: "newchat", description: "Start a fresh conversation with JARVIS" },
+            { command: "brief", description: "Your morning brief" },
             { command: "jobs", description: "Sessions I'm tracking" },
             { command: "new", description: "Start a cloud session on a task" },
             { command: "use", description: "Pick which session plain messages go to" },

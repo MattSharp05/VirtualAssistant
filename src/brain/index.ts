@@ -99,6 +99,8 @@ export interface ChatOptions {
   onDelta?: (text: string) => void;
   /** Files that came with the message (src/uploads.ts); the brain can Read them. */
   attachments?: { path: string; name: string }[];
+  /** Use this message id instead of a new one (a caller that must hand it back before queueing). */
+  messageId?: string;
 }
 
 export interface CliResult {
@@ -203,7 +205,7 @@ export class Brain {
 
   /** Like chat(), but hands back the message id at once (the Desk follows the reply over SSE). */
   start(text: string, channel: BrainChannel, options: ChatOptions = {}): { messageId: string; done: Promise<BrainReply> } {
-    const messageId = randomUUID();
+    const messageId = options.messageId ?? randomUUID();
     const done = this.queue.then(() => this.run(messageId, text, channel, options));
     this.queue = done.catch(() => undefined);
     return { messageId, done };
