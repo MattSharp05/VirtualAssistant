@@ -682,6 +682,8 @@ export interface DeskBridge {
     speak(text: string, voice: string, rate: number): Promise<void>;
     /** The macOS folder picker; undefined when cancelled. */
     pickFolder(): Promise<string | undefined>;
+    /** Settings → Test (JD-45): cycles the four orb states through the status files; throws without a folder. */
+    testStatusFiles(): Promise<void>;
   };
   /** Saved window layouts (JD-37): applying one opens, moves and closes windows. Absent in the preview. */
   layouts?: {
