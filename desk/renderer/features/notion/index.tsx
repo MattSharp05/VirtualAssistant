@@ -3,6 +3,7 @@ import type { NotionPageRef } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { useWindowParam } from "../../app/useWindowParam";
 import { Blocks } from "./Blocks";
+import { NotionFullView } from "./FullView";
 import { isPinned, pageProperties, recentUnpinned } from "./model";
 import { useNotion } from "./useNotion";
 import "./notion.css";
@@ -11,7 +12,7 @@ type View = "read" | "full";
 
 /**
  * The Notion window (mockup 7): search, PINNED and RECENT on the left; the open page on the right,
- * read-only, with its properties and blocks. Full view (notion.so, editable) arrives with JD-39.
+ * read-only, with its properties and blocks, or Full view: notion.so itself, editable (JD-39).
  * `?page=<id>` opens a given page.
  */
 export default function NotionWindow() {
@@ -110,6 +111,7 @@ export default function NotionWindow() {
 
         <div
           className="notion-panel"
+          data-view={page ? view : undefined}
           role="tabpanel"
           id="notion-panel"
           aria-labelledby={`notion-tab-${view}`}
@@ -124,14 +126,7 @@ export default function NotionWindow() {
               <p className="notion-empty">{n.opening ? "Opening…" : "Search, or pick a page on the left."}</p>
             )
           ) : view === "full" ? (
-            <div className="notion-full">
-              <p>Editing in notion.so inside JARVIS Desk arrives in a later update (JD-39).</p>
-              {page.url && (
-                <a href={page.url} target="_blank" rel="noreferrer">
-                  Open “{page.title}” in Notion
-                </a>
-              )}
-            </div>
+            <NotionFullView page={page} />
           ) : (
             <article className="notion-page" aria-labelledby="notion-page-title">
               <header className="notion-head">

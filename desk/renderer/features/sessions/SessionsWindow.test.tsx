@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BridgeProvider, chooseBridge } from "../../app/bridge";
 import type { DeskEvent } from "@jarvis/shared";
 import { createMockBridge, type MockBridge } from "../../mock/bridge";
@@ -81,6 +81,27 @@ describe("Sessions window", () => {
     const before = lists();
     await act(async () => listeners.forEach((fn) => fn({ type: "sessions.changed" })));
     expect(lists()).toBe(before + 1);
+  });
+
+  it("Full view shows the session on claude.ai, stays on as another session is picked, and hides on Quick view", async () => {
+    const mock = renderOn("sessions");
+    const webview = { show: vi.fn(), hide: vi.fn() };
+    mock.webview = webview;
+    fireEvent.click(await screen.findByRole("tab", { name: "Full view (claude.ai)" }));
+    expect(screen.getByRole("tab", { name: "Full view (claude.ai)" }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+    expect(screen.queryByLabelText("Message mk")).toBeNull();
+    expect(webview.show).toHaveBeenLastCalledWith("https://claude.ai/code/session_01MK", expect.anything());
+
+    const nav = screen.getByRole("navigation", { name: "Sessions" });
+    fireEvent.click(within(nav).getByRole("button", { name: /^trip/ }));
+    await screen.findByRole("heading", { level: 2, name: "trip" });
+    expect(webview.show).toHaveBeenLastCalledWith("https://claude.ai/code/session_01TR", expect.anything());
+
+    fireEvent.click(screen.getByRole("tab", { name: "Quick view" }));
+    expect(webview.hide).toHaveBeenCalled();
+    expect(await screen.findByLabelText("Message trip")).toBeTruthy();
   });
 
   it("empty: explains where sessions come from", async () => {

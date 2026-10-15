@@ -466,3 +466,10 @@
 .sessions-send-state[data-ok="false"] {
   color: var(--red);
 }
+
+/* Full view (JD-39): claude.ai fills the pane below the header. */
+.sessions-full {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}

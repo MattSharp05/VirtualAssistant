@@ -34,6 +34,10 @@ const bridge: DeskBridge = {
     minimize: () => ipcRenderer.send("desk:frame-minimize"),
     close: () => ipcRenderer.send("desk:frame-close"),
   },
+  webview: {
+    show: (url, bounds) => ipcRenderer.send("desk:webview-show", url, bounds),
+    hide: () => ipcRenderer.send("desk:webview-hide"),
+  },
 };
 
 contextBridge.exposeInMainWorld("desk", bridge);

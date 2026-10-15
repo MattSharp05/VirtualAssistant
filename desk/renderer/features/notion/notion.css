@@ -435,19 +435,13 @@
   color: var(--red);
 }
 
-.notion-full {
+/* Full view (JD-39): notion.so fills the panel edge to edge. */
+.notion-panel[data-view="full"] {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  color: var(--ink-2);
+  overflow: hidden;
+  padding: 0;
 }
 
-.notion-full p {
-  margin: 0;
-}
-
-.notion-full a,
 .notion-link {
   color: var(--accent-ink);
 }

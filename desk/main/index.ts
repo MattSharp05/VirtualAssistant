@@ -27,6 +27,7 @@ import { createAmbient } from "./windows/ambient";
 import { CommandBar, COMMAND_BAR_SHORTCUT } from "./windows/commandbar";
 import { WindowManager } from "./windows/manager";
 import { createOverlay } from "./windows/overlay";
+import { registerWebViews } from "./windows/webview";
 
 const USAGE_EVERY_MS = 5 * 60_000;
 
@@ -161,6 +162,8 @@ app.whenReady().then(() => {
   // launcher brings it back where it was.
   ipcMain.on("desk:frame-minimize", (e) => BrowserWindow.fromWebContents(e.sender)?.hide());
   ipcMain.on("desk:frame-close", (e) => BrowserWindow.fromWebContents(e.sender)?.close());
+  // Full views (JD-39): claude.ai sessions and notion.so pages inside their windows.
+  registerWebViews();
 
   const overlay = createOverlay(rendererIndex, scenario);
   // The launcher ring opens in the overlay; focus it so Esc reaches the ring.

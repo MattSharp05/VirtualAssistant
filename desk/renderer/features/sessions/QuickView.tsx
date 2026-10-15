@@ -1,7 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { DeskSession, SessionDetail, SessionSendResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
+import { SessionFullView } from "./FullView";
 import { ago, clock, labelOf, pillOf, toneOf, whoOf } from "./sessionGroups";
+
+export type SessionView = "quick" | "full";
 
 const REPORT_KIND: Record<string, string> = {
   blocked: "blocked",
@@ -11,8 +14,16 @@ const REPORT_KIND: Record<string, string> = {
   info: "update",
 };
 
-/** The right pane: header with status pill, Quick view (activity + reports) and the message box. */
-export function QuickView({ session, version }: { session: DeskSession; version: number }) {
+interface QuickViewProps {
+  session: DeskSession;
+  version: number;
+  /** Quick view (activity, reports, message box) or Full view (claude.ai itself, JD-39). */
+  view: SessionView;
+  onView(view: SessionView): void;
+}
+
+/** The right pane: header with status pill and tabs; Quick view (activity + reports + message box) or Full view. */
+export function QuickView({ session, version, view, onView }: QuickViewProps) {
   const bridge = useBridge();
   const label = labelOf(session);
   const [detail, setDetail] = useState<SessionDetail>();
@@ -80,83 +91,112 @@ export function QuickView({ session, version }: { session: DeskSession; version:
           </p>
         </div>
         <div className="sessions-tabs" role="tablist" aria-label="View">
-          <button type="button" role="tab" aria-selected="true" className="sessions-tab">
+          <button
+            type="button"
+            role="tab"
+            id="sessions-tab-quick"
+            aria-selected={view === "quick"}
+            aria-controls="sessions-panel"
+            className="sessions-tab"
+            onClick={() => onView("quick")}
+          >
             Quick view
           </button>
           <button
             type="button"
             role="tab"
-            aria-selected="false"
+            id="sessions-tab-full"
+            aria-selected={view === "full"}
+            aria-controls="sessions-panel"
             className="sessions-tab"
-            disabled
-            title="The full claude.ai view arrives in a later update"
+            onClick={() => onView("full")}
           >
-            Full view
+            Full view (claude.ai)
           </button>
         </div>
       </header>
 
-      <div className="sessions-body" role="tabpanel" aria-label="Quick view">
-        <section className="sessions-activity" aria-labelledby="sessions-activity-title">
-          <h3 id="sessions-activity-title" className="sessions-section-title">
-            Recent activity
-          </h3>
-          {detailError ? (
-            <p className="sessions-note sessions-error">{detailError}</p>
-          ) : !activity ? (
-            <p className="sessions-note">Loading…</p>
-          ) : activity.available ? (
-            <ol className="sessions-activity-list">
-              {activity.items.map((item, i) => (
-                <li key={i} data-role={item.role}>
-                  <span className="sessions-time">{clock(item.at)}</span>
-                  <span className="sessions-who">{whoOf(item, label)}</span>
-                  <span className="sessions-what">{item.text}</span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="sessions-note">Live activity isn't available: {activity.reason ?? "no history"}.</p>
-          )}
-        </section>
-        <section className="sessions-reports" aria-labelledby="sessions-reports-title">
-          <h3 id="sessions-reports-title" className="sessions-section-title">
-            Latest reports
-          </h3>
-          {detail && detail.reports.length === 0 && (
-            <p className="sessions-note">No reports from {label} yet.</p>
-          )}
-          <ul>
-            {detail?.reports.map((r, i) => (
-              <li key={i} className="sessions-report" data-kind={r.kind}>
-                <p>{r.text}</p>
-                <span className="sessions-report-meta">
-                  {clock(r.at)} · {REPORT_KIND[r.kind]}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      </div>
+      {view === "full" ? (
+        <div
+          className="sessions-full"
+          role="tabpanel"
+          id="sessions-panel"
+          aria-labelledby="sessions-tab-full"
+        >
+          <SessionFullView session={session} label={label} />
+        </div>
+      ) : (
+        <>
+          <div
+            className="sessions-body"
+            role="tabpanel"
+            id="sessions-panel"
+            aria-labelledby="sessions-tab-quick"
+          >
+            <section className="sessions-activity" aria-labelledby="sessions-activity-title">
+              <h3 id="sessions-activity-title" className="sessions-section-title">
+                Recent activity
+              </h3>
+              {detailError ? (
+                <p className="sessions-note sessions-error">{detailError}</p>
+              ) : !activity ? (
+                <p className="sessions-note">Loading…</p>
+              ) : activity.available ? (
+                <ol className="sessions-activity-list">
+                  {activity.items.map((item, i) => (
+                    <li key={i} data-role={item.role}>
+                      <span className="sessions-time">{clock(item.at)}</span>
+                      <span className="sessions-who">{whoOf(item, label)}</span>
+                      <span className="sessions-what">{item.text}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="sessions-note">
+                  Live activity isn't available: {activity.reason ?? "no history"}.
+                </p>
+              )}
+            </section>
+            <section className="sessions-reports" aria-labelledby="sessions-reports-title">
+              <h3 id="sessions-reports-title" className="sessions-section-title">
+                Latest reports
+              </h3>
+              {detail && detail.reports.length === 0 && (
+                <p className="sessions-note">No reports from {label} yet.</p>
+              )}
+              <ul>
+                {detail?.reports.map((r, i) => (
+                  <li key={i} className="sessions-report" data-kind={r.kind}>
+                    <p>{r.text}</p>
+                    <span className="sessions-report-meta">
+                      {clock(r.at)} · {REPORT_KIND[r.kind]}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          </div>
 
-      <form className="sessions-send" onSubmit={send}>
-        <label htmlFor="sessions-message" className="sessions-sr">
-          Message {label}
-        </label>
-        <input
-          id="sessions-message"
-          placeholder={`Message ${label}…`}
-          value={text}
-          autoComplete="off"
-          onChange={(e) => setText(e.target.value)}
-        />
-        <button type="submit" aria-label={`Send to ${label}`} disabled={sending || !text.trim()}>
-          {sending ? "Sending…" : "Send"}
-        </button>
-        <p className="sessions-send-state" role="status" data-ok={sendState?.ok}>
-          {sendState?.text}
-        </p>
-      </form>
+          <form className="sessions-send" onSubmit={send}>
+            <label htmlFor="sessions-message" className="sessions-sr">
+              Message {label}
+            </label>
+            <input
+              id="sessions-message"
+              placeholder={`Message ${label}…`}
+              value={text}
+              autoComplete="off"
+              onChange={(e) => setText(e.target.value)}
+            />
+            <button type="submit" aria-label={`Send to ${label}`} disabled={sending || !text.trim()}>
+              {sending ? "Sending…" : "Send"}
+            </button>
+            <p className="sessions-send-state" role="status" data-ok={sendState?.ok}>
+              {sendState?.text}
+            </p>
+          </form>
+        </>
+      )}
     </section>
   );
 }

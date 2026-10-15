@@ -32,7 +32,7 @@ test("sessions: three groups; selecting mk shows its activity and reports; sendi
   await expect(page.locator(".sessions-pill")).toHaveText("Blocked · needs you");
   await expect(page.getByText("Blocking MK-81 and asking Matthew.")).toBeVisible();
   await expect(page.getByText(/MK-79 merged · CI green/)).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Full view" })).toBeDisabled();
+  await expect(page.getByRole("tab", { name: "Full view (claude.ai)" })).toBeEnabled();
   await expectWindowSnapshot(page, "sessions");
 
   await page.getByLabel("Message mk").fill("Go with (a), cap at 1.2×");

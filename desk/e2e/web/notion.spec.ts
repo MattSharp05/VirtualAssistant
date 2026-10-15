@@ -77,7 +77,7 @@ test("notion: pin and unpin call the server; Ask JARVIS sends the page; Full vie
   await page.getByRole("button", { name: "Ask JARVIS about this page" }).click();
   await expect(page.getByRole("status")).toHaveText("Asked JARVIS about “Mario Kart PRD”. Open Chat");
   await page.getByRole("tab", { name: "Full view (notion.so, editable)" }).click();
-  await expect(page.getByRole("link", { name: "Open “Mario Kart PRD” in Notion" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open “Mario Kart PRD” on notion.so" })).toBeVisible();
   await waitForBridgeIdle(page);
 });
 
