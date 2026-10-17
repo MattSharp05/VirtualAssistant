@@ -4,6 +4,7 @@ import {
   applicationMenu,
   dockClickTarget,
   dockMenu,
+  textMenu,
   orbMenu,
   type AppMenuActions,
   type AppMenuItem,
@@ -87,5 +88,34 @@ describe("app menus (JD-62)", () => {
   it("a Dock click opens the command bar, or Settings until the Desk is paired", () => {
     expect(dockClickTarget(true)).toBe("commandbar");
     expect(dockClickTarget(false)).toBe("settings");
+  });
+
+  it("right-click in a text field offers Cut, Copy, Paste and Select All, following what's possible", () => {
+    const flags = { canCut: false, canCopy: false, canPaste: true, canSelectAll: true };
+    const items = textMenu({ isEditable: true, selectionText: "", linkURL: "", editFlags: flags }, vi.fn());
+    expect(items.filter((i) => i.role).map((i) => [i.role, i.enabled])).toEqual([
+      ["cut", false],
+      ["copy", false],
+      ["paste", true],
+      ["selectAll", true],
+    ]);
+  });
+
+  it("right-click on selected text offers Copy; on a link, Copy Link; on nothing (the orb), no menu", () => {
+    const none = { canCut: false, canCopy: true, canPaste: false, canSelectAll: false };
+    const copyLink = vi.fn();
+    expect(
+      textMenu({ isEditable: false, selectionText: "hello", linkURL: "", editFlags: none }, copyLink),
+    ).toEqual([{ role: "copy" }]);
+    const link = textMenu(
+      { isEditable: false, selectionText: "", linkURL: "https://github.com/x", editFlags: none },
+      copyLink,
+    );
+    expect(link.map((i) => i.label)).toEqual(["Copy Link"]);
+    link[0].click?.();
+    expect(copyLink).toHaveBeenCalledWith("https://github.com/x");
+    expect(
+      textMenu({ isEditable: false, selectionText: " ", linkURL: "", editFlags: none }, copyLink),
+    ).toEqual([]);
   });
 });
