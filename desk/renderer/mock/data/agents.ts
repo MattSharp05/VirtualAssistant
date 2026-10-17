@@ -87,6 +87,7 @@ const ticket = (id: string, title: string, status: string) => ({
 
 const orch13 = session("session_01JDorch13", "JARVIS batch 13 orchestrator", 95, 3.42, 4_810_000, {
   tags: ["project:jarvis", "role:orchestrator", `run:${RUN_13}`],
+  contextPercent: 62.4,
 });
 
 const batch13: AgentBuilder[] = [
@@ -140,6 +141,7 @@ const batch13: AgentBuilder[] = [
 const orch12 = session("session_01JDorch12", "JARVIS batch 12 orchestrator", 300, 9.6, 14_200_000, {
   tags: ["project:jarvis", "role:orchestrator", `run:${RUN_12}`],
   statusBucket: "review_ready",
+  contextPercent: 88.1,
 });
 
 const batch12: AgentBuilder[] = [
@@ -186,6 +188,7 @@ const loose: AgentBuilder[] = [
 
 const tripOrch = session("session_01TRorch", "Trip planner orchestrator", 180, 4.2, 6_400_000, {
   tags: ["project:trip", "role:orchestrator", `run:${RUN_TRIP}`],
+  contextPercent: 41,
 });
 
 const tripBuilders: AgentBuilder[] = [
