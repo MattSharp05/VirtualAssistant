@@ -70,6 +70,12 @@ const bridge: DeskBridge = {
     show: (url, bounds) => ipcRenderer.send("desk:webview-show", url, bounds),
     hide: () => ipcRenderer.send("desk:webview-hide"),
   },
+  browser: {
+    state: () => ipcRenderer.invoke("desk:browser-state"),
+    command: (command) => ipcRenderer.invoke("desk:browser-command", command),
+    show: (bounds) => ipcRenderer.send("desk:browser-show", bounds),
+    hide: () => ipcRenderer.send("desk:browser-hide"),
+  },
   hands: {
     windowAt: (point, part) => ipcRenderer.invoke("desk:hands-window-at", point, part),
     setBounds: (id, bounds, done) => ipcRenderer.send("desk:hands-set-bounds", id, bounds, done),

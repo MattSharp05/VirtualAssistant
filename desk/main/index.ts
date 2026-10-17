@@ -32,6 +32,8 @@ import { Connection } from "./connection";
 import { describeTurn, latencyLine } from "./latency";
 import { startHotkeyWithAccess } from "./permissions";
 import { MacFiles } from "./rpcHandlers/fs";
+import { registerBrowser } from "./browser/host";
+import { browserRpcHandlers } from "./rpcHandlers/browser";
 import { askLayoutName, Layouts } from "./rpcHandlers/layout";
 import { answerRpc, type RpcHandler } from "./rpcHandlers";
 import { screenRpcHandlers } from "./rpcHandlers/screenNative";
@@ -196,6 +198,14 @@ app.whenReady().then(() => {
   let usage: UsageResponse | undefined;
   // Server→Mac requests (rpcHandlers/): folder access reads Settings → Folders on every call.
   const macFiles = new MacFiles({ allowedFolders: () => settings.get("allowedFolders") });
+  // The Mac's browser (JD-59): the Browser window's tabs, and the browser.* actions JARVIS calls.
+  const browserAgent = registerBrowser({
+    window: () => windows.window("browser"),
+    openWindow: () => windows.openWindow("browser"),
+    publish: broadcast,
+    upload: (source) => uploader.upload(source),
+    downloadsDir: app.getPath("downloads"),
+  });
   const rpcHandlers: Record<string, RpcHandler> = {
     "fs.list": (p) => macFiles.list(p as FsListRequest),
     "fs.read": (p) => macFiles.read(p as FsReadRequest),
@@ -205,7 +215,14 @@ app.whenReady().then(() => {
       upload: (source) => uploader.upload(source),
       publish: broadcast,
     }),
+    ...browserRpcHandlers(browserAgent),
   };
+  // The Electron smoke test (a scenario run) calls rpc handlers directly, as the server would.
+  if (scenario)
+    (globalThis as { __deskRpc?: (kind: string, payload: unknown) => Promise<unknown> }).__deskRpc = (
+      kind,
+      payload,
+    ) => rpcHandlers[kind]!(payload);
   const connection = new Connection({
     config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
     onEvent: (event) => {

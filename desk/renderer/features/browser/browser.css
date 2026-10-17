@@ -1,0 +1,498 @@
+/* The Browser window (JD-59): tabs (38 px), toolbar (48 px) and status line (26 px) on the glass, then
+   the page edge to edge. main/browser/host.ts guesses the same 160 px until the slot is measured. */
+.browser {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-size: 13px;
+}
+
+.browser button,
+.browser input {
+  font: inherit;
+}
+
+.browser :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ── Tabs ── */
+
+.browser-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 38px;
+  box-sizing: border-box;
+  padding: 6px 10px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.browser-tab {
+  display: flex;
+  align-items: center;
+  flex: 0 1 220px;
+  min-width: 96px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
+  color: var(--ink-3);
+}
+
+.browser-tab:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.browser-tab[data-active] {
+  border-color: var(--glass-border);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--ink);
+}
+
+.browser-tab-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 12px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.browser-tab-dot {
+  flex: 0 0 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  opacity: 0.6;
+}
+
+.browser-tab[data-active] .browser-tab-dot {
+  background: var(--accent);
+  opacity: 1;
+}
+
+.browser-tab-text {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.browser-tab-close,
+.browser-tab-new {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  height: 22px;
+  margin-right: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.browser-tab-new {
+  flex-basis: 28px;
+  height: 28px;
+  margin: 0 0 2px;
+}
+
+.browser-tab-close:hover,
+.browser-tab-new:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+}
+
+/* ── Toolbar and status line ── */
+
+.browser-chrome {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 48px;
+  box-sizing: border-box;
+  padding: 0 10px;
+}
+
+.browser-nav {
+  display: grid;
+  place-items: center;
+  flex: 0 0 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.browser-nav:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+.browser-nav:disabled {
+  color: var(--ink-3);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.browser-address {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: 0 6px;
+}
+
+.browser-address input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 34px 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: var(--bg-deep);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.browser-address input::placeholder {
+  color: var(--ink-3);
+  font-family: var(--font-body);
+}
+
+.browser-address input:focus {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: none;
+}
+
+.browser-loading {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  width: 12px;
+  height: 12px;
+  margin-top: -7px;
+  border: 2px solid rgba(95, 212, 230, 0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: browser-spin 0.8s linear infinite;
+}
+
+@keyframes browser-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.browser-control {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 14px 0 11px;
+  border: 1px solid rgba(242, 178, 76, 0.55);
+  border-radius: 999px;
+  background: rgba(242, 178, 76, 0.1);
+  color: var(--amber);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.browser-control:hover {
+  background: rgba(242, 178, 76, 0.2);
+}
+
+.browser-control[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--bg-deep);
+}
+
+.browser-control[aria-pressed="true"]:hover {
+  background: var(--accent-ink);
+}
+
+.browser-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  margin: 0;
+  padding: 0 16px;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.browser-status::before {
+  content: "";
+  flex: 0 0 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.browser[data-control="matthew"] .browser-status::before {
+  background: var(--amber);
+  box-shadow: 0 0 8px var(--amber);
+}
+
+.browser-status-who {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+.browser[data-control="matthew"] .browser-status-who {
+  color: var(--amber);
+}
+
+.browser-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── The page ── */
+
+.browser-page {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* While Matthew drives, an amber edge says JARVIS has let go. */
+.browser[data-control="matthew"] .browser-page {
+  padding: 2px;
+  background: color-mix(in srgb, var(--amber) 75%, transparent);
+}
+
+.browser-slot,
+.browser-preview,
+.browser-empty {
+  flex: 1;
+  min-width: 0;
+}
+
+.browser-slot {
+  display: grid;
+  place-content: center;
+  background: #fff;
+  color: #6b7480;
+}
+
+.browser-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.browser-empty h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.browser-empty p {
+  max-width: 420px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.browser-preview {
+  position: relative;
+  overflow: auto;
+  background: #fbf8f3;
+}
+
+/* ── The ring and caption (the preview's copy of what main draws in the page) ── */
+
+.browser-act {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 0.6s;
+}
+
+.browser-act[data-fading] {
+  opacity: 0;
+}
+
+.browser-ring {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 4px rgba(95, 212, 230, 0.25),
+    0 0 18px rgba(95, 212, 230, 0.55);
+  animation: browser-appear 0.15s ease-out;
+}
+
+.browser-caption {
+  position: absolute;
+  max-width: 320px;
+  padding: 7px 12px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(95, 212, 230, 0.55);
+  border-radius: 999px;
+  background: rgba(14, 19, 24, 0.92);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: browser-appear 0.2s ease-out;
+}
+
+@keyframes browser-appear {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ── The stand-in page (web preview only) ── */
+
+.stand-in {
+  min-height: 100%;
+  box-sizing: border-box;
+  color: #2a2420;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.stand-in-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 40px;
+  border-bottom: 1px solid #e7dfd3;
+}
+
+.stand-in a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.stand-in-brand {
+  font-size: 20px;
+  font-style: italic;
+}
+
+.stand-in-header nav {
+  display: flex;
+  gap: 24px;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.stand-in-main {
+  max-width: 640px;
+  padding: 36px 40px;
+}
+
+.stand-in h2 {
+  margin: 0 0 8px;
+  font-size: 34px;
+  font-weight: 400;
+}
+
+.stand-in p {
+  margin: 0 0 24px;
+  color: #6a5f55;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.stand-in-form {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+  font-family: system-ui, sans-serif;
+}
+
+.stand-in-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a7d70;
+}
+
+.stand-in-form input,
+.stand-in-form select {
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid #d8cdbf;
+  border-radius: 6px;
+  background: #fff;
+  color: #2a2420;
+  font-size: 15px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+.stand-in-form button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  height: 46px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: 6px;
+  background: #9b3d22;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stand-in-note {
+  font-size: 13px;
+}
+
+.stand-in-other {
+  display: grid;
+  place-content: center;
+  padding: 40px;
+  text-align: center;
+}

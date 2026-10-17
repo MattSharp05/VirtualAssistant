@@ -8,6 +8,7 @@ import {
   type DeskEvent,
   type UploadResponse,
 } from "@jarvis/shared";
+import { createMockBrowser, type MockBrowserLog } from "./browser";
 import { createMockMac, type MockMacLog } from "./mac";
 import type { Scenario } from "./types";
 
@@ -37,6 +38,8 @@ export interface MockBridge extends DeskBridge {
   readonly chats: { text: string; channel: ChatRequest["channel"]; attachments?: string[] }[];
   /** The Mac side (Settings): samples spoken. */
   readonly mac: NonNullable<DeskBridge["mac"]> & MockMacLog;
+  /** The Browser window (JD-59): toolbar commands. */
+  readonly browser: NonNullable<DeskBridge["browser"]> & MockBrowserLog;
 }
 
 export function createMockBridge(scenario: Scenario): MockBridge {
@@ -177,6 +180,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     requests,
     chats: chatLog,
     mac: createMockMac(scenario, settings),
+    browser: createMockBrowser(scenario.browser, emit),
     overlay: {
       setInteractive: (on) => void (interactive = on),
       orbClicked: () => void orbClicks++,
