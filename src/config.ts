@@ -26,6 +26,44 @@ export interface Config {
   timeZone?: string;
   /** claude.ai connectors the brain may read (see CONNECTORS in src/tools/connectors.ts). Empty = none. */
   brainConnectors: string[];
+  /** Projects the agent graph always shows (PROJECTS, JSON; JD-57), even with nothing running. */
+  projects?: ProjectSetting[];
+  /** Read-only GitHub token for PR check runs (GITHUB_TOKEN; public repos work without it, rate-limited). Never logged. */
+  githubToken?: string;
+}
+
+/** One project in PROJECTS: its tag slug, name, Tickets data source and repo. */
+export interface ProjectSetting {
+  /** The `project:` tag value (the project's CLAUDE.md `Project slug:`). */
+  slug: string;
+  name: string;
+  /** The Tickets data source (collection://… or its id) or database id, read for in-flight tickets. */
+  tickets?: string;
+  /** owner/name, for PR numbers the run page gives without a URL. */
+  repo?: string;
+  /** Ticket ID prefix (e.g. "JD"), for sessions titled `JD-12: …` when the ticket isn't in flight. */
+  prefix?: string;
+  notionUrl?: string;
+}
+
+/** PROJECTS='[{"slug":"jarvis","name":"JARVIS Desk","tickets":"collection://…","repo":"MattSharp05/VirtualAssistant","prefix":"JD"}]' */
+export function parseProjects(text: string | undefined): ProjectSetting[] {
+  if (!text) return [];
+  let rows: unknown;
+  try {
+    rows = JSON.parse(text);
+  } catch {
+    throw new Error("PROJECTS must be a JSON list, e.g. [{\"slug\":\"jarvis\",\"name\":\"JARVIS Desk\"}]");
+  }
+  if (!Array.isArray(rows)) throw new Error("PROJECTS must be a JSON list of projects");
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  return rows.map((r: Record<string, unknown>, i) => {
+    const slug = str(r?.slug);
+    if (!slug) throw new Error(`PROJECTS[${i}] needs a slug`);
+    const out: ProjectSetting = { slug, name: str(r.name) ?? slug };
+    for (const key of ["tickets", "repo", "prefix", "notionUrl"] as const) if (str(r[key])) out[key] = str(r[key]);
+    return out;
+  });
 }
 
 function optional(name: string): string | undefined {
@@ -60,6 +98,8 @@ export function loadConfig(): Config {
   const brainConnectors = /^none$/i.test(connectors) ? [] : connectors.split(",").map((c) => c.trim()).filter(Boolean);
   return {
     brainConnectors,
+    projects: parseProjects(optional("PROJECTS")),
+    githubToken: optional("GITHUB_TOKEN"),
     notionToken: optional("NOTION_TOKEN"),
     brainModels,
     brainModel,

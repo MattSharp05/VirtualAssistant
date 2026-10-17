@@ -64,6 +64,8 @@ export type DeskEvent =
   | { type: "reminder.due"; id: string; text: string; late: boolean }
   /** A session reported in or was messaged (JD-32); the Sessions window re-fetches /sessions. */
   | { type: "sessions.changed" }
+  /** Something in the agent graph changed (JD-57): a status, CI, a new or gone node; ids are node ids (project:, session:, sub:, ticket:); re-fetch /agents. */
+  | { type: "agents.changed"; ids: string[] }
   /** A Desk setting changed on this Mac (main → its windows; never from the server): re-read it with settings.get. */
   | { type: "settings.changed"; key: string }
   /** The server asks the Mac for something (a file, the clipboard…); the Desk answers with POST /api/desk/rpc/:id. */
@@ -931,6 +933,143 @@ export interface NotionPage extends NotionPageRef {
 export interface NotionPinnedResponse {
   pinned: NotionPageRef[];
   recent: NotionPageRef[];
+}
+
+// ── Agent graph (JD-57): projects → orchestrators → builders, with tickets, PRs and live CI ──
+// Built from session tags (project:, role:, orchestrator:, ticket:, run:), session lineage, the run
+// page's Builders table, the projects' Tickets databases and `<ID>: …` session titles, in that order:
+// an earlier source wins, a later one fills gaps.
+
+/** Where a node's facts came from. */
+export type AgentSource = "tags" | "lineage" | "run-page" | "ticket" | "title";
+
+/** A cloud session in the graph (an orchestrator, or a builder that is one). */
+export interface AgentSession {
+  id: string;
+  title: string;
+  url: string;
+  /** The session list's status (running, idle…). */
+  status?: string;
+  lastActivity?: string;
+  /** Its JD-53 metrics (statusBucket, cost, tokens…); absent when the detail couldn't be read. */
+  metrics?: SessionMetrics;
+}
+
+export interface AgentTicket {
+  /** e.g. "JD-57". */
+  id: string;
+  title?: string;
+  /** The ticket page's Status (In Progress, In Review, QA Pending…). */
+  status?: string;
+  url?: string;
+}
+
+/** CI for a PR's head commit, from GitHub check runs. Failed beats running beats queued beats passed. */
+export type CiState = "queued" | "running" | "passed" | "failed";
+
+export interface AgentCheck {
+  name: string;
+  /** GitHub's own: queued, in_progress, completed (or waiting, requested, pending). */
+  status: string;
+  /** Set once completed: success, failure, neutral, cancelled, skipped, timed_out, action_required… */
+  conclusion?: string;
+  url?: string;
+  state: CiState;
+}
+
+export interface AgentCi {
+  state: CiState;
+  checks: AgentCheck[];
+  headSha?: string;
+  checkedAt: string;
+}
+
+export interface AgentPr {
+  number: number;
+  url: string;
+  /** owner/name, from the PR URL. */
+  repo: string;
+  /** From GitHub once read; until then what the run page or ticket implies (open). */
+  state: "open" | "closed" | "merged";
+  title?: string;
+}
+
+/**
+ * One builder: a cloud session, a sub-agent row from the run page (a local worktree no session API
+ * sees), or a ticket in progress that nothing else accounts for.
+ */
+export interface AgentBuilder {
+  /** "session:<id>", "sub:<run>:<ticket or worktree>" or "ticket:<ID>". */
+  id: string;
+  kind: "cloud" | "sub-agent" | "ticket";
+  session?: AgentSession;
+  /** The run page's Session / worktree cell when it names no session JARVIS can see (a worktree path). */
+  worktree?: string;
+  /** The run page's State: building, CI, merged, blocked, stopped. */
+  state?: string;
+  ticket?: AgentTicket;
+  pr?: AgentPr;
+  ci?: AgentCi;
+  /** From the run page (HH:MM UTC on the run's day, as ISO). */
+  startedAt?: string;
+  updatedAt?: string;
+  sources: AgentSource[];
+}
+
+/** The orchestrator's run page (`Run: <project> <scope> (<date>)`). */
+export interface AgentRun {
+  /** The page id (32 hex), as in the run: tag. */
+  id: string;
+  url: string;
+  title?: string;
+  /** The callout's Status: Running, Waiting on user, Handed over, Finished. */
+  status?: string;
+}
+
+/** Totals over a node and everything under it; cost and tokens only from sessions that report them. */
+export interface AgentMetrics {
+  sessions: number;
+  builders: number;
+  /** Builders still working: not finished, and not merged or stopped on the run page. */
+  active: number;
+  costUsd?: number;
+  totalTokens?: number;
+}
+
+export interface AgentOrchestrator {
+  /** "session:<id>". */
+  id: string;
+  session: AgentSession;
+  metrics: AgentMetrics;
+  run?: AgentRun;
+  /** Its session has completed (or its run page says Finished). */
+  finished: boolean;
+  builders: AgentBuilder[];
+}
+
+export interface AgentProject {
+  /** "project:<slug>". */
+  id: string;
+  slug: string;
+  name: string;
+  notionUrl?: string;
+  /** owner/name. */
+  repo?: string;
+  /** Including folded runs. */
+  metrics: AgentMetrics;
+  orchestrators: AgentOrchestrator[];
+  /** Builders and tagged sessions under no orchestrator. */
+  loose: AgentBuilder[];
+  /** Finished runs older than 7 days left out of `orchestrators` (GET /agents?all=1 returns them). */
+  folded: number;
+}
+
+/** GET /api/desk/agents[?all=1]; agents.changed says when to fetch it again. */
+export interface AgentsResponse {
+  projects: AgentProject[];
+  /** What couldn't be read this time (Notion, GitHub, the session list), one line each. */
+  warnings: string[];
+  checkedAt: string;
 }
 
 // ── The Desk bridge (window.desk): the renderer's only door to the rest of the app ──

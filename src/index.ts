@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { PROTOCOL_VERSION } from "@jarvis/shared";
+import { agentGraphFor, AGENTS_POLL_MS } from "./agents/index.js";
 import { Brain } from "./brain/index.js";
 import { createBot } from "./bot.js";
 import { BriefService, useBrief } from "./brief.js";
@@ -112,6 +113,12 @@ scheduler.every("jobs", 60_000, () => void jobRunner.tick());
 useBrief(jarvis, new BriefService({ ctx: toolContext, brain, bus, runner: () => jobRunner }));
 // To-do suggestions: from session reports at once, Notion QA every 30 min (Slack + email is a job).
 suggesterFor(toolContext).start((name, ms, fn) => scheduler.every(name, ms, fn));
+
+// The agent graph (JD-57): re-read every 30 s while a Desk is connected; agents.changed on a change.
+const agents = agentGraphFor(jarvis, bus);
+scheduler.every("agents", AGENTS_POLL_MS, async () => {
+  if (deskCtx.hub.clientCount) await agents.refresh();
+});
 
 // Uploaded files are kept for 7 days.
 const uploads = new UploadStore(config.dataDir);
