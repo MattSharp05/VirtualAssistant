@@ -12,6 +12,7 @@ Follows the `dev-workflow` skill (ticket-driven: Notion → branch → PR → QA
 - Tickets data source: collection://97df4bde-6ac0-42d6-a1cc-0b0838864dfb   (ID prefix: JD)
 - Epics data source: collection://4bf55450-4057-4860-acb8-82e4ea365cb7
 - GitHub: MattSharp05/VirtualAssistant
+- Project slug: jarvis
 - Vision mockup: https://claude.ai/artifact/CdmCZuqgXrtboVyw2MbcR4
 - Preview URLs: batched QA mode. Desk UI browser preview + scenario links per PR (set up in the first epic), plus a .dmg per PR from a macOS runner. Server changes are QA'd on the running container after `git pull && docker compose up -d --build`. Production: Matthew's own Mac + container.
 - QA mode: batched (batch ends at checkpoints: overlay + orb + first window; voice loop; camera hands)
