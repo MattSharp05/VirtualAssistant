@@ -679,6 +679,8 @@ export interface SessionMetrics {
   tags?: string[];
   /** The session that started this one, when the lineage names it. */
   parentId?: string;
+  /** The GitHub repository it runs on ("owner/name"), from its session context (JD-55). */
+  repo?: string;
   createdAt?: string;
   updatedAt?: string;
   /** Now − created, or last activity − created once the session is finished. */
@@ -813,6 +815,43 @@ export interface SystemResponse {
   devices: DeviceInfo[];
   /** Voice latency over the last voice turns the Desk reported (JD-48); absent on an older server. */
   voiceLatency?: VoiceLatencySummary;
+  /** Cloud sessions' use per project, most expensive first (JD-55); absent on an older server. */
+  projects?: ProjectUsage[];
+  /** The last 30 days of cloud session use, oldest first, split by project (JD-55). */
+  history?: UsageDay[];
+}
+
+// ── Project totals and history (JD-55): cloud session use from the server's hourly snapshots ──
+
+/** What a project's sessions used over a period; tokens = input + output + cache read + cache write. */
+export interface ProjectUsagePeriod {
+  costUsd: number;
+  tokens: number;
+  /** Sessions that used anything in the period. */
+  sessions: number;
+  /** Their wall time (created → last activity, or now) inside the period. */
+  wallMs: number;
+  /** Their turns' time inside the period. */
+  activeMs: number;
+}
+
+export interface ProjectUsage {
+  /** The session's `project:<name>` tag, else its repository's name, else "Other". */
+  project: string;
+  /** Sessions working at the last snapshot. */
+  activeSessions: number;
+  /** The last 7 days, today included. */
+  week: ProjectUsagePeriod;
+  allTime: ProjectUsagePeriod;
+}
+
+export interface UsageDay {
+  /** YYYY-MM-DD in the server's time zone. */
+  day: string;
+  costUsd: number;
+  tokens: number;
+  /** The day's use per project (only the projects that used something). */
+  projects: Record<string, { costUsd: number; tokens: number }>;
 }
 
 // ── Voice latency (JD-48): how long from Matthew's last word to JARVIS's first ──

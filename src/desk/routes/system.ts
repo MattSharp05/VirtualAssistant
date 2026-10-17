@@ -1,12 +1,14 @@
 // The System window (JD-30): the dashboard's tiles for the Desk.
 //   GET  /api/desk/system → SystemResponse (plan usage, routine fires, container, brain use today, devices,
 //        voice latency over the last 20 voice turns)
+//        and cloud sessions' use per project and per day over the last 30 days (JD-55)
 //   POST /api/desk/system/latency VoiceLatencyTurn → { ok } (the Desk, after every voice turn; JD-48)
 // Plan usage and fires come from jarvis.status() (cached like the dashboard's), the container from the
 // SystemMonitor index.ts registers, the chat's and worker's use today from their message logs.
 import type { BrainUsageToday, SystemResponse } from "@jarvis/shared";
 import { WorkerState } from "../../brain/worker.js";
 import type { BrainMessage } from "../../store.js";
+import { SessionUsageLog } from "../../sessionUsage.js";
 import { systemMonitorFor } from "../../system.js";
 import { parseLatencyTurn, VoiceLatencyLog } from "../../voiceLatency.js";
 import { DeskHttpError, type DeskRoute } from "./index.js";
@@ -76,6 +78,8 @@ const routes: DeskRoute[] = [
         },
         devices: devices.list(),
         voiceLatency: new VoiceLatencyLog(jarvis.config.dataDir).summary(),
+        // From the hourly snapshots index.ts records (no session API calls on this 15 s poll).
+        ...new SessionUsageLog(jarvis.config.dataDir).summary(),
       };
     },
   },

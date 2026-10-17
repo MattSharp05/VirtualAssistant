@@ -76,6 +76,15 @@ test("GET /api/desk/system: plan, fires, container, chat vs worker today, device
     join(dir, "worker.json"),
     JSON.stringify({ state: { messages: [{ at: today.toISOString(), from: "jarvis", channel: "worker", text: "ok", metrics: metrics(5000, 300, 4, 6000) }], totals: {} } }),
   );
+  // Two hourly snapshots of one session today (JD-55).
+  const hourAgo = new Date(Date.now() - 3_600_000).toISOString();
+  writeFileSync(
+    join(dir, "session-usage.jsonl"),
+    [
+      { at: hourAgo, sessionId: "session_01A", project: "jarvis", costUsd: 1, tokens: 100, updatedAt: hourAgo },
+      { at: today.toISOString(), sessionId: "session_01A", project: "jarvis", costUsd: 3.5, tokens: 350, working: true },
+    ].map((l) => JSON.stringify(l) + "\n").join(""),
+  );
   // A container with 400 MB of 512 MB in use (cgroup v2 files).
   const cg = join(dir, "cgroup");
   mkdirSync(cg);
@@ -115,6 +124,9 @@ test("GET /api/desk/system: plan, fires, container, chat vs worker today, device
     assert.deepEqual(body.brain.chatToday, { replies: 1, tokens: 1120, turns: 2, ms: 900 });
     assert.deepEqual(body.brain.workerToday, { replies: 1, tokens: 5400, turns: 4, ms: 6000 });
     assert.deepEqual(body.devices.map((d) => d.name), ["Matthew's Mac"]);
+    assert.deepEqual(body.projects?.map((p) => [p.project, p.activeSessions, p.allTime.costUsd, p.allTime.tokens]), [["jarvis", 1, 3.5, 350]]);
+    assert.equal(body.history?.length, 30);
+    assert.equal(body.history?.reduce((n, d) => n + d.costUsd, 0), 3.5);
     assert.deepEqual(body.voiceLatency, { turns: 0, p50: null, p90: null, stages: [] }, "no voice turns reported yet");
     // The Desk reports a voice turn (JD-48); the next GET summarises it.
     const reported = await fetch(`${base}/api/desk/system/latency`, {

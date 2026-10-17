@@ -1,6 +1,6 @@
 /* The System window (JD-30): the dashboard's tiles as glass sections. Plan and routine fires on the
    left, the container on the right, then voice latency (JD-48, latency.css), the brains' use today
-   and the paired Macs across. Narrow windows stack everything in one column. */
+   project history and totals (JD-55, usage.css) and the paired Macs across. Narrow windows stack everything in one column. */
 .system {
   container-type: inline-size;
   display: flex;
@@ -76,6 +76,8 @@
     "fires container"
     "latency latency"
     "brain brain"
+    "history history"
+    "projects projects"
     "devices devices";
   gap: 14px;
   padding: 14px 18px 18px;
@@ -84,7 +86,7 @@
 @container (max-width: 560px) {
   .system-grid {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "plan" "fires" "container" "latency" "brain" "devices";
+    grid-template-areas: "plan" "fires" "container" "latency" "brain" "history" "projects" "devices";
   }
 }
 

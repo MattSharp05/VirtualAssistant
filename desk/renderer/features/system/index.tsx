@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { BrainUsageToday, SystemResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { Icon } from "../../app/icons";
+import History from "./History";
 import Latency from "./Latency";
 import {
   agoFrom,
@@ -14,8 +15,11 @@ import {
   tokens,
   workerShare,
 } from "./model";
+import Projects from "./Projects";
+import { chartSeries } from "./usage";
 import { useSystem } from "./useSystem";
 import "./system.css";
+import "./usage.css";
 
 const SPARK_W = 300;
 const SPARK_H = 44;
@@ -247,9 +251,21 @@ function Devices({ r }: { r: SystemResponse }) {
 const clock = (at: string) =>
   new Date(at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
+/** Cloud sessions per project and per day (JD-55); nothing on a server older than that. */
+function Usage({ r }: { r: SystemResponse }) {
+  if (!r.projects || !r.history) return null;
+  const series = chartSeries(r.projects, r.history);
+  return (
+    <>
+      <History history={r.history} series={series} />
+      <Projects projects={r.projects} series={series} />
+    </>
+  );
+}
+
 /**
- * The System window (JD-30): plan usage, routine fires, container health, voice latency (JD-48) and
- * the brains' use today.
+ * The System window (JD-30): plan usage, routine fires, container health, voice latency (JD-48),
+ * the brains' use today, and cloud sessions per project with 30 days of history (JD-55).
  */
 export default function System() {
   const { response, error, loading, reload } = useSystem(useBridge());
@@ -286,6 +302,7 @@ export default function System() {
           <Container r={response} />
           <Latency summary={response.voiceLatency} />
           <Brain r={response} />
+          <Usage r={response} />
           <Devices r={response} />
         </div>
       )}
