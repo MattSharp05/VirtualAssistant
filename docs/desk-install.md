@@ -69,3 +69,12 @@ app over the old one in Applications. (Installing quits JARVIS Desk first.)
 
 Updating by hand: quit JARVIS Desk (above), drag the new app from the `.dmg` into Applications and
 choose **Replace**, then open it again. Finder refuses to replace the app while it's still running.
+
+## When something looks wrong
+JARVIS Desk keeps a log: `~/Library/Logs/JARVIS Desk/desk.log` (**Settings → Updates → Open log**
+shows it in Finder). It records errors from every window (a missing orb, a blank window), crashes and
+failed loads, with the time. Attach it when you report a bug. It's capped at 5 MB (the previous one is
+kept as `desk.log.1`).
+
+To look inside a window, press **⌥⌘I** while it's in front: the Developer Tools open for it (or for
+the overlay with the orb when no JARVIS window is in front).

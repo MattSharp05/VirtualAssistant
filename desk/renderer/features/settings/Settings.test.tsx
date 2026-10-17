@@ -154,6 +154,12 @@ describe("Settings window", () => {
     expect(bridge.appActions).toEqual(["quit"]);
   });
 
+  it("Open log shows desk.log through the bridge (JD-63)", async () => {
+    const bridge = await renderOn("settings");
+    fireEvent.click(screen.getByRole("button", { name: "Open log" }));
+    await waitFor(() => expect(bridge.mac.logOpens).toBe(1));
+  });
+
   it("starts with Show in Dock off when it was switched off", async () => {
     await renderOn("settings-dock-off");
     expect((screen.getByRole("switch", { name: /Show in Dock/ }) as HTMLInputElement).checked).toBe(false);

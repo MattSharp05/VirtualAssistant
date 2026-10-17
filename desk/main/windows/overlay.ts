@@ -1,6 +1,8 @@
 // The overlay (PRD: overlay + orb; ADR 0001): one transparent, frameless, always-on-top window over
 // the primary display's work area, on every Space and over full-screen apps. Clicks pass through to
-// the apps underneath, except while the renderer reports the pointer over the orb (desk:hit).
+// the apps underneath, except while the renderer reports the pointer over the orb (desk:hit). On macOS
+// it's a non-activating panel kept out of Mission Control, Exposé and ⌘Tab (JD-63): it's part of the
+// screen, not a window.
 import { join } from "node:path";
 import { BrowserWindow, ipcMain, screen, shell } from "electron";
 import { DROP_POLL_MS, inside, orbZone, OverlayMouse } from "./dropZone";
@@ -24,6 +26,8 @@ export function createOverlay(
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
+    // A panel floats over full-screen apps without activating JARVIS (so the Dock icon can stay, JD-62).
+    ...(process.platform === "darwin" ? { type: "panel" } : {}),
     backgroundColor: "#00000000",
     title: "JARVIS Desk",
     webPreferences: { preload: join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true },
@@ -31,6 +35,7 @@ export function createOverlay(
   win.setAlwaysOnTop(true, "screen-saver");
   // skipTransformProcessType: without it Electron hides the Dock icon to float over full-screen apps (JD-62).
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  if (process.platform === "darwin") win.setHiddenInMissionControl(true);
   // Click-through by default; `forward` keeps mouse-move events coming so hover can be detected.
   win.setIgnoreMouseEvents(true, { forward: true });
 

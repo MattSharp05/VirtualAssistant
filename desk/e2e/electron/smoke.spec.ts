@@ -28,9 +28,11 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
       BrowserWindow.getAllWindows().map((w) => ({
         onTop: w.isAlwaysOnTop(),
         allSpaces: w.isVisibleOnAllWorkspaces(),
+        // JD-63: not listed in Mission Control, Exposé or ⌘Tab.
+        hiddenInMissionControl: w.isHiddenInMissionControl(),
       })),
     );
-    expect(overlay).toEqual([{ onTop: true, allSpaces: true }]);
+    expect(overlay).toEqual([{ onTop: true, allSpaces: true, hiddenInMissionControl: true }]);
     // See-through: the page paints nothing but the orb. (The window is created with transparent: true;
     // macOS capturePage() composites onto black, so the pixels can't prove it from in here: manual QA.)
     expect(await window.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(

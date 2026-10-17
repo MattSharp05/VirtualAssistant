@@ -70,6 +70,22 @@ describe("cards beside the orb", () => {
     expect(keys(play([{ type: "card.dismiss", id: "task-q" }], false, s))).toEqual(["notice-2"]);
   });
 
+  it("skips a card or notice missing what it needs instead of throwing while React renders (JD-63)", () => {
+    const bad = [
+      { type: "card.show" },
+      { type: "card.show", card: { id: "x" } },
+      { type: "notice", at: "", level: "info" },
+      { type: "timer.started", id: "t" },
+      { type: "timer.done" },
+      { type: "card.dismiss" },
+    ] as unknown as DeskEvent[];
+    expect(() => play(bad)).not.toThrow();
+    expect(play(bad)).toBe(initialCards);
+    // A card without a body or rows still shows.
+    const bare = { type: "card.show", card: { id: "b", title: "Bare" } } as unknown as DeskEvent;
+    expect(keys(play([bare]))).toEqual(["card-b"]);
+  });
+
   it("ignores events that aren't cards", () => {
     const s = play([{ type: "tasks.changed" }]);
     expect(s).toBe(initialCards);

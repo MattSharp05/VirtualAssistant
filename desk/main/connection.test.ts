@@ -93,6 +93,18 @@ describe("Connection", () => {
     conn.stop();
   });
 
+  it("passes on only events: an object with a type (JD-63)", async () => {
+    const server = fakeServer();
+    const { conn, events } = connect(server);
+    conn.restart();
+    await vi.waitFor(() => expect(server.streams).toHaveLength(1));
+    server.streams[0].push(
+      'data: null\n\ndata: 42\n\ndata: {"state":"x"}\n\ndata: not json\n\ndata: {"type":"tasks.changed"}\n\n',
+    );
+    await vi.waitFor(() => expect(events).toEqual([{ type: "tasks.changed" }]));
+    conn.stop();
+  });
+
   it("reconnects with backoff after the stream drops, catching up from Last-Event-ID", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const server = fakeServer();

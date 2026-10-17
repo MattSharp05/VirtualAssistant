@@ -36,7 +36,7 @@ export function useCards(bridge: DeskBridge): CardsView {
           const dnd = await readDnd(bridge);
           if (alive) dispatch({ type: "event", event, dnd, now: Date.now() });
         });
-      } else if (event.type.startsWith("card.") || event.type.startsWith("timer.")) {
+      } else if (typeof event.type === "string" && /^(card|timer)\./.test(event.type)) {
         dispatch({ type: "event", event, dnd: false, now: Date.now() });
       }
     });

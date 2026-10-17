@@ -78,6 +78,13 @@ export default function SettingsWindow() {
             checked={values.checkForUpdates}
             onChange={(on) => void update("checkForUpdates", on)}
           />
+          {bridge.mac?.openLog && (
+            <Row label="Log" hint="desk.log in ~/Library/Logs/JARVIS Desk: what went wrong, and when.">
+              <button type="button" className="settings-button" onClick={() => void bridge.mac?.openLog?.()}>
+                Open log
+              </button>
+            </Row>
+          )}
           {bridge.app && (
             <div className="settings-quit">
               <p className="settings-hint">

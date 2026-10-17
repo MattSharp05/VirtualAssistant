@@ -31,6 +31,7 @@ const bridge: DeskBridge = {
     speak: (text, voice, rate) => ipcRenderer.invoke("desk:mac-speak", text, voice, rate),
     pickFolder: () => ipcRenderer.invoke("desk:mac-pick-folder"),
     testStatusFiles: () => ipcRenderer.invoke("desk:mac-status-test"),
+    openLog: () => ipcRenderer.invoke("desk:mac-open-log"),
   },
   overlay: {
     setInteractive: (on) => ipcRenderer.send("desk:hit", on),

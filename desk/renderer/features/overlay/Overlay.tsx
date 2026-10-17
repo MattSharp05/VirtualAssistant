@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useBridgeChoice } from "../../app/bridge";
+import { ErrorBoundary } from "../../app/ErrorBoundary";
 import { HandsLayer } from "../hands/HandsLayer";
 import { CardsLayer, Hit } from "./cards/CardsLayer";
 import { DropCard, DropRing, useFileDrop } from "./DropZone";
@@ -12,7 +13,8 @@ import "./overlay.css";
 /**
  * The see-through layer over every app, with the orb in the top-right corner, its launcher ring, the
  * cards beside it (JD-27), file drop on the orb (JD-40) and the hand pointers while Camera hands is on
- * (JD-42).
+ * (JD-42). Each layer has its own error boundary (JD-63): one that crashes is logged and dropped, and
+ * the orb always stays.
  */
 export function Overlay() {
   const { bridge, scenario, ui } = useBridgeChoice();
@@ -44,37 +46,70 @@ export function Overlay() {
   );
 
   const orbSize = orb.expanded ? 120 : 28;
+  const orbHandlers = {
+    onEnter: () => hits.enter("orb"),
+    onLeave: () => hits.leave("orb"),
+    onClick: () => {
+      setRing((r) => !r);
+      bridge.overlay?.orbClicked();
+    },
+    onContextMenu: () => {
+      setRing(false);
+      bridge.overlay?.orbMenu?.();
+    },
+  };
   return (
     <main className={`overlay${scenario ? " overlay-preview" : ""}`}>
       <div className="overlay-corner" style={{ "--orb-size": `${orbSize}px` } as CSSProperties}>
-        {drop.dragging && <DropRing orbSize={orbSize} />}
-        {ring && <Launcher orbSize={orbSize} onOpen={open} onClose={close} />}
-        <Orb
-          {...orb}
-          onEnter={() => hits.enter("orb")}
-          onLeave={() => hits.leave("orb")}
-          onClick={() => {
-            setRing((r) => !r);
-            bridge.overlay?.orbClicked();
-          }}
-          onContextMenu={() => {
-            setRing(false);
-            bridge.overlay?.orbMenu?.();
-          }}
-        />
+        {drop.dragging && (
+          <ErrorBoundary name="drop">
+            <DropRing orbSize={orbSize} />
+          </ErrorBoundary>
+        )}
+        {ring && (
+          <ErrorBoundary name="launcher">
+            <Launcher orbSize={orbSize} onOpen={open} onClose={close} />
+          </ErrorBoundary>
+        )}
+        <ErrorBoundary name="orb" fallback={<PlainOrb {...orbHandlers} />}>
+          <Orb {...orb} {...orbHandlers} />
+        </ErrorBoundary>
       </div>
-      <CardsLayer
-        bridge={bridge}
-        hits={hits}
-        pinned={
-          drop.card && (
-            <Hit hits={hits} id="drop-card">
-              <DropCard drop={drop} />
-            </Hit>
-          )
-        }
-      />
-      <HandsLayer bridge={bridge} />
+      <ErrorBoundary name="cards">
+        <CardsLayer
+          bridge={bridge}
+          hits={hits}
+          pinned={
+            drop.card && (
+              <ErrorBoundary name="drop">
+                <Hit hits={hits} id="drop-card">
+                  <DropCard drop={drop} />
+                </Hit>
+              </ErrorBoundary>
+            )
+          }
+        />
+      </ErrorBoundary>
+      <ErrorBoundary name="hands">
+        <HandsLayer bridge={bridge} />
+      </ErrorBoundary>
     </main>
+  );
+}
+
+/** The orb with nothing live in it: what stays if the orb itself ever fails to render. */
+function PlainOrb({ onEnter, onLeave, onClick }: { onEnter(): void; onLeave(): void; onClick(): void }) {
+  return (
+    <button
+      type="button"
+      className="orb"
+      aria-label="JARVIS"
+      data-orb-state="idle"
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      onClick={onClick}
+    >
+      <span className="orb-core" />
+    </button>
   );
 }

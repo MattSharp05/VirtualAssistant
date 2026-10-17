@@ -11,6 +11,24 @@ const SECTIONS = [
   "Updates",
 ];
 
+/** The section jump scrolls smoothly: wait until the page stops moving before checking or snapshotting. */
+async function scrollSettled(page: Page) {
+  let last = -1;
+  await expect
+    .poll(
+      async () => {
+        const top = await page.evaluate(() =>
+          Math.max(...[...document.querySelectorAll("*")].map((el) => el.scrollTop)),
+        );
+        const still = top === last;
+        last = top;
+        return still;
+      },
+      { intervals: [150] },
+    )
+    .toBe(true);
+}
+
 test("settings: every section renders with the saved values", async ({ page }) => {
   await openWindow(page, "settings", "settings");
   await waitForBridgeIdle(page);
@@ -76,7 +94,8 @@ test("settings: the section list jumps, and controls are keyboard reachable", as
     .getByRole("button", { name: "Updates" })
     .click();
   await expect(page.getByRole("heading", { name: "Updates" })).toBeInViewport();
-  await expect(page.getByRole("heading", { name: "Faces & status files" })).toBeInViewport();
+  await scrollSettled(page);
+  await expect(page.getByRole("button", { name: "Quit JARVIS Desk" })).toBeInViewport();
   await expectWindowSnapshot(page, "settings-bottom");
   await page.getByRole("button", { name: "Add folder…" }).focus();
   await page.keyboard.press("Enter");

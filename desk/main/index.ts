@@ -30,6 +30,7 @@ import {
 } from "@jarvis/shared";
 import { applicationMenu, dockClickTarget, dockMenu, orbMenu, type AppMenuActions } from "./appMenus";
 import { Connection } from "./connection";
+import { createLog, errorText, windowSource, type DeskLog } from "./log";
 import { describeTurn, latencyLine } from "./latency";
 import { startHotkeyWithAccess } from "./permissions";
 import { MacFiles } from "./rpcHandlers/fs";
@@ -55,8 +56,50 @@ import { createOverlay } from "./windows/overlay";
 import { registerWebViews } from "./windows/webview";
 
 const USAGE_EVERY_MS = 5 * 60_000;
+const scenario = process.env.JARVIS_DESK_SCENARIO;
+
+// The Electron smoke tests that run without a scenario (JD-63) get their own userData (and logs)
+// folder and a device key that skips the Keychain. Never in the packaged app.
+const testUserData = app.isPackaged ? undefined : process.env.JARVIS_DESK_TEST_USER_DATA;
+const testDeviceKey = app.isPackaged ? undefined : process.env.JARVIS_DESK_TEST_DEVICE_KEY;
+if (testUserData) {
+  app.setPath("userData", testUserData);
+  app.setAppLogsPath(join(testUserData, "logs"));
+}
+
+// desk.log (JD-63): main's own uncaught errors, and every window's console errors, crashes and
+// failed preloads or loads, so a blank window always leaves a reason behind.
+let log: DeskLog | undefined;
+const logError = (source: string, message: string) => {
+  console.error(`[${source}] ${message}`);
+  log?.write("error", source, message);
+};
+process.on("uncaughtException", (err) => logError("main", `Uncaught: ${errorText(err)}`));
+process.on("unhandledRejection", (reason) => logError("main", `Unhandled rejection: ${errorText(reason)}`));
+app.on("web-contents-created", (_e, contents) => {
+  const source = () => windowSource(contents.getURL());
+  contents.on("console-message", (details) => {
+    if (details.level !== "error" && details.level !== "warning") return;
+    const where = details.sourceId ? ` (${details.sourceId}:${details.lineNumber})` : "";
+    log?.write(details.level === "error" ? "error" : "warn", source(), `${details.message}${where}`);
+  });
+  contents.on("render-process-gone", (_ev, d) =>
+    logError(source(), `Renderer gone: ${d.reason} (exit code ${d.exitCode})`),
+  );
+  contents.on("preload-error", (_ev, path, err) => logError(source(), `Preload ${path}: ${errorText(err)}`));
+  contents.on("did-fail-load", (_ev, code, description, url, isMainFrame) => {
+    if (isMainFrame) logError(source(), `Couldn't load ${url}: ${description} (${code})`);
+  });
+  contents.on("unresponsive", () => log?.write("warn", source(), "The page stopped responding"));
+});
 
 app.whenReady().then(() => {
+  log = createLog({ file: join(app.getPath("logs"), "desk.log") });
+  log.write(
+    "info",
+    "main",
+    `JARVIS Desk ${app.getVersion()} started${scenario ? ` on scenario ${scenario}` : ""}`,
+  );
   const userData = app.getPath("userData");
   const settings = new Settings({
     file: join(userData, "settings.json"),
@@ -69,8 +112,8 @@ app.whenReady().then(() => {
     },
   });
   app.on("before-quit", () => settings.flush());
+  const hasDeviceKey = () => settings.hasSecret("deviceKey") || Boolean(testDeviceKey);
   const rendererIndex = join(__dirname, "../renderer/dist/index.html");
-  const scenario = process.env.JARVIS_DESK_SCENARIO;
   const windows = new WindowManager(rendererIndex, settings, scenario);
   const commandBar = new CommandBar(rendererIndex, scenario);
   if (!globalShortcut.register(COMMAND_BAR_SHORTCUT, () => commandBar.toggle()))
@@ -82,7 +125,15 @@ app.whenReady().then(() => {
   settings.onChange((key) => key === "statusFiles" && statusFiles.refresh());
   const broadcast = (event: DeskEvent) => {
     statusFiles.onEvent(event);
-    for (const w of BrowserWindow.getAllWindows()) w.webContents.send("desk:event", event);
+    // One window going away mid-send mustn't keep the event from the rest (the overlay included).
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (w.isDestroyed() || w.webContents.isDestroyed()) continue;
+      try {
+        w.webContents.send("desk:event", event);
+      } catch (err) {
+        logError("main", `Couldn't send ${event.type}: ${errorText(err)}`);
+      }
+    }
   };
   const voice = createVoice({
     modelsDir: join(userData, "models"),
@@ -168,8 +219,8 @@ app.whenReady().then(() => {
     if (key === "wakeWordEnabled" || key === "dnd" || key === "wakeDuringDnd") voice.wake.sync();
     if (key === "picovoiceKey" || key === "wakeSensitivity" || key === "micDevice") voice.wake.reload();
   });
-  // First run downloads the models now, with a progress card (not on a scenario, e.g. the smoke test).
-  if (!scenario) voice.session.warmUp().catch((err) => console.error("voice models:", err));
+  // First run downloads the models now, with a progress card (not in the smoke tests).
+  if (!scenario && !testUserData) voice.session.warmUp().catch((err) => console.error("voice models:", err));
   // Saved layouts (JD-37): the tray, the command bar and the server's apply_layout tool.
   const layouts = new Layouts({
     windows,
@@ -221,7 +272,10 @@ app.whenReady().then(() => {
       payload,
     ) => rpcHandlers[kind]!(payload);
   const connection = new Connection({
-    config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
+    config: () => ({
+      serverUrl: settings.get("serverUrl"),
+      deviceKey: settings.getSecret("deviceKey") ?? testDeviceKey,
+    }),
     onEvent: (event) => {
       if (event.type === "rpc") {
         if (event.kind === LAYOUT_RPC)
@@ -262,7 +316,14 @@ app.whenReady().then(() => {
     // The server holds Do Not Disturb for Telegram notices too.
     connection.request("/dnd", { on }).catch(() => {});
   };
-  const menuActions: AppMenuActions = { openSettings, commandBar: () => commandBar.open(), setDnd, quit };
+  const menuActions: AppMenuActions = {
+    openSettings,
+    commandBar: () => commandBar.open(),
+    setDnd,
+    quit,
+    // ⌥⌘I (JD-63): DevTools for the JARVIS window in front, else the overlay (packaged builds too).
+    devTools: () => (BrowserWindow.getFocusedWindow() ?? overlay).webContents.toggleDevTools(),
+  };
   // The menu bar while a JARVIS window is in front: ⌘Q, ⌘, and Edit (copy/paste in every window).
   Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenu(menuActions)));
   // The Dock icon (JD-62): shown by default (no LSUIElement), hidden at once when Show in Dock is off.
@@ -290,7 +351,7 @@ app.whenReady().then(() => {
   // A click on the Dock icon (or opening the app again from Finder) opens the command bar, or
   // Settings while the Desk isn't paired.
   app.on("activate", () => {
-    const paired = Boolean(settings.get("serverUrl")) && settings.hasSecret("deviceKey");
+    const paired = Boolean(settings.get("serverUrl")) && hasDeviceKey();
     if (dockClickTarget(paired) === "commandbar") commandBar.open();
     else openSettings();
   });
@@ -340,8 +401,8 @@ app.whenReady().then(() => {
       quit,
     },
   );
-  // The Electron smoke test checks the menu-bar icon is really there (JD-62).
-  if (scenario) (globalThis as { __deskTray?: typeof trayCheck }).__deskTray = trayCheck;
+  // The Electron smoke tests check the menu-bar icon is really there (JD-62).
+  if (scenario || testUserData) (globalThis as { __deskTray?: typeof trayCheck }).__deskTray = trayCheck;
   windows.onChange(() => tray.refresh());
   settings.onChange((key) => {
     if (key === "serverUrl" || key === "deviceKey") connection.restart();
@@ -392,7 +453,10 @@ app.whenReady().then(() => {
   ipcMain.handle("desk:layouts-apply", (_e, name: string) => void layouts.apply(String(name)));
   // Files dropped on the orb or a window (JD-40); progress goes back to the window that asked.
   const uploader = new Uploader({
-    config: () => ({ serverUrl: settings.get("serverUrl"), deviceKey: settings.getSecret("deviceKey") }),
+    config: () => ({
+      serverUrl: settings.get("serverUrl"),
+      deviceKey: settings.getSecret("deviceKey") ?? testDeviceKey,
+    }),
   });
   ipcMain.handle("desk:upload", (e, source: UploadSource, token: string) =>
     uploader.upload(source, (fraction) => {
@@ -400,6 +464,8 @@ app.whenReady().then(() => {
     }),
   );
   ipcMain.handle("desk:mac-status-test", () => statusFiles.test());
+  // Settings → Open log (JD-63): desk.log in Finder.
+  ipcMain.handle("desk:mac-open-log", () => shell.showItemInFolder(log!.file));
   ipcMain.on("desk:open-window", (_e, id: string, params?: Record<string, string>) =>
     // The command bar has its own window; the drop card's Ask opens it prefilled (JD-40).
     id === "commandbar" ? commandBar.open(params) : windows.openWindow(id, params),
@@ -419,7 +485,7 @@ app.whenReady().then(() => {
     return true;
   });
   // Not on a scenario (e.g. the smoke test): no network checks there.
-  if (!scenario) updater.start();
+  if (!scenario && !testUserData) updater.start();
   app.on("will-quit", () => updater.stop());
   // The launcher ring opens in the overlay; focus it so Esc reaches the ring.
   ipcMain.on("desk:orb-click", () => overlay.focus());
@@ -429,8 +495,7 @@ app.whenReady().then(() => {
   ambient.sync(settings.get("face"));
 
   // First launch: nothing to connect to yet, so Settings opens (not on a scenario, e.g. the smoke test).
-  if (!scenario && (!settings.get("serverUrl") || !settings.hasSecret("deviceKey")))
-    windows.openWindow("settings");
+  if (!scenario && (!settings.get("serverUrl") || !hasDeviceKey())) windows.openWindow("settings");
 });
 app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => globalShortcut.unregisterAll());
