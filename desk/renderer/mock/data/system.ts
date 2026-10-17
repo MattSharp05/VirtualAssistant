@@ -3,6 +3,7 @@
 // that meet the PRD's latency target (JD-48).
 import type { SystemResponse, VoiceLatencySummary } from "@jarvis/shared";
 import type { ScenarioPart } from "../types";
+import { demoUsage } from "./system-usage";
 
 const MB = 2 ** 20;
 export const SYSTEM_CHECKED_AT = "2026-10-14T08:20:00Z";
@@ -82,6 +83,8 @@ export const system: SystemResponse = {
     { id: "d2", name: "Studio Mac", createdAt: "2026-10-03T10:00:00Z", lastSeen: minutes(-26 * 60) },
   ],
   voiceLatency,
+  // Cloud sessions per project and the last 30 days (JD-55).
+  ...demoUsage,
 };
 
 const part: ScenarioPart = { data: { "/system": system } };

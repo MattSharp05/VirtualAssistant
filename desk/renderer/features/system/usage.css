@@ -1,0 +1,276 @@
+/* Project totals and the 30-day history (JD-55) in the System window. Five project colours in a fixed
+   order (checked with the dataviz validator against the window's dark surface: lightness band,
+   colour-blind and normal-vision separation, 3:1 contrast), then a grey for the folded "Other".
+   Text stays in the ink colours; the dots and bars carry the identity. */
+.system-history,
+.system-projects {
+  --usage-surface: #161d24;
+  --series-1: #1a9cb0;
+  --series-2: #d95926;
+  --series-3: #9085e9;
+  --series-4: #d55181;
+  --series-5: #c98500;
+  --series-other: #6f7a83;
+}
+
+.system-history {
+  grid-area: history;
+}
+
+.system-projects {
+  grid-area: projects;
+}
+
+[data-slot="1"] {
+  --series: var(--series-1);
+}
+[data-slot="2"] {
+  --series: var(--series-2);
+}
+[data-slot="3"] {
+  --series: var(--series-3);
+}
+[data-slot="4"] {
+  --series: var(--series-4);
+}
+[data-slot="5"] {
+  --series: var(--series-5);
+}
+[data-slot="other"] {
+  --series: var(--series-other);
+}
+
+.usage-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.usage-sum {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.usage-toggle {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.usage-toggle button {
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.usage-toggle button[aria-pressed="true"] {
+  background: rgba(95, 212, 230, 0.16);
+  color: var(--ink);
+}
+
+.usage-toggle button:hover:not([aria-pressed="true"]) {
+  color: var(--ink-2);
+}
+
+.usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.usage-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.usage-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--series);
+}
+
+.usage-figure {
+  position: relative;
+  min-width: 0;
+}
+
+.usage-figure svg {
+  display: block;
+  overflow: visible;
+}
+
+.usage-grid line {
+  stroke: rgba(255, 255, 255, 0.07);
+}
+
+.usage-baseline {
+  stroke: rgba(255, 255, 255, 0.22);
+}
+
+.usage-grid text,
+.usage-x {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--ink-3);
+}
+
+.usage-bar rect,
+.usage-bar path {
+  fill: var(--series);
+  transition: opacity 0.12s ease;
+}
+
+.usage-bar[data-dim] rect,
+.usage-bar[data-dim] path {
+  opacity: 0.35;
+}
+
+.usage-hit {
+  fill: transparent;
+  outline: none;
+}
+
+.usage-hit:focus-visible {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.usage-empty {
+  position: absolute;
+  inset: 10px 4px 22px 48px;
+  display: grid;
+  place-content: center;
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  text-align: center;
+  pointer-events: none;
+}
+
+.usage-tip {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+  min-width: 170px;
+  transform: translateX(-50%);
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(14, 19, 24, 0.96);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 12px;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+
+.usage-tip-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.usage-tip-head strong {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.usage-tip ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.usage-tip li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.usage-tip-name {
+  flex: 1;
+}
+
+.usage-tip-value {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.usage-tip p {
+  margin: 0;
+  color: var(--ink-3);
+}
+
+.usage-scroll {
+  overflow-x: auto;
+}
+
+.usage-table {
+  min-width: 520px;
+}
+
+.usage-table thead th {
+  padding: 0;
+}
+
+.usage-table thead th:first-child {
+  text-align: left;
+}
+
+.usage-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  justify-content: inherit;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.usage-table thead th:not(:first-child) .usage-sort {
+  justify-content: flex-end;
+}
+
+.usage-sort:hover {
+  color: var(--ink-2);
+}
+
+.usage-table th[aria-sort="ascending"] .usage-sort,
+.usage-table th[aria-sort="descending"] .usage-sort {
+  color: var(--ink);
+}
+
+.usage-sort-mark {
+  display: inline-block;
+  width: 8px;
+  font-size: 8px;
+}
+
+/* The row's dot is its chart colour (the brain table's dots are accent and blue). */
+.usage-table tbody th::before,
+.usage-table tbody tr + tr th::before {
+  background: var(--series, transparent);
+}

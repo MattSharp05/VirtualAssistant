@@ -22,6 +22,7 @@ import { bus } from "./events.js";
 import { authStatus } from "./cloud.js";
 import { loadConfig } from "./config.js";
 import { Jarvis } from "./jarvis.js";
+import { recordSessionUsage, SessionUsageLog, SNAPSHOT_MS } from "./sessionUsage.js";
 import { Store } from "./store.js";
 import { SystemMonitor, useSystemMonitor } from "./system.js";
 import { ToolRegistry, type ToolContext } from "./tools/index.js";
@@ -124,6 +125,12 @@ scheduler.every("agents", AGENTS_POLL_MS, async () => {
 const uploads = new UploadStore(config.dataDir);
 uploads.cleanup();
 scheduler.every("uploads-cleanup", 24 * 60 * 60_000, () => void uploads.cleanup());
+// Each cloud session's cumulative cost and tokens, now and every hour (the System window's projects
+// and 30-day history, JD-55).
+const sessionUsage = new SessionUsageLog(config.dataDir);
+const snapshotUsage = () => recordSessionUsage(jarvis, sessionUsage).then(() => undefined);
+snapshotUsage().catch((err) => console.error("session usage snapshot failed:", err));
+scheduler.every("session-usage", SNAPSHOT_MS, snapshotUsage);
 // Matthew's edits to JARVIS Memory in Notion reach the brain within 10 minutes.
 scheduler.every("memory-poll", MEMORY_POLL_MS, async () => void (await memory(toolContext).poll()));
 

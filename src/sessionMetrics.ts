@@ -56,6 +56,7 @@ export function parseDetail(body: unknown): DetailMetrics {
   const max = num(context.max_tokens);
   const tags = Array.isArray(b.tags) ? b.tags.filter((t): t is string => typeof t === "string") : undefined;
   const parent = str(lineage.parent_session_id) ?? str(lineage.parent_id) ?? str(obj(lineage.parent)?.id);
+  const repo = repoOf(b.session_context);
 
   const served = str(meta.last_served_model);
   const configured = str(b.configured_model);
@@ -78,10 +79,30 @@ export function parseDetail(body: unknown): DetailMetrics {
     statusBucket: bucketOf(b.status_bucket),
     tags,
     parentId: parent,
+    repo,
     createdAt: iso(b.created_at),
     updatedAt: iso(b.updated_at),
   };
   return prune(out);
+}
+
+/**
+ * The repository a session runs on (JD-55): the first outcome's `git_info.repo`, else the first
+ * source's GitHub URL, as "owner/name".
+ */
+export function repoOf(context: unknown): string | undefined {
+  const c = obj(context) ?? {};
+  const list = (v: unknown) => (Array.isArray(v) ? v.map(obj).filter((x): x is Obj => x !== undefined) : []);
+  for (const o of list(c.outcomes)) {
+    const repo = str(obj(obj(o.git_repository)?.git_info)?.repo);
+    if (repo) return repo;
+  }
+  for (const s of list(c.sources)) {
+    const url = str(obj(s.git_repository)?.url);
+    const m = url?.match(/github\.com[/:]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/);
+    if (m) return m[1];
+  }
+  return undefined;
 }
 
 /** Drops undefined keys so the JSON carries only what is known. */
