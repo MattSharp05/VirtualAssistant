@@ -70,7 +70,9 @@ describe("Overlay + orb", () => {
     expect(ring().map((b) => b.getAttribute("aria-label"))).toEqual([
       "Chat",
       "Sessions",
+      "Agents",
       "Today",
+      "Calendar",
       "To-do",
       "Notion",
       "System",

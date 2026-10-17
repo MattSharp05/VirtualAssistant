@@ -1,6 +1,6 @@
 import { useEffect, type CSSProperties } from "react";
 import { Icon } from "../../app/icons";
-import { launcherItems, ringPositions } from "./ringLayout";
+import { launcherItems, ringPositions, ringRadius } from "./ringLayout";
 
 interface LauncherProps {
   /** The orb's current diameter: the ring keeps clear of it. */
@@ -9,7 +9,7 @@ interface LauncherProps {
   onClose(): void;
 }
 
-/** Six round buttons fanned out around the orb; Esc or a click anywhere else closes the ring. */
+/** Round buttons fanned out around the orb; Esc or a click anywhere else closes the ring. */
 export function Launcher({ orbSize, onOpen, onClose }: LauncherProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -18,7 +18,7 @@ export function Launcher({ orbSize, onOpen, onClose }: LauncherProps) {
   }, [onClose]);
 
   const items = launcherItems();
-  const positions = ringPositions(items.length, orbSize / 2 + 140);
+  const positions = ringPositions(items.length, ringRadius(items.length, orbSize));
   return (
     <>
       {/* A pinch anywhere else closes the ring too (camera hands, JD-47). */}
