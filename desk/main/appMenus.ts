@@ -7,8 +7,20 @@ export interface AppMenuItem {
   label?: string;
   type?: "normal" | "separator" | "checkbox" | "submenu";
   /** One of Electron's built-in roles (about, quit, editMenu…): macOS supplies label, shortcut and action. */
-  role?: "about" | "hide" | "hideOthers" | "unhide" | "quit" | "editMenu" | "windowMenu";
+  role?:
+    | "about"
+    | "hide"
+    | "hideOthers"
+    | "unhide"
+    | "quit"
+    | "editMenu"
+    | "windowMenu"
+    | "cut"
+    | "copy"
+    | "paste"
+    | "selectAll";
   checked?: boolean;
+  enabled?: boolean;
   accelerator?: string;
   click?: () => void;
   submenu?: AppMenuItem[];
@@ -78,4 +90,36 @@ export function orbMenu(act: AppMenuActions): AppMenuItem[] {
 /** What a click on the Dock icon opens: the command bar, or Settings until the Desk is paired. */
 export function dockClickTarget(paired: boolean): "commandbar" | "settings" {
   return paired ? "commandbar" : "settings";
+}
+
+/** What a right-click hit, from Electron's context-menu params. */
+export interface TextMenuTarget {
+  isEditable: boolean;
+  selectionText: string;
+  linkURL: string;
+  editFlags: { canCut: boolean; canCopy: boolean; canPaste: boolean; canSelectAll: boolean };
+}
+
+/**
+ * The right-click menu in every window (text fields, selected text, links): Cut / Copy / Paste /
+ * Select All, plus Copy Link. Empty when there's nothing to offer, so the orb keeps its own menu.
+ */
+export function textMenu(t: TextMenuTarget, copyLink: (url: string) => void): AppMenuItem[] {
+  const items: AppMenuItem[] = [];
+  if (t.isEditable) {
+    items.push(
+      { role: "cut", enabled: t.editFlags.canCut },
+      { role: "copy", enabled: t.editFlags.canCopy },
+      { role: "paste", enabled: t.editFlags.canPaste },
+      separator,
+      { role: "selectAll", enabled: t.editFlags.canSelectAll },
+    );
+  } else if (t.selectionText.trim()) {
+    items.push({ role: "copy" });
+  }
+  if (t.linkURL) {
+    if (items.length) items.push(separator);
+    items.push({ label: "Copy Link", click: () => copyLink(t.linkURL) });
+  }
+  return items;
 }

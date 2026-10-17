@@ -28,7 +28,14 @@ import {
   type MoodResponse,
   type UsageResponse,
 } from "@jarvis/shared";
-import { applicationMenu, dockClickTarget, dockMenu, orbMenu, type AppMenuActions } from "./appMenus";
+import {
+  applicationMenu,
+  dockClickTarget,
+  dockMenu,
+  orbMenu,
+  textMenu,
+  type AppMenuActions,
+} from "./appMenus";
 import { Connection } from "./connection";
 import { createLog, errorText, windowSource, type DeskLog } from "./log";
 import { describeTurn, latencyLine } from "./latency";
@@ -91,6 +98,11 @@ app.on("web-contents-created", (_e, contents) => {
     if (isMainFrame) logError(source(), `Couldn't load ${url}: ${description} (${code})`);
   });
   contents.on("unresponsive", () => log?.write("warn", source(), "The page stopped responding"));
+  // Right-click Cut / Copy / Paste / Select All / Copy Link in every window and full view.
+  contents.on("context-menu", (_ev, params) => {
+    const items = textMenu(params, (url) => clipboard.writeText(url));
+    if (items.length) Menu.buildFromTemplate(items).popup();
+  });
 });
 
 app.whenReady().then(() => {
