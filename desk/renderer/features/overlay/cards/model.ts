@@ -81,6 +81,9 @@ export function cardsReducer(state: CardsState, action: CardsAction): CardsState
     return { ...state, cards: [...[...state.queued].reverse(), ...state.cards], queued: [] };
   }
   const { event, dnd, now } = action;
+  // The reducer runs while React renders: an event without what its card needs is skipped, never
+  // allowed to throw and take the overlay down with it (JD-63).
+  if (!isShowable(event)) return state;
   const seq = state.seq + 1;
 
   switch (event.type) {
@@ -148,6 +151,28 @@ export function cardsReducer(state: CardsState, action: CardsAction): CardsState
     }
     default:
       return state;
+  }
+}
+
+const isText = (v: unknown): v is string => typeof v === "string";
+
+/** Whether an event has what its card needs (the server and main are trusted, but not to be perfect). */
+export function isShowable(event: DeskEvent): boolean {
+  const e = event as Record<string, unknown>;
+  switch (event.type) {
+    case "card.show": {
+      const card = e.card as Record<string, unknown> | undefined;
+      return Boolean(card) && isText(card!.id) && isText(card!.title);
+    }
+    case "card.dismiss":
+    case "timer.done":
+      return isText(e.id);
+    case "notice":
+      return isText(e.title);
+    case "timer.started":
+      return isText(e.id) && isText(e.endsAt);
+    default:
+      return true;
   }
 }
 

@@ -20,6 +20,8 @@ export interface AppMenuActions {
   setDnd(on: boolean): void;
   /** Every way out goes here (desk:quit → app.quit()). */
   quit(): void;
+  /** DevTools for the focused window, else the overlay (JD-63). */
+  devTools(): void;
 }
 
 export const APP_NAME = "JARVIS Desk";
@@ -27,7 +29,7 @@ const separator: AppMenuItem = { type: "separator" };
 
 /**
  * The menu bar while a JARVIS window is in front: the app menu (About, Settings… ⌘,, Hide, Quit ⌘Q),
- * Edit (so ⌘C/⌘V/⌘A keep working in text fields) and Window.
+ * Edit (so ⌘C/⌘V/⌘A keep working in text fields), View (Developer Tools ⌥⌘I, JD-63) and Window.
  */
 export function applicationMenu(act: AppMenuActions): AppMenuItem[] {
   return [
@@ -46,6 +48,10 @@ export function applicationMenu(act: AppMenuActions): AppMenuItem[] {
       ],
     },
     { role: "editMenu" },
+    {
+      label: "View",
+      submenu: [{ label: "Developer Tools", accelerator: "Alt+CommandOrControl+I", click: act.devTools }],
+    },
     { role: "windowMenu" },
   ];
 }

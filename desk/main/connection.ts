@@ -247,7 +247,10 @@ export class Connection {
         for (const msg of parser.feed(decoder.decode(value, { stream: true }))) {
           if (msg.id) this.lastEventId = msg.id;
           try {
-            this.opts.onEvent(JSON.parse(msg.data) as DeskEvent);
+            const event = JSON.parse(msg.data) as Partial<DeskEvent> | null;
+            // Only events (an object with a type) reach the windows (JD-63).
+            if (event && typeof event === "object" && typeof event.type === "string")
+              this.opts.onEvent(event as DeskEvent);
           } catch {
             // not an event we can read; skip it
           }

@@ -14,6 +14,7 @@ const actions = (): AppMenuActions => ({
   commandBar: vi.fn(),
   setDnd: vi.fn(),
   quit: vi.fn(),
+  devTools: vi.fn(),
 });
 
 const names = (items: AppMenuItem[]) => items.map((i) => i.label ?? i.role ?? "—");
@@ -23,7 +24,7 @@ describe("app menus (JD-62)", () => {
   it("the application menu has About, Settings… ⌘,, Hide and Quit ⌘Q, then Edit and Window", () => {
     const act = actions();
     const menu = applicationMenu(act);
-    expect(names(menu)).toEqual(["JARVIS Desk", "editMenu", "windowMenu"]);
+    expect(names(menu)).toEqual(["JARVIS Desk", "editMenu", "View", "windowMenu"]);
     const app = menu[0]!.submenu!;
     expect(names(app)).toEqual([
       "about",
@@ -43,6 +44,14 @@ describe("app menus (JD-62)", () => {
     find(app, "Settings…").click!();
     expect(act.quit).toHaveBeenCalledOnce();
     expect(act.openSettings).toHaveBeenCalledOnce();
+  });
+
+  it("View → Developer Tools is ⌥⌘I (JD-63)", () => {
+    const act = actions();
+    const tools = find(applicationMenu(act), "View").submenu![0]!;
+    expect(tools).toMatchObject({ label: "Developer Tools", accelerator: "Alt+CommandOrControl+I" });
+    tools.click!();
+    expect(act.devTools).toHaveBeenCalledOnce();
   });
 
   it("the Dock menu opens the command bar and Settings and toggles Do Not Disturb", () => {

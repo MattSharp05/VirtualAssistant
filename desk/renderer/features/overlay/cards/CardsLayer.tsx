@@ -186,7 +186,7 @@ function ShownCard({ card, bridge, onDismiss }: { card: ScreenCard; bridge: Desk
           <Dismiss onDismiss={onDismiss} what={card.title} />
         </div>
       </header>
-      {card.items?.length ? (
+      {Array.isArray(card.items) && card.items.length ? (
         <ul className={`card-rows card-rows-${card.kind}`}>
           {card.items.map((item, i) => (
             <li key={i} className="card-row">
@@ -205,7 +205,7 @@ function ShownCard({ card, bridge, onDismiss }: { card: ScreenCard; bridge: Desk
           ))}
         </ul>
       ) : null}
-      {card.body.trim() && (
+      {card.body?.trim() && (
         <>
           {card.items?.length ? <hr className="card-rule" /> : null}
           <Markdown text={card.body} />

@@ -10,6 +10,8 @@ export interface MockMacLog {
   spoken: { text: string; voice: string; rate: number }[];
   /** How many times Settings → Test ran the status files (JD-45). */
   statusTests: number;
+  /** How many times Settings → Open log was pressed (JD-63). */
+  logOpens: number;
 }
 
 const VOICES: VoiceInfo[] = [
@@ -23,12 +25,17 @@ const VOICES: VoiceInfo[] = [
 export function createMockMac(scenario: Scenario, settings: Map<string, unknown>): Mac & MockMacLog {
   const spoken: MockMacLog["spoken"] = [];
   let statusTests = 0;
+  let logOpens = 0;
   const folders = [...(scenario.mac?.folders ?? [])];
   return {
     spoken,
     get statusTests() {
       return statusTests;
     },
+    get logOpens() {
+      return logOpens;
+    },
+    openLog: async () => void logOpens++,
     connection: async () => scenario.mac?.connection ?? { state: "unconfigured" },
     async testConnection() {
       if (!settings.get("serverUrl")) return { ok: false, error: "Add the server URL first." };
