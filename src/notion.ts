@@ -7,6 +7,8 @@ import { normalizeId } from "./notionWrite.js";
 const API = "https://api.notion.com/v1";
 // The stable API version for /databases/{id}/query; later versions moved databases to data sources.
 const VERSION = "2022-06-28";
+// Data sources (collection://… ids) are only queryable from this version on.
+const DATA_SOURCES_VERSION = "2025-09-03";
 const MAX_BLOCKS = 400;
 const MAX_CHARS = 15_000;
 
@@ -156,10 +158,10 @@ export class Notion {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  private async call(path: string, body?: Json): Promise<Json> {
+  private async call(path: string, body?: Json, version = VERSION): Promise<Json> {
     const res = await this.fetchImpl(`${API}${path}`, {
       method: body ? "POST" : "GET",
-      headers: { Authorization: `Bearer ${this.token}`, "Notion-Version": VERSION, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${this.token}`, "Notion-Version": version, "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(20_000),
     });
@@ -259,6 +261,34 @@ export class Notion {
     const { nodes, truncated } = await this.blockTree(id);
     const blocks = nodes.map(blockJson).filter((b): b is NotionBlock => Boolean(b));
     return { ...ref, properties: Notion.props(page), blocks, ...(truncated ? { truncated } : {}) };
+  }
+
+  /** A page as Notion returns it (title, url, properties); the agent graph's run pages (JD-57). */
+  rawPage(id: string): Promise<Json> {
+    return this.call(`/pages/${encodeURIComponent(normalizeId(id))}`);
+  }
+
+  /** A page's blocks two levels deep, as Notion returns them: a table comes with its rows. */
+  async rawBlocks(id: string): Promise<BlockNode[]> {
+    return (await this.blockTree(normalizeId(id))).nodes;
+  }
+
+  /**
+   * Rows matching `filter`, up to `max`, from a data source ("collection://…", read with the data
+   * sources API) or a database id. Read only, like everything here.
+   */
+  async queryRows(source: string, filter: Json, max = 200): Promise<Json[]> {
+    const dataSource = source.startsWith("collection://");
+    const id = encodeURIComponent(dataSource ? source.slice("collection://".length) : normalizeId(source));
+    const rows: Json[] = [];
+    let cursor: string | undefined;
+    do {
+      const body = { filter, page_size: 100, ...(cursor ? { start_cursor: cursor } : {}) };
+      const res = dataSource ? await this.call(`/data_sources/${id}/query`, body, DATA_SOURCES_VERSION) : await this.call(`/databases/${id}/query`, body);
+      rows.push(...((res.results as Json[]) ?? []));
+      cursor = res.has_more && res.next_cursor ? String(res.next_cursor) : undefined;
+    } while (cursor && rows.length < max);
+    return rows.slice(0, max);
   }
 
   async queryDatabase(id: string, limit = 25): Promise<string> {
