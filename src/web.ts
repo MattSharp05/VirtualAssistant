@@ -9,7 +9,8 @@
 //   POST /api/brain/model        { model }           switch the brain's model
 //   POST /api/brain/reset        {}                  start a new conversation
 //   /internal/*                                      the brain's tools (loopback + internal token)
-//   GET  /api/sessions[?refresh=1]                   your cloud sessions (undocumented source)
+//   GET  /api/sessions[?refresh=1]                   your cloud sessions (undocumented source), each with metrics
+//   GET  /api/sessions/metrics?id=session_…         one session's metrics with turns, tool calls, PRs, active time
 //   POST /api/sessions/pick      { id, title }       start talking to one of them
 //   POST /api/jobs/attach        { link, name, note } add a session JARVIS didn't start
 //   POST /api/jobs/:id/messages  { message }         message a session
@@ -260,7 +261,16 @@ export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): S
       }
 
       if (req.method === "GET" && url.pathname === "/api/sessions") {
-        return send(res, 200, await jarvis.listSessions(url.searchParams.get("refresh") === "1"));
+        const list = await jarvis.listSessions(url.searchParams.get("refresh") === "1");
+        const metrics = await jarvis.metrics.summaries(list.sessions.map((s) => s.id));
+        return send(res, 200, { ...list, sessions: list.sessions.map((s) => (metrics.has(s.id) ? { ...s, metrics: metrics.get(s.id) } : s)) });
+      }
+
+      if (req.method === "GET" && url.pathname === "/api/sessions/metrics") {
+        const id = parseSessionId(url.searchParams.get("id") ?? "");
+        if (!id) return send(res, 400, { error: "id must be a cloud session id or link" });
+        const metrics = await jarvis.metrics.full(id);
+        return metrics ? send(res, 200, metrics) : send(res, 404, { error: "no metrics for that session (yet)" });
       }
 
       if (req.method === "POST" && url.pathname === "/api/sessions/pick") {

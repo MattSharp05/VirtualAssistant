@@ -1,7 +1,9 @@
 // The Sessions window (JD-32): cloud sessions merged with the ones JARVIS tracks, grouped by what
 // needs Matthew.
-//   GET  /api/desk/sessions               → DeskSession[] (needs-you first, then newest activity)
-//   GET  /api/desk/sessions/:id           → SessionDetail (activity, last 5 reports, link)
+//   GET  /api/desk/sessions               → DeskSession[] (needs-you first, then newest activity), each
+//                                           with metrics: tokens, cost, context, wall time, status (JD-53)
+//   GET  /api/desk/sessions/:id           → SessionDetail (activity, last 5 reports, link); its
+//                                           session.metrics adds turns, tool calls, PRs, active time
 //   POST /api/desk/sessions/:id/send { text } → SessionSendResponse (the Telegram/brain send path)
 // :id is a tracked name ("mk") or a cloud session id. New reports publish sessions.changed
 // (src/notifyRules.ts), and so does a message sent from here.
@@ -68,10 +70,13 @@ export function mergeSessions(cloud: CloudSession[], jobs: Job[], reports: Repor
   return out.sort((a, b) => ORDER[a.group] - ORDER[b.group] || (b.lastActivity ?? "").localeCompare(a.lastActivity ?? ""));
 }
 
-async function listFor(ctx: DeskContext): Promise<DeskSession[]> {
+async function listFor(ctx: DeskContext, withMetrics = false): Promise<DeskSession[]> {
   const { jarvis } = ctx;
   const cloud = await jarvis.listSessions();
-  return mergeSessions(cloud.available ? cloud.sessions : [], jarvis.store.recentJobs(1000), jarvis.store.recentReports(200).reverse());
+  const list = mergeSessions(cloud.available ? cloud.sessions : [], jarvis.store.recentJobs(1000), jarvis.store.recentReports(200).reverse());
+  if (!withMetrics) return list;
+  const metrics = await jarvis.metrics.summaries(list.map((s) => s.sessionId));
+  return list.map((s) => (metrics.has(s.sessionId) ? { ...s, metrics: metrics.get(s.sessionId) } : s));
 }
 
 async function find(ctx: DeskContext, id: string): Promise<DeskSession> {
@@ -82,7 +87,7 @@ async function find(ctx: DeskContext, id: string): Promise<DeskSession> {
 }
 
 const routes: DeskRoute[] = [
-  { method: "GET", path: "/sessions", handler: ({ ctx }) => listFor(ctx) },
+  { method: "GET", path: "/sessions", handler: ({ ctx }) => listFor(ctx, true) },
   {
     method: "GET",
     path: "/sessions/:id",
@@ -95,8 +100,8 @@ const routes: DeskRoute[] = [
             .slice(0, 5)
             .map((r) => ({ text: r.text, at: r.receivedAt, kind: classify(r.text) }))
         : [];
-      const activity = await sessionActivity(session.sessionId, 15);
-      return { session, activity, reports, link: session.url };
+      const [activity, metrics] = await Promise.all([sessionActivity(session.sessionId, 15), ctx.jarvis.metrics.full(session.sessionId)]);
+      return { session: metrics ? { ...session, metrics } : session, activity, reports, link: session.url };
     },
   },
   {

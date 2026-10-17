@@ -10,6 +10,7 @@
 // Anything that fails returns { available: false, reason } and nothing else breaks.
 
 import { spawn } from "node:child_process";
+import type { SessionMetrics } from "@jarvis/shared";
 import { API_BASE, apiHeaders, claudeConfigDir, readAccessToken } from "./claudeApi.js";
 
 export interface CloudSession {
@@ -18,6 +19,8 @@ export interface CloudSession {
   status?: string;
   lastActivityAt?: string;
   url: string;
+  /** Filled in by the dashboard API from the session's detail (sessionMetrics.ts, JD-53). */
+  metrics?: SessionMetrics;
 }
 
 export interface SessionList {

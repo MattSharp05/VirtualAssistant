@@ -1,6 +1,12 @@
 // Cloud sessions JARVIS tracks (JD-32, mockup 4), typed as the server's Desk API so the preview and
 // the real thing match. Times are relative to when the preview loads (e2e fixes the clock).
-import type { DeskSession, SessionDetail, SessionReport, SessionSendResponse } from "@jarvis/shared";
+import type {
+  DeskSession,
+  SessionDetail,
+  SessionMetrics,
+  SessionReport,
+  SessionSendResponse,
+} from "@jarvis/shared";
 import type { ScenarioPart } from "../types";
 
 const loaded = Date.now();
@@ -77,6 +83,101 @@ export const sessions: DeskSession[] = [
   },
 ];
 
+// What each session has used (JD-53), shaped like the server's SessionMetrics: the list rows carry
+// the usage part; the detail adds turns, tool calls, PRs and active time. notes-cleanup is an older
+// session whose detail has no usage, so its numbers are unknown (absent), not 0.
+const min = 60_000;
+const usage = (
+  createdMin: number,
+  input: number,
+  output: number,
+  cacheRead: number,
+  cacheWrite: number,
+  costUsd: number,
+  contextUsed: number,
+  rest: Partial<SessionMetrics> = {},
+): SessionMetrics => ({
+  inputTokens: input,
+  outputTokens: output,
+  cacheReadTokens: cacheRead,
+  cacheWriteTokens: cacheWrite,
+  totalTokens: input + output + cacheRead + cacheWrite,
+  costUsd,
+  contextUsedTokens: contextUsed,
+  contextMaxTokens: 1_000_000,
+  contextPercent: Math.round(contextUsed / 1000) / 10,
+  model: "claude-opus-5-5",
+  statusBucket: "working",
+  createdAt: ago(createdMin),
+  updatedAt: ago(1),
+  wallMs: createdMin * min,
+  finished: false,
+  checkedAt: ago(0),
+  ...rest,
+});
+
+const rowMetrics: Record<string, SessionMetrics> = {
+  mk: usage(26 * 60, 98_498, 2_654_189, 820_538_750, 8_315_652, 269.76, 270_674, {
+    statusBucket: "blocked",
+    tags: ["orchestrator", "mario-kart"],
+    updatedAt: ago(12),
+  }),
+  trip: usage(9 * 60, 41_220, 812_400, 214_880_100, 2_904_330, 71.12, 148_900, {
+    statusBucket: "review_ready",
+    tags: ["orchestrator"],
+    updatedAt: ago(40),
+  }),
+  "mk-80-builder": usage(47, 6_812, 96_455, 18_402_300, 512_090, 6.38, 512_400, {
+    model: "claude-sonnet-5-5",
+    parentId: "session_01MK",
+    tags: ["builder"],
+  }),
+  session_01SM: usage(95, 12_030, 140_210, 31_550_000, 880_400, 11.04, 61_200),
+  "virtual-assistant": usage(5 * 60, 30_100, 402_900, 96_310_000, 1_204_000, 33.9, 880_100, {
+    statusBucket: "completed",
+    updatedAt: ago(130),
+    wallMs: (5 * 60 - 130) * min,
+    finished: true,
+  }),
+  "notes-cleanup": {
+    statusBucket: "completed",
+    createdAt: ago(27 * 60),
+    updatedAt: ago(26 * 60),
+    wallMs: 60 * min,
+    finished: true,
+    checkedAt: ago(0),
+  },
+};
+
+const activityMetrics: Record<string, Partial<SessionMetrics>> = {
+  mk: {
+    turns: 14,
+    toolCalls: 612,
+    prs: [1, 2, 3, 4].map((n) => `https://github.com/MattSharp05/MarioKart/pull/${75 + n}`),
+    activeMs: 7 * 60 * min + 41 * min,
+  },
+  trip: {
+    turns: 9,
+    toolCalls: 231,
+    prs: [
+      "https://github.com/MattSharp05/TripPlanner/pull/19",
+      "https://github.com/MattSharp05/TripPlanner/pull/20",
+    ],
+    activeMs: 3 * 60 * min + 5 * min,
+  },
+  "mk-80-builder": { turns: 1, toolCalls: 48, prs: [], activeMs: 9 * min },
+  session_01SM: { turns: 3, toolCalls: 77, prs: [], activeMs: 52 * min },
+  "virtual-assistant": {
+    turns: 6,
+    toolCalls: 190,
+    prs: ["https://github.com/MattSharp05/VirtualAssistant/pull/17"],
+    activeMs: 2 * 60 * min + 18 * min,
+  },
+  "notes-cleanup": {},
+};
+
+for (const s of sessions) s.metrics = rowMetrics[s.id];
+
 const activity = (items: [number, SessionDetail["activity"]["items"][number]["role"], string][]) => ({
   available: true,
   items: items.map(([min, role, text]) => ({ at: ago(min), role, text })),
@@ -145,7 +246,8 @@ const details: Record<string, Omit<SessionDetail, "session" | "link">> = {
 
 const data: Record<string, unknown> = { "/sessions": sessions };
 for (const s of sessions) {
-  data[`/sessions/${s.id}`] = { session: s, link: s.url, ...details[s.id] } satisfies SessionDetail;
+  const session = s.metrics ? { ...s, metrics: { ...s.metrics, ...activityMetrics[s.id] } } : s;
+  data[`/sessions/${s.id}`] = { session, link: s.url, ...details[s.id] } satisfies SessionDetail;
   data[`/sessions/${s.id}/send`] = {
     ok: true,
     name: s.name ?? "shapemint",

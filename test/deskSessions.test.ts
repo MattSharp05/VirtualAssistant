@@ -15,6 +15,7 @@ import { EventBus } from "../src/events.js";
 import { Jarvis } from "../src/jarvis.js";
 import { Notifier } from "../src/notify.js";
 import { ReportWatcher } from "../src/notifyRules.js";
+import { SessionMetricsSource } from "../src/sessionMetrics.js";
 import type { CloudSession } from "../src/sessions.js";
 import { Store, type Job } from "../src/store.js";
 import { createDashboard } from "../src/web.js";
@@ -111,7 +112,8 @@ async function start() {
     server.closeAllConnections();
     server.close();
   };
-  return { jarvis, store, bus, events, log, get, post, stop };
+  const dashboard = (path: string) => fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}${path}`);
+  return { jarvis, store, bus, events, log, get, post, dashboard, stop };
 }
 
 test("GET /sessions and /sessions/:id: grouped list, reports newest first, activity unavailable without a login", async (t) => {
@@ -149,6 +151,63 @@ test("GET /sessions and /sessions/:id: grouped list, reports newest first, activ
   // Untracked sessions are found by their cloud id; unknown ones are 404.
   assert.equal(((await (await s.get("/sessions/session_01SM")).json()) as SessionDetail).reports.length, 0);
   assert.equal((await s.get("/sessions/nope")).status, 404);
+});
+
+test("JD-53: rows carry tokens, cost, context, wall time and status; the detail adds activity; no usage = unknown", async (t) => {
+  const s = await start();
+  t.after(s.stop);
+  s.jarvis.attachSession("https://claude.ai/code/session_01MK", "mk");
+  const created = new Date(Date.now() - 90 * 60_000).toISOString();
+  const bodies: Record<string, unknown> = {
+    "/v1/code/sessions/session_01MK": {
+      status_bucket: "SESSION_STATUS_BUCKET_WORKING",
+      created_at: created,
+      external_metadata: {
+        usage: { input_tokens: 100, output_tokens: 200, cache_read_tokens: 3000, cache_write_tokens: 400, cost_usd: 1.5 },
+        context_usage: { used_tokens: 250_000, max_tokens: 1_000_000 },
+      },
+    },
+    // An older session: no usage or context at all.
+    "/v1/code/sessions/session_01SM": { status_bucket: "SESSION_STATUS_BUCKET_REVIEW_READY", created_at: created },
+    "/v1/code/sessions/session_01MK/events": {
+      data: [
+        { id: "e1", created_at: created, data: { type: "user", message: { content: "Build MK-81" } } },
+        { id: "e2", created_at: created, data: { type: "assistant", message: { content: [{ type: "tool_use", name: "Bash" }] } } },
+        { id: "e3", created_at: created, data: { type: "user", message: { content: [{ type: "tool_result", content: "https://github.com/o/mk/pull/81" }] } } },
+      ],
+      has_more: false,
+    },
+  };
+  const fakeFetch = (async (input: string | URL) => {
+    const body = bodies[new URL(String(input)).pathname];
+    return new Response(JSON.stringify(body ?? { error: "not found" }), { status: body ? 200 : 404 });
+  }) as typeof fetch;
+  s.jarvis.metrics = new SessionMetricsSource({ fetchImpl: fakeFetch, token: () => "tok" });
+
+  const list = (await (await s.get("/sessions")).json()) as DeskSession[];
+  const mk = list.find((x) => x.id === "mk")!.metrics!;
+  assert.equal(mk.totalTokens, 3700);
+  assert.equal(mk.costUsd, 1.5);
+  assert.equal(mk.contextPercent, 25);
+  assert.equal(mk.statusBucket, "working");
+  assert.ok(mk.wallMs! >= 90 * 60_000 - 1000);
+  assert.equal(mk.turns, undefined, "activity is detail only");
+  const sm = list.find((x) => x.id === "session_01SM")!.metrics!;
+  assert.equal(sm.statusBucket, "review_ready");
+  assert.ok(!("costUsd" in sm) && !("totalTokens" in sm) && !("contextPercent" in sm), "unknown, not 0");
+
+  const detail = (await (await s.get("/sessions/mk")).json()) as SessionDetail;
+  assert.equal(detail.session.metrics?.turns, 1);
+  assert.equal(detail.session.metrics?.toolCalls, 1);
+  assert.deepEqual(detail.session.metrics?.prs, ["https://github.com/o/mk/pull/81"]);
+  assert.ok((detail.session.metrics?.activeMs ?? 0) >= 90 * 60_000 - 1000, "the open turn counts to now");
+
+  // The dashboard API gets the same.
+  const dash = (await (await s.dashboard("/api/sessions")).json()) as { sessions: { id: string; metrics?: { costUsd?: number } }[] };
+  assert.equal(dash.sessions.find((x) => x.id === "session_01MK")?.metrics?.costUsd, 1.5);
+  const one = (await (await s.dashboard("/api/sessions/metrics?id=session_01MK")).json()) as { turns?: number };
+  assert.equal(one.turns, 1);
+  assert.equal((await s.dashboard("/api/sessions/metrics?id=nope")).status, 400);
 });
 
 test("POST /sessions/:id/send goes through the CLI, tracks an untracked session, and publishes sessions.changed", async (t) => {

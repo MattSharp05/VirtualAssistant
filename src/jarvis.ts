@@ -6,6 +6,7 @@ import { NotionStatusCache, type NotionStatus } from "./notion.js";
 import { followUpText, newJobText } from "./prompts.js";
 import { fireRoutine } from "./routines.js";
 import { JOB_NAME, parseSessionId, sessionUrl, type Job, type Store } from "./store.js";
+import { SessionMetricsSource } from "./sessionMetrics.js";
 import { SessionListCache, type SessionList } from "./sessions.js";
 import { UsageCache, type PlanUsage } from "./usage.js";
 
@@ -32,6 +33,8 @@ export class Jarvis {
   private readonly usage: UsageCache;
   private readonly sessionList: SessionListCache;
   private readonly notion: NotionStatusCache;
+  /** Per-session tokens, cost, context and activity (JD-53); tests swap in one with a fake fetch. */
+  metrics = new SessionMetricsSource();
   private auth?: { value: AuthStatus; at: number };
 
   constructor(

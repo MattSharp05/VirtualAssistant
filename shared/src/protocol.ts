@@ -473,6 +473,54 @@ export interface DeskSession {
   latestReport?: string;
   latestKind?: ReportKind;
   url: string;
+  /** What the session has used (JD-53); absent when its detail couldn't be read. */
+  metrics?: SessionMetrics;
+}
+
+/** The sessions API's status bucket, lower-cased without its prefix ("working", "completed"…). */
+export type SessionStatusBucket = "working" | "blocked" | "review_ready" | "completed" | "failed" | (string & {});
+
+/**
+ * Per-session metrics (JD-53) from the cloud session's detail and events. Every value the API
+ * didn't give is undefined (unknown), never 0. Turns, tool calls, PRs and active time are only on
+ * GET /api/desk/sessions/:id.
+ */
+export interface SessionMetrics {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  /** input + output + cache read + cache write, when all four are known. */
+  totalTokens?: number;
+  costUsd?: number;
+  contextUsedTokens?: number;
+  contextMaxTokens?: number;
+  /** used / max × 100, rounded to one decimal. */
+  contextPercent?: number;
+  /** The model the latest turn ran on, else the configured one. */
+  model?: string;
+  statusBucket?: SessionStatusBucket;
+  tags?: string[];
+  /** The session that started this one, when the lineage names it. */
+  parentId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  /** Now − created, or last activity − created once the session is finished. */
+  wallMs?: number;
+  /** Completed: its metrics no longer change and aren't re-read. */
+  finished?: boolean;
+  /** Detail only: user messages (turns) sent to the session. */
+  turns?: number;
+  /** Detail only: tool calls the session made. */
+  toolCalls?: number;
+  /** Detail only: GitHub PR links seen in tool results, oldest first. */
+  prs?: string[];
+  /** Detail only: the sum of turn durations (each turn's start to its result; an open turn counts to now). */
+  activeMs?: number;
+  /** Detail only: the history was longer than one read covers, so the activity counts are a lower bound. */
+  activityPartial?: boolean;
+  /** When these were read from the API (older than the request when the API is failing). */
+  checkedAt: string;
 }
 
 export interface SessionReport {
