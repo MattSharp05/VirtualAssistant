@@ -43,8 +43,8 @@ mac:
   # "-" = ad-hoc signature: required for arm64 apps to launch; Gatekeeper still asks once (right-click → Open).
   identity: "-"
   hardenedRuntime: false
+  # No LSUIElement (JD-62): a normal app with a Dock icon; Settings → Show in Dock hides it at runtime.
   extendInfo:
-    LSUIElement: true
     NSMicrophoneUsageDescription: JARVIS listens when you say "Jarvis" or double-tap the right Option key.
     NSCameraUsageDescription: JARVIS uses the camera only when Camera hands is on, to track your hands.
 dmg:

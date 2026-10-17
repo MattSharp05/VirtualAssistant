@@ -1243,6 +1243,12 @@ export interface DeskBridge {
     setInteractive(on: boolean): void;
     /** The orb was clicked (the overlay opens its launcher ring itself). */
     orbClicked(): void;
+    /** The orb was right-clicked (JD-62): main shows its small native menu (Settings…, Quit) at the pointer. */
+    orbMenu?(): void;
+  };
+  /** The app itself (JD-62): quits JARVIS Desk (the command bar's command, Settings' button). */
+  app?: {
+    quit(): void;
   };
   /** Voice input (JD-31): starts listening as if the hotkey was pressed. Absent until voice is set up. */
   voice?: {

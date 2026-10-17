@@ -32,6 +32,8 @@ export interface MockBridge extends DeskBridge {
   /** Windows asked for with openWindow, and the frame buttons pressed ("minimize" | "close"), in order. */
   readonly opened: string[];
   readonly frameActions: string[];
+  /** App actions (JD-62), in order: "quit" and "orb-menu" (the orb's right-click menu). */
+  readonly appActions: string[];
   /** Every request(path, body), in order (e2e checks POSTs reached the "server"). */
   readonly requests: { path: string; body?: unknown }[];
   /** Every chat(text, channel, attachments), in order (JD-40 checks a dropped file went with it). */
@@ -58,6 +60,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
   let orbClicks = 0;
   const opened: string[] = [];
   const frameActions: string[] = [];
+  const appActions: string[] = [];
   const requests: { path: string; body?: unknown }[] = [];
   const chatLog: MockBridge["chats"] = [];
   let uploads = 0;
@@ -177,6 +180,7 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     },
     opened,
     frameActions,
+    appActions,
     requests,
     chats: chatLog,
     mac: createMockMac(scenario, settings),
@@ -184,6 +188,10 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     overlay: {
       setInteractive: (on) => void (interactive = on),
       orbClicked: () => void orbClicks++,
+      orbMenu: () => void appActions.push("orb-menu"),
+    },
+    app: {
+      quit: () => void appActions.push("quit"),
     },
     frame: {
       minimize: () => void frameActions.push("minimize"),

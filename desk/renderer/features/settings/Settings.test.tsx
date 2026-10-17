@@ -143,6 +143,22 @@ describe("Settings window", () => {
     await waitFor(async () => expect(await setting(bridge, "statusFiles")).toEqual({}));
   });
 
+  it("Show in Dock saves as it changes; Quit JARVIS Desk quits through the bridge (JD-62)", async () => {
+    const bridge = await renderOn("settings");
+    const dock = screen.getByRole("switch", { name: /Show in Dock/ }) as HTMLInputElement;
+    expect(dock.checked).toBe(true);
+    fireEvent.click(dock);
+    await waitFor(async () => expect(await setting(bridge, "showInDock")).toBe(false));
+    expect(bridge.appActions).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Quit JARVIS Desk" }));
+    expect(bridge.appActions).toEqual(["quit"]);
+  });
+
+  it("starts with Show in Dock off when it was switched off", async () => {
+    await renderOn("settings-dock-off");
+    expect((screen.getByRole("switch", { name: /Show in Dock/ }) as HTMLInputElement).checked).toBe(false);
+  });
+
   it("errors from main lose Electron's prefix", () => {
     expect(
       errorText(new Error("Error invoking remote method 'desk:settings-set': SettingError: Pick a voice.")),

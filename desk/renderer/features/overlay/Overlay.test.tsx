@@ -62,6 +62,15 @@ describe("Overlay + orb", () => {
     expect(bridge.interactive).toBe(false);
   });
 
+  it("right-click or control-click asks main for the orb's menu, not the ring (JD-62)", () => {
+    const { orb, bridge } = renderOn("orb-idle");
+    fireEvent.contextMenu(orb());
+    expect(bridge.appActions).toEqual(["orb-menu"]);
+    fireEvent.click(orb(), { ctrlKey: true });
+    expect(bridge.orbClicks).toBe(0);
+    expect(screen.queryByRole("navigation")).toBeNull();
+  });
+
   it("opens the launcher ring on click; Esc, a click elsewhere or the orb close it", () => {
     const { orb, bridge } = renderOn("orb-idle");
     const ring = () => screen.queryAllByRole("button").filter((b) => b.dataset.launcherId);

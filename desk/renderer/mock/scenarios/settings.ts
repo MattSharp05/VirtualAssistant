@@ -16,6 +16,7 @@ const paired = {
   statusFiles: { barehandsDir: "/Users/matthew/Projects/barehands/status" },
   face: "corner",
   checkForUpdates: true,
+  showInDock: true,
 };
 
 const scenarios: Scenario[] = [
@@ -44,6 +45,17 @@ const scenarios: Scenario[] = [
         error: "Couldn't reach jarvis.tail1234.ts.net:8443 (ECONNREFUSED).",
       },
       test: { ok: false, error: "Couldn't reach jarvis.tail1234.ts.net:8443 (ECONNREFUSED)." },
+    },
+  },
+  {
+    name: "settings-dock-off",
+    description: "Settings with Show in Dock off (JD-62): JARVIS lives in the menu bar only.",
+    data: {},
+    events: [],
+    settings: { ...paired, showInDock: false },
+    mac: {
+      connection: { state: "connected", serverUrl: SERVER, deviceName: "Matthew's MacBook Pro" },
+      test: { ok: true, deviceName: "Matthew's MacBook Pro" },
     },
   },
   {

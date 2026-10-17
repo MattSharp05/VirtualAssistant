@@ -185,6 +185,31 @@
   color: var(--ink);
 }
 
+/* Quit JARVIS Desk (JD-62): the last thing in Settings, red but not shouting. */
+.settings-button.is-danger {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red);
+}
+
+.settings-button.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red) 22%, transparent);
+}
+
+.settings-quit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.settings-quit .settings-hint {
+  margin: 0;
+}
+
 .settings-status {
   display: flex;
   align-items: center;

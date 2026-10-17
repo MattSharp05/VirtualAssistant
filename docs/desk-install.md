@@ -45,6 +45,27 @@ Privacy & Security**.
 2. In JARVIS Desk, Settings opens on first launch: paste your JARVIS address
    (`https://jarvis.<your-tailnet>.ts.net:8443`) and the key, then **Test connection**.
 
+## Quitting
+JARVIS Desk has an icon in the **Dock** (and in ⌘Tab) as well as the menu bar. Any of these quits it:
+- **Dock:** right-click the JARVIS Desk icon → **Quit**.
+- **⌘Q** while any JARVIS Desk window is in front (or **JARVIS Desk → Quit JARVIS Desk** in the menu bar).
+- **Menu bar icon** (the small orb, top right) → **Quit JARVIS Desk**.
+- **Command bar:** ⌘⇧Space, type `quit`, press ↵.
+- **Orb:** right-click (or control-click) the orb → **Quit JARVIS Desk**.
+- **Settings:** the **Quit JARVIS Desk** button at the bottom.
+
+Prefer a menu-bar-only app? Switch off **Settings → Faces & status files → Show in Dock**; the Dock
+icon goes at once (switch it back on the same way).
+
+If none of those are reachable, quit it from Terminal:
+
+```sh
+osascript -e 'quit app "JARVIS Desk"'
+```
+
 ## Updating
 When a new version is out, JARVIS Desk offers it: click **Download & install**, then drag the new
-app over the old one in Applications.
+app over the old one in Applications. (Installing quits JARVIS Desk first.)
+
+Updating by hand: quit JARVIS Desk (above), drag the new app from the `.dmg` into Applications and
+choose **Replace**, then open it again. Finder refuses to replace the app while it's still running.

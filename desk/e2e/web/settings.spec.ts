@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { expectWindowSnapshot, openWindow, waitForBridgeIdle } from "../helpers";
 
 const SECTIONS = [
@@ -90,4 +90,36 @@ test("settings: the section list jumps, and controls are keyboard reachable", as
     () => (globalThis as { __deskMock?: { mac: { spoken: { voice: string }[] } } }).__deskMock?.mac.spoken,
   );
   expect(spoken?.[0]?.voice).toBe("Daniel");
+});
+
+const appActions = (page: Page) =>
+  page.evaluate(() => (globalThis as { __deskMock?: { appActions: string[] } }).__deskMock?.appActions);
+
+test("settings: Show in Dock switches, and Quit JARVIS Desk quits (JD-62)", async ({ page }) => {
+  await openWindow(page, "settings", "settings");
+  await waitForBridgeIdle(page);
+  const dock = page.getByRole("switch", { name: /Show in Dock/ });
+  await expect(dock).toBeChecked();
+  await dock.click();
+  await expect(dock).not.toBeChecked();
+  expect(
+    await page.evaluate(() =>
+      (
+        globalThis as { __deskMock?: { settings: { get(k: string): Promise<unknown> } } }
+      ).__deskMock?.settings.get("showInDock"),
+    ),
+  ).toBe(false);
+  const quit = page.getByRole("button", { name: "Quit JARVIS Desk" });
+  await quit.scrollIntoViewIfNeeded();
+  await expectWindowSnapshot(page, "settings-quit");
+  expect(await appActions(page)).toEqual([]);
+  await quit.focus();
+  await page.keyboard.press("Enter");
+  expect(await appActions(page)).toEqual(["quit"]);
+});
+
+test("settings-dock-off: Show in Dock starts off", async ({ page }) => {
+  await openWindow(page, "settings", "settings-dock-off");
+  await waitForBridgeIdle(page);
+  await expect(page.getByRole("switch", { name: /Show in Dock/ })).not.toBeChecked();
 });
