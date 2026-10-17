@@ -96,6 +96,12 @@ export class WindowManager {
     });
   }
 
+  /** The window open for this id, if any (the Browser window's tabs live in it, JD-59). */
+  window(id: string): BrowserWindow | undefined {
+    const win = this.windows.get(id);
+    return win && !win.isDestroyed() ? win : undefined;
+  }
+
   closeWindow(id: string): void {
     this.windows.get(id)?.close();
   }

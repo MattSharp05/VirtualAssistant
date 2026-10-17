@@ -67,7 +67,11 @@ export type DeskEvent =
   /** A Desk setting changed on this Mac (main → its windows; never from the server): re-read it with settings.get. */
   | { type: "settings.changed"; key: string }
   /** The server asks the Mac for something (a file, the clipboard…); the Desk answers with POST /api/desk/rpc/:id. */
-  | { type: "rpc"; id: string; kind: string; payload: unknown };
+  | { type: "rpc"; id: string; kind: string; payload: unknown }
+  /** The Mac's browser changed (main → the Browser window, JD-59; never from the server). */
+  | { type: "browser.state"; state: BrowserState }
+  /** JARVIS is about to act in the browser: the window's caption, and the element it will touch. */
+  | { type: "browser.action"; caption: string; ref?: number; rect?: BrowserRect };
 
 /** A button on a notice's card (JD-27): opens a Desk window or a link; neither just dismisses ("Later"). */
 export interface NoticeAction {
@@ -201,6 +205,174 @@ export type ClipboardReadResult =
   | { kind: "text"; text: string; truncated: boolean }
   | { kind: "image"; upload: UploadResponse }
   | { kind: "empty" };
+
+// The Mac's browser (JD-59): a Browser window with its own profile that JARVIS acts in through the
+// rpc kinds below, done in main over the page's DevTools protocol. Every action answers with the page
+// it left (BrowserActionResult). While Matthew has taken over, each one is refused with
+// BROWSER_TAKEN_OVER and the brain waits until he hands back.
+
+export const BROWSER_RPC = {
+  /** BrowserOpenRequest */
+  open: "browser.open",
+  /** BrowserNavigateRequest */
+  navigate: "browser.navigate",
+  /** BrowserTabsRequest; the result carries `tabs`. */
+  tabs: "browser.tabs",
+  /** BrowserSnapshotRequest → BrowserSnapshotResult */
+  snapshot: "browser.snapshot",
+  /** BrowserClickRequest */
+  click: "browser.click",
+  /** BrowserTypeRequest */
+  type: "browser.type",
+  /** BrowserSelectRequest */
+  select: "browser.select",
+  /** BrowserPressRequest */
+  press: "browser.press",
+  /** BrowserScrollRequest */
+  scroll: "browser.scroll",
+  /** BrowserWaitRequest */
+  wait: "browser.wait",
+  /** {} → BrowserScreenshotResult */
+  screenshot: "browser.screenshot",
+  /** BrowserStatusRequest: the task's status line in the window's toolbar. */
+  status: "browser.status",
+} as const;
+export type BrowserRpcKind = (typeof BROWSER_RPC)[keyof typeof BROWSER_RPC];
+
+/** The refusal while Matthew has the browser. */
+export const BROWSER_TAKEN_OVER = "Matthew has the browser";
+/** A snapshot page is about this long; the rest comes with `more`. */
+export const BROWSER_SNAPSHOT_MAX_CHARS = 12_000;
+export const BROWSER_WAIT_MAX_MS = 15_000;
+export const BROWSER_SCREENSHOT_MAX_BYTES = 300 * 1024;
+
+export interface BrowserOpenRequest {
+  /** http(s); a bare host ("example.com") gets https. */
+  url: string;
+  newTab?: boolean;
+}
+
+export interface BrowserNavigateRequest {
+  action: "back" | "forward" | "reload";
+}
+
+export interface BrowserTabsRequest {
+  action: "list" | "switch" | "close";
+  /** switch / close: a tab id from the list. */
+  tabId?: string;
+}
+
+export interface BrowserSnapshotRequest {
+  /** The `more` cursor of the previous snapshot: the next part of the same page. */
+  more?: string;
+}
+
+/** Refs are the numbers in the snapshot ("[12] button …"), valid until the page changes document. */
+export interface BrowserClickRequest {
+  ref: number;
+}
+
+export interface BrowserTypeRequest {
+  ref: number;
+  /** Replaces what the field holds. */
+  text: string;
+  /** Presses Enter afterwards. */
+  submit?: boolean;
+}
+
+export interface BrowserSelectRequest {
+  ref: number;
+  /** The option's label or value. */
+  option: string;
+}
+
+export interface BrowserPressRequest {
+  /** A key name ("Enter", "Escape", "ArrowDown", "Tab", "a"), optionally with modifiers ("Meta+a"). */
+  key: string;
+}
+
+export interface BrowserScrollRequest {
+  /** By most of a screen, or to an end. */
+  direction?: "up" | "down" | "top" | "bottom";
+  /** Scrolls this element into view instead. */
+  ref?: number;
+}
+
+export interface BrowserWaitRequest {
+  /** Until this text is on the page (case-insensitive). */
+  text?: string;
+  /** Or just this long. Either way at most BROWSER_WAIT_MAX_MS. */
+  ms?: number;
+}
+
+export interface BrowserStatusRequest {
+  /** One line, e.g. "Booking a table for 4 · checking Friday"; empty clears it. */
+  text?: string;
+}
+
+export interface BrowserTab {
+  id: string;
+  url: string;
+  title: string;
+  active: boolean;
+}
+
+/** What every browser action answers: where the page is now, and whether the action changed it. */
+export interface BrowserActionResult {
+  url: string;
+  title: string;
+  change: "page changed" | "same page";
+  /** browser.tabs and browser.open: every tab. */
+  tabs?: BrowserTab[];
+}
+
+export interface BrowserSnapshotResult extends BrowserActionResult {
+  /** The page as an accessibility tree, one element a line; interactive ones carry a [ref]. */
+  text: string;
+  /** Ask again with this for the next part of the page. */
+  more?: string;
+}
+
+export interface BrowserScreenshotResult extends BrowserActionResult {
+  /** The viewport as a JPEG (at most BROWSER_SCREENSHOT_MAX_BYTES), uploaded like a dropped file. */
+  upload: UploadResponse;
+  width: number;
+  height: number;
+}
+
+/** In CSS px from the page's top-left (the viewport). */
+export interface BrowserRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Who drives the browser: JARVIS acts; Matthew, after Take over, and JARVIS waits. */
+export type BrowserControl = "jarvis" | "matthew";
+
+/** The Browser window's toolbar and tab strip. */
+export interface BrowserState {
+  tabs: BrowserTab[];
+  /** The active tab's page ("" with no tabs). */
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
+  control: BrowserControl;
+  /** The task's status line (browser.status). */
+  status?: string;
+}
+
+/** What the Browser window's toolbar and tab strip ask main to do (Matthew's own clicks). */
+export type BrowserCommand =
+  | { type: "go"; address: string }
+  | {
+      type:
+        "back" | "forward" | "reload" | "new-tab" | "take-over" | "hand-back";
+    }
+  | { type: "switch-tab" | "close-tab"; tabId: string };
 
 /** A saved window layout (JD-37): the built-ins (Work mode, Focus) and Matthew's own. */
 export interface LayoutSummary {
@@ -845,6 +1017,16 @@ export interface DeskBridge {
    */
   webview?: {
     show(url: string, bounds: { x: number; y: number; width: number; height: number }): void;
+    hide(): void;
+  };
+  /**
+   * The Mac's browser (JD-59): its toolbar state (then browser.state events), Matthew's toolbar
+   * commands, and the rect of this window the active page is laid over (like webview).
+   */
+  browser?: {
+    state(): Promise<BrowserState>;
+    command(command: BrowserCommand): Promise<void>;
+    show(bounds: { x: number; y: number; width: number; height: number }): void;
     hide(): void;
   };
   /**

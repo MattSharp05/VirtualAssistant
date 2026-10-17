@@ -1,6 +1,6 @@
 // Scenarios drive the mock bridge (web preview, e2e, JARVIS_DESK_SCENARIO): a named, deterministic
 // state plus events replayed with timings (docs/TDD.md → Scenario system).
-import type { ConnectionTest, DeskConnection, DeskEvent, VoiceInfo } from "@jarvis/shared";
+import type { BrowserState, ConnectionTest, DeskConnection, DeskEvent, VoiceInfo } from "@jarvis/shared";
 
 /** An event replayed `after` ms after the previous one (or after the bridge starts). */
 export interface TimedEvent {
@@ -40,6 +40,8 @@ export interface Scenario extends Required<Omit<ScenarioPart, "routes">> {
   settings?: Record<string, unknown>;
   /** How the Mac side answers (Settings window, JD-26); see mock/mac.ts for the defaults. */
   mac?: MockMac;
+  /** The Browser window's toolbar and tabs (JD-59); none open without it (mock/browser.ts). */
+  browser?: BrowserState;
 }
 
 export interface MockMac {

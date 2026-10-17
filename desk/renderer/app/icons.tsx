@@ -18,6 +18,12 @@ const paths: Record<string, string> = {
   close: "M6 6l12 12M18 6 6 18",
   search: "M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5 20 20",
   layout: "M4 5h16v14H4zM12 5v14M12 12h8",
+  browser:
+    "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9s-1.2 6.5-3.6 9c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3z",
+  back: "M15 5l-7 7 7 7",
+  forward: "M9 5l7 7-7 7",
+  plus: "M12 5v14M5 12h14",
+  hand: "M8 12V6a1.5 1.5 0 0 1 3 0v5M11 11V4.5a1.5 1.5 0 0 1 3 0V11M14 11V6a1.5 1.5 0 0 1 3 0v7c0 4-2.6 7-6.2 7-2.6 0-4.2-1.4-5.6-3.6L3.4 13a1.5 1.5 0 0 1 2.4-1.8L8 14",
 };
 
 export function Icon({ name, size = 18 }: { name: string; size?: number }) {

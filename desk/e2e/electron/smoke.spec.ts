@@ -2,6 +2,8 @@
 // always on top, on every Space) and the orb, saves a screenshot and writes idle memory/CPU to the job
 // summary. Needs Electron's binary (macOS job only).
 import { appendFileSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test } from "@playwright/test";
 
@@ -146,6 +148,69 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Electron smoke\n${line}\n`);
   } finally {
     await app.close();
+  }
+});
+
+// JD-59: the browser actions JARVIS calls over rpc, on a local test page in the real Browser window:
+// open, snapshot, type in a field, click a button and read the result back.
+// eslint-disable-next-line no-empty-pattern
+test("Browser: open, snapshot, type, click and read back", async ({}) => {
+  test.skip(
+    process.platform !== "darwin" && !process.env.ELECTRON_SMOKE,
+    "Electron runs on the macOS runner only",
+  );
+  test.setTimeout(90_000);
+  const server = createServer((_req, res) => {
+    res.setHeader("content-type", "text/html; charset=utf-8");
+    res.end(`<!doctype html><title>Greeter</title>
+      <label>Name <input id="name"></label>
+      <button onclick="document.getElementById('out').textContent = 'Hello, ' + document.getElementById('name').value">Greet</button>
+      <p id="out">Nobody greeted yet</p>`);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
+  const app = await electron.launch({
+    args: ["."],
+    cwd: fileURLToPath(new URL("../..", import.meta.url)),
+    env: { ...process.env, JARVIS_DESK_SCENARIO: "empty" },
+  });
+  try {
+    await app.firstWindow();
+    type Snapshot = { text: string; url: string; title: string; change: string };
+    const rpc = <T>(kind: string, payload: unknown) =>
+      app.evaluate(
+        (_electron, a) =>
+          (
+            globalThis as unknown as { __deskRpc(kind: string, payload: unknown): Promise<unknown> }
+          ).__deskRpc(a.kind, a.payload),
+        { kind, payload },
+      ) as Promise<T>;
+    const opened = await rpc<{ url: string; title: string }>("browser.open", { url });
+    expect(opened).toMatchObject({ url, title: "Greeter" });
+    // The Browser window opened for it.
+    expect(
+      await app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().some((w) => w.getTitle().startsWith("Browser") && w.isVisible()),
+      ),
+    ).toBe(true);
+
+    const first = await rpc<Snapshot>("browser.snapshot", {});
+    const field = first.text.match(/\[(\d+)\] textbox “Name”/)?.[1];
+    const button = first.text.match(/\[(\d+)\] button “Greet”/)?.[1];
+    expect(first.text).toContain("Nobody greeted yet");
+    expect(field && button).toBeTruthy();
+    // Refs stay put on an unchanged page.
+    expect((await rpc<Snapshot>("browser.snapshot", {})).text).toBe(first.text);
+
+    await rpc("browser.type", { ref: Number(field), text: "Matthew" });
+    const clicked = await rpc<Snapshot>("browser.click", { ref: Number(button) });
+    expect(clicked.change).toBe("page changed");
+    const after = await rpc<Snapshot>("browser.snapshot", {});
+    expect(after.text).toContain("Hello, Matthew");
+    expect(after.text).toContain(`[${field}] textbox “Name” value=“Matthew”`);
+  } finally {
+    await app.close();
+    server.close();
   }
 });
 
