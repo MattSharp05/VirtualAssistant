@@ -10,6 +10,7 @@ const paths: Record<string, string> = {
   system: "M3 12h4l2-6 4 12 2-6h6",
   settings: "M4 7h9M17 7h3M15 4.5v5M4 17h3M11 17h9M9 14.5v5",
   calendar: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
+  agents: "M9 3h6v5H9zM3 16h6v5H3zM15 16h6v5h-6zM12 8v4M6 16v-4h12v4",
   spark: "M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z",
   orb: "M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z",
   refresh: "M20 11a8 8 0 1 0-2 5.3M20 4v7h-7",

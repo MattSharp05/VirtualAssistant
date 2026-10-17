@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { expectWindowSnapshot, openWindow, waitForBridgeIdle } from "../helpers";
 
-test("clicking the orb shows the six launcher buttons; Esc hides them", async ({ page }) => {
+test("clicking the orb shows the eight launcher buttons; Esc hides them", async ({ page }) => {
   await openWindow(page, "overlay", "orb-idle");
   const buttons = page.locator("[data-launcher-id]");
   await expect(buttons).toHaveCount(0);
   await page.locator("[data-orb-state]").click();
-  await expect(buttons).toHaveCount(6);
+  await expect(buttons).toHaveCount(8);
   for (const name of ["Chat", "Sessions", "Today", "To-do", "Notion", "System"])
     await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   // Every button is on screen.
@@ -28,7 +28,7 @@ test("a launcher button asks for its window", async ({ page }) => {
 test("launcher-open: the ring around the orb", async ({ page }) => {
   await openWindow(page, "overlay", "launcher-open");
   await waitForBridgeIdle(page);
-  await expect(page.locator("[data-launcher-id]")).toHaveCount(6);
+  await expect(page.locator("[data-launcher-id]")).toHaveCount(8);
   await expectWindowSnapshot(page, "launcher-open");
 });
 
