@@ -86,6 +86,8 @@ test("parseDetail reads usage, context, models, status, tags, lineage and times"
   assert.equal(d.costUsd, 269.76);
   assert.equal(d.contextPercent, 27.1);
   assert.equal(d.model, "model-served", "the served model beats the configured one");
+  assert.equal(d.configuredModel, "model-configured", "the configured one is kept when they differ");
+  assert.equal(parseDetail(detail({ configured_model: "model-served" })).configuredModel, undefined, "and dropped when they match");
   assert.equal(d.statusBucket, "working");
   assert.deepEqual(d.tags, ["jarvis", "orchestrator"]);
   assert.equal(d.parentId, "session_01PARENT");

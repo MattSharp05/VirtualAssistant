@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { DeskSession, SessionDetail, SessionSendResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { SessionFullView } from "./FullView";
+import { MetricsBlock } from "./MetricsView";
 import { ago, clock, labelOf, pillOf, toneOf, whoOf } from "./sessionGroups";
 
 export type SessionView = "quick" | "full";
@@ -157,24 +158,30 @@ export function QuickView({ session, version, view, onView }: QuickViewProps) {
                 </p>
               )}
             </section>
-            <section className="sessions-reports" aria-labelledby="sessions-reports-title">
-              <h3 id="sessions-reports-title" className="sessions-section-title">
-                Latest reports
-              </h3>
-              {detail && detail.reports.length === 0 && (
-                <p className="sessions-note">No reports from {label} yet.</p>
-              )}
-              <ul>
-                {detail?.reports.map((r, i) => (
-                  <li key={i} className="sessions-report" data-kind={r.kind}>
-                    <p>{r.text}</p>
-                    <span className="sessions-report-meta">
-                      {clock(r.at)} · {REPORT_KIND[r.kind]}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <div className="sessions-side">
+              <MetricsBlock
+                metrics={detail?.session.metrics ?? session.metrics}
+                loading={!detail && !detailError}
+              />
+              <section className="sessions-reports" aria-labelledby="sessions-reports-title">
+                <h3 id="sessions-reports-title" className="sessions-section-title">
+                  Latest reports
+                </h3>
+                {detail && detail.reports.length === 0 && (
+                  <p className="sessions-note">No reports from {label} yet.</p>
+                )}
+                <ul>
+                  {detail?.reports.map((r, i) => (
+                    <li key={i} className="sessions-report" data-kind={r.kind}>
+                      <p>{r.text}</p>
+                      <span className="sessions-report-meta">
+                        {clock(r.at)} · {REPORT_KIND[r.kind]}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </div>
           </div>
 
           <form className="sessions-send" onSubmit={send}>

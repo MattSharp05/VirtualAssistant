@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { DeskSession } from "@jarvis/shared";
 import { Icon } from "../../app/icons";
-import { ago, groupSessions, labelOf, toneOf } from "./sessionGroups";
+import { RowMetrics } from "./MetricsView";
+import { SORTS, sortSessions, type SessionSort } from "./metrics";
+import { ago, groupSessions, labelOf, matches, toneOf } from "./sessionGroups";
 
 interface SessionListProps {
   sessions?: DeskSession[];
@@ -11,10 +13,23 @@ interface SessionListProps {
   onRefresh(): void;
 }
 
-/** The left pane: filter box and the NEEDS YOU / WORKING / IDLE groups. */
+/** The left pane: filter box, sort, and the NEEDS YOU / WORKING / IDLE groups (or one sorted list). */
 export function SessionList({ sessions, error, selectedId, onSelect, onRefresh }: SessionListProps) {
   const [filter, setFilter] = useState("");
-  const groups = groupSessions(sessions ?? [], filter);
+  const [sort, setSort] = useState<SessionSort>("needs-you");
+  const groups =
+    sort === "needs-you"
+      ? groupSessions(sessions ?? [], filter)
+      : [
+          {
+            id: sort,
+            label: SORTS.find((o) => o.id === sort)!.label,
+            sessions: sortSessions(
+              (sessions ?? []).filter((s) => matches(s, filter)),
+              sort,
+            ),
+          },
+        ].filter((g) => g.sessions.length > 0);
   return (
     <nav className="sessions-list" aria-label="Sessions">
       <div className="sessions-filter">
@@ -36,6 +51,16 @@ export function SessionList({ sessions, error, selectedId, onSelect, onRefresh }
         >
           <Icon name="refresh" size={16} />
         </button>
+      </div>
+      <div className="sessions-sort">
+        <label htmlFor="sessions-sort">Sort</label>
+        <select id="sessions-sort" value={sort} onChange={(e) => setSort(e.target.value as SessionSort)}>
+          {SORTS.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
       </div>
       {error && (
         <p className="sessions-note sessions-error" role="alert">
@@ -67,6 +92,7 @@ export function SessionList({ sessions, error, selectedId, onSelect, onRefresh }
                       <span className="sessions-row-line">
                         {s.latestReport ?? (s.name ? s.title : "Not tracked yet · no reports")}
                       </span>
+                      <RowMetrics metrics={s.metrics} />
                     </span>
                   </button>
                 </li>

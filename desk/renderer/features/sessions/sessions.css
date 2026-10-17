@@ -17,7 +17,9 @@
 }
 
 .sessions button:focus-visible,
-.sessions input:focus-visible {
+.sessions input:focus-visible,
+.sessions select:focus-visible,
+.sessions a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -85,6 +87,32 @@
 .sessions-icon-button:hover {
   background: rgba(255, 255, 255, 0.08);
   color: var(--ink);
+}
+
+/* Sort (JD-54): the grouped order, or one list by cost or context. */
+.sessions-sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.sessions-sort select {
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: var(--bg-deep);
+  color: var(--ink-2);
+  font-family: var(--font-body);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .sessions-list > .sessions-note {
@@ -200,6 +228,72 @@
   color: var(--ink-3);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Metrics (JD-54): cost · tokens · wall time · context, under the report line. */
+.sessions-row-metrics {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.sessions-row-metrics > [data-metric]:not(:first-child, .sessions-row-context)::before {
+  content: "·";
+  margin-right: 6px;
+  color: var(--ink-3);
+}
+
+.sessions-row-context {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sessions-unknown {
+  color: var(--ink-3);
+  cursor: help;
+}
+
+.sessions-loading {
+  color: var(--ink-3);
+}
+
+.sessions-bar {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sessions-bar[data-wide] {
+  flex: 1 1 auto;
+  width: auto;
+  height: 6px;
+  border-radius: 3px;
+}
+
+.sessions-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.sessions-bar[data-tone="amber"] > span {
+  background: var(--amber);
+}
+.sessions-bar[data-tone="red"] > span {
+  background: var(--red);
 }
 
 /* ── Selected session ── */
@@ -340,11 +434,123 @@
   min-width: 0;
 }
 
+.sessions-side {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  flex: 0 0 300px;
+  min-width: 0;
+}
+
 .sessions-reports {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  flex: 0 0 300px;
+}
+
+.sessions-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sessions-metrics dl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sessions-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.sessions-metric dt {
+  flex-shrink: 0;
+  color: var(--ink-3);
+}
+
+.sessions-metric dd {
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  text-align: right;
+}
+
+.sessions-metric-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 16px;
+  padding: 2px 0 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sessions-metric-split .sessions-metric {
+  font-size: 12px;
+}
+
+.sessions-metric-split dd {
+  color: var(--ink-2);
+}
+
+.sessions-metric-context {
+  flex-wrap: wrap;
+}
+
+.sessions-metric-context dd {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.sessions-metric-percent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.sessions-metric-percent > :last-child {
+  flex-shrink: 0;
+  min-width: 42px;
+}
+
+.sessions-prs,
+.sessions-model {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.sessions-prs a {
+  color: var(--accent-ink);
+  text-decoration: none;
+}
+
+.sessions-prs a:hover {
+  text-decoration: underline;
+}
+
+.sessions-model-configured {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.sessions-metrics-note {
+  font-size: 12px;
 }
 
 .sessions-section-title {
