@@ -57,6 +57,10 @@ export function Overlay() {
             setRing((r) => !r);
             bridge.overlay?.orbClicked();
           }}
+          onContextMenu={() => {
+            setRing(false);
+            bridge.overlay?.orbMenu?.();
+          }}
         />
       </div>
       <CardsLayer

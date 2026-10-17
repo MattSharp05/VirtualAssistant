@@ -1,5 +1,5 @@
-// What the command bar lists (JD-28): windows, sessions, Notion pages and layouts that match the text,
-// best first (max 8), then always "Ask JARVIS: <text>". Pure, so ranking is unit-tested.
+// What the command bar lists (JD-28): windows, sessions, Notion pages, layouts and app commands (JD-62:
+// Quit JARVIS Desk) that match the text, best first (max 8), then always "Ask JARVIS: <text>". Pure, so ranking is unit-tested.
 import type { DeskSession } from "@jarvis/shared";
 import { bestScore } from "./fuzzy";
 
@@ -28,6 +28,7 @@ export type CommandResult =
   | { kind: "session"; key: string; label: string; detail?: string; id: string }
   | { kind: "notion"; key: string; label: string; id: string }
   | { kind: "layout"; key: string; label: string; windows: string[] }
+  | { kind: "command"; key: string; label: string; id: AppCommand }
   | { kind: "ask"; key: string; label: string; text: string };
 
 export interface Sources {
@@ -37,8 +38,16 @@ export interface Sources {
   layouts: LayoutHit[];
 }
 
-/** Ties go to windows, then sessions, Notion pages and layouts. */
-const KIND_ORDER = { window: 0, session: 1, notion: 2, layout: 3, ask: 4 } as const;
+/** What the app itself can do from the bar (JD-62). */
+export type AppCommand = "quit";
+
+/** App commands and the other words they answer to (only listed once something is typed). */
+export const COMMANDS: { id: AppCommand; label: string; words: string[] }[] = [
+  { id: "quit", label: "Quit JARVIS Desk", words: ["quit", "exit", "close JARVIS Desk"] },
+];
+
+/** Ties go to windows, then sessions, Notion pages, layouts and commands. */
+const KIND_ORDER = { window: 0, session: 1, notion: 2, layout: 3, command: 4, ask: 5 } as const;
 
 export function buildResults(text: string, sources: Sources): CommandResult[] {
   const query = text.trim();
@@ -66,6 +75,10 @@ export function buildResults(text: string, sources: Sources): CommandResult[] {
     ...sources.layouts.map((l) => ({
       score: bestScore(query, [l.name]),
       result: { kind: "layout" as const, key: `layout:${l.name}`, label: l.name, windows: l.windows },
+    })),
+    ...COMMANDS.map((c) => ({
+      score: bestScore(query, [c.label, ...c.words]),
+      result: { kind: "command" as const, key: `command:${c.id}`, label: c.label, id: c.id },
     })),
   ];
   const matches = scored

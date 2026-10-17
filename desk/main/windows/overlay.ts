@@ -29,7 +29,8 @@ export function createOverlay(
     webPreferences: { preload: join(__dirname, "preload.cjs"), contextIsolation: true, sandbox: true },
   });
   win.setAlwaysOnTop(true, "screen-saver");
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // skipTransformProcessType: without it Electron hides the Dock icon to float over full-screen apps (JD-62).
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
   // Click-through by default; `forward` keeps mouse-move events coming so hover can be detected.
   win.setIgnoreMouseEvents(true, { forward: true });
 

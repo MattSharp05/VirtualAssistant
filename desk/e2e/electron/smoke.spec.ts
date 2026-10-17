@@ -36,6 +36,20 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
     expect(await window.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(
       "rgba(0, 0, 0, 0)",
     );
+    // JD-62: the menu-bar icon exists with a real (non-empty, 18 pt template) image, the Dock icon
+    // shows by default, and the app menu has Quit on ⌘Q and an Edit menu for copy/paste.
+    expect(
+      await app.evaluate(() => (globalThis as unknown as { __deskTray(): unknown }).__deskTray()),
+    ).toEqual({ exists: true, empty: false, template: true, size: { width: 18, height: 18 } });
+    expect(await app.evaluate(({ app }) => app.dock?.isVisible())).toBe(true);
+    const menu = await app.evaluate(({ Menu }) =>
+      Menu.getApplicationMenu()!.items.map((i) => ({
+        label: i.label,
+        items: i.submenu?.items.map((s) => `${s.label}|${s.accelerator ?? ""}`) ?? [],
+      })),
+    );
+    expect(menu[0]!.items).toContain("Quit JARVIS Desk|CommandOrControl+Q");
+    expect(menu.map((m) => m.label)).toContain("Edit");
     // JD-20: the ring's buttons open framed windows, and a window reopens where it was left.
     const openHello = () => app.evaluate(({ ipcMain }) => void ipcMain.emit("desk:open-window", {}, "hello"));
     const helloWindow = () =>

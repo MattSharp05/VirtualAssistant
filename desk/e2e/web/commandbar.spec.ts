@@ -83,3 +83,17 @@ test("commandbar: ↑↓ move the highlight, Esc closes, rows are buttons", asyn
   await page.keyboard.press("Escape");
   expect(await mock(page, "frameActions")).toEqual(["close", "close", "close"]);
 });
+
+test("commandbar: “quit” offers Quit JARVIS Desk; ↵ quits through the bridge (JD-62)", async ({ page }) => {
+  const input = page.getByRole("combobox", { name: "Ask JARVIS or open a window" });
+  await input.fill("quit");
+  const first = page.getByRole("option").first();
+  await expect(first).toHaveAccessibleName("Quit JARVIS Desk");
+  await expect(first).toHaveAttribute("aria-selected", "true");
+  await expectWindowSnapshot(page, "commandbar-quit");
+  await page.keyboard.press("Enter");
+  const appActions = () =>
+    page.evaluate(() => (globalThis as { __deskMock?: { appActions: string[] } }).__deskMock?.appActions);
+  expect(await appActions()).toEqual(["quit"]);
+  expect(await mock(page, "__opened")).toEqual([]);
+});

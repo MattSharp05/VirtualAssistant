@@ -1,7 +1,9 @@
 // The tray's pictures, drawn as raw pixels (BGRA, Electron's nativeImage.createFromBitmap): the
 // menu-bar glyph (a small orb: a ring around a dot, black on transparent so macOS can tint it as a
 // template image) and the coloured dots for the connection line. Drawn here rather than shipped as
-// PNGs so they're crisp at 1× and 2× and need no packaging.
+// PNGs so they're crisp at 1× and 2× and need no packaging. tray.ts hands them to Electron as PNG
+// (encodePng), the well-trodden path for menu-bar images (JD-62: the raw-bitmap image didn't show).
+import { deflateSync } from "node:zlib";
 import type { DeskConnection } from "@jarvis/shared";
 
 export interface Bitmap {
@@ -60,4 +62,55 @@ export function statusDot(state: DeskConnection["state"], scale: 1 | 2): Bitmap 
   const size = 12 * scale;
   const c = size / 2;
   return draw(size, COLOURS[state], (x, y) => Math.hypot(x - c, y - c) <= 4 * scale);
+}
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+function crc32(bytes: Buffer): number {
+  let c = 0xffffffff;
+  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff]! ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function chunk(type: string, data: Buffer): Buffer {
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(data.length, 0);
+  head.write(type, 4, "ascii");
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])), 0);
+  return Buffer.concat([head, data, crc]);
+}
+
+/** A bitmap as a PNG (8-bit RGBA, straight alpha), for nativeImage.createFromBuffer. */
+export function encodePng(bmp: Bitmap): Buffer {
+  const { width, height, data } = bmp;
+  const rows = Buffer.alloc(height * (width * 4 + 1));
+  for (let y = 0; y < height; y++) {
+    const row = y * (width * 4 + 1); // each row starts with filter type 0 (none)
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * 4;
+      const o = row + 1 + x * 4;
+      const a = data[i + 3]!;
+      // BGRA premultiplied → RGBA straight.
+      const un = (v: number) => (a ? Math.min(255, Math.round((v * 255) / a)) : 0);
+      rows[o] = un(data[i + 2]!);
+      rows[o + 1] = un(data[i + 1]!);
+      rows[o + 2] = un(data[i]!);
+      rows[o + 3] = a;
+    }
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header.set([8, 6, 0, 0, 0], 8); // 8-bit, RGBA, deflate, adaptive filtering, no interlace
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(rows)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
 }

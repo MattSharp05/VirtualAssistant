@@ -40,6 +40,8 @@ export interface DeskSettings {
   /** Saved window layouts by name (JD-37 decides their shape). */
   layouts: Record<string, unknown>;
   checkForUpdates: boolean;
+  /** A Dock icon (JD-62): right-click → Quit, ⌘Tab. Off = menu bar only, applied without a restart. */
+  showInDock: boolean;
   /** Where each window was last left, by feature id (JD-20). */
   windowBounds: Record<string, Rect>;
   // Voice latency tuning (JD-48; settings.json only for now). The defaults are the measured baseline's.
@@ -74,6 +76,7 @@ export const DEFAULT_SETTINGS: DeskSettings = {
   statusFiles: {},
   layouts: {},
   checkForUpdates: true,
+  showInDock: true,
   windowBounds: {},
   voiceModel: "",
   endpointSilenceMs: 700,
@@ -188,6 +191,7 @@ const validators: { [K in SettingKey]: (v: unknown) => DeskSettings[K] } = {
     return v;
   },
   checkForUpdates: (v) => bool("checkForUpdates", v),
+  showInDock: (v) => bool("showInDock", v),
   windowBounds: (v) => {
     if (!isPlainObject(v)) throw new SettingError("Window bounds must be an object.");
     return Object.fromEntries(Object.entries(v).filter(([, r]) => isRect(r))) as Record<string, Rect>;

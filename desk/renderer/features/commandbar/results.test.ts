@@ -78,6 +78,13 @@ describe("fuzzy ranking", () => {
     ]);
   });
 
+  it("“quit” lists Quit JARVIS Desk first; it isn't offered before anything is typed (JD-62)", () => {
+    for (const text of ["quit", "exit", "qui"])
+      expect(labels(text)[0], text).toBe("command:Quit JARVIS Desk");
+    expect(labels("")).not.toContain("command:Quit JARVIS Desk");
+    expect(labels("mk")).not.toContain("command:Quit JARVIS Desk");
+  });
+
   it("lists the windows (and no Ask row) before anything is typed", () => {
     expect(labels("  ")).toEqual(["window:Chat", "window:Sessions", "window:Today", "window:To-do"]);
   });

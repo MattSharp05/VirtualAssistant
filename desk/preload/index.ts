@@ -35,6 +35,10 @@ const bridge: DeskBridge = {
   overlay: {
     setInteractive: (on) => ipcRenderer.send("desk:hit", on),
     orbClicked: () => ipcRenderer.send("desk:orb-click"),
+    orbMenu: () => ipcRenderer.send("desk:orb-menu"),
+  },
+  app: {
+    quit: () => ipcRenderer.send("desk:quit"),
   },
   layouts: {
     list: () => ipcRenderer.invoke("desk:layouts-list"),

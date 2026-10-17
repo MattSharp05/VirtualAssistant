@@ -37,6 +37,8 @@ describe("settings schema", () => {
     expect(settings.get("cameraHands")).toBe(false);
     expect(settings.get("allowedFolders")).toEqual([]);
     expect(settings.get("checkForUpdates")).toBe(true);
+    // JD-62: in the Dock unless switched off.
+    expect(settings.get("showInDock")).toBe(true);
   });
 
   it("normalises a pasted server URL and rejects what isn't one", () => {

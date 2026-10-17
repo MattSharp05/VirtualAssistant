@@ -78,6 +78,16 @@ export default function SettingsWindow() {
             checked={values.checkForUpdates}
             onChange={(on) => void update("checkForUpdates", on)}
           />
+          {bridge.app && (
+            <div className="settings-quit">
+              <p className="settings-hint">
+                Quit before you drag a new version into Applications. Next time, open it from Applications.
+              </p>
+              <button type="button" className="settings-button is-danger" onClick={() => bridge.app?.quit()}>
+                Quit JARVIS Desk
+              </button>
+            </div>
+          )}
         </Section>
       </div>
     </div>
@@ -693,7 +703,13 @@ function FacesSection({
         );
       })}
       <StatusFilesTest bridge={bridge} dirs={values.statusFiles} />
-      <ErrorText>{errors.statusFiles ?? errors.face}</ErrorText>
+      <Switch
+        label="Show in Dock"
+        hint="Right-click the Dock icon to quit; it's in ⌘Tab too. Off: JARVIS lives in the menu bar only."
+        checked={values.showInDock}
+        onChange={(on) => void update("showInDock", on)}
+      />
+      <ErrorText>{errors.statusFiles ?? errors.face ?? errors.showInDock}</ErrorText>
     </Section>
   );
 }

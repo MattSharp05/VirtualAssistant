@@ -84,6 +84,15 @@ describe("Command bar", () => {
     expect(bridge.frameActions).toEqual(["close"]);
   });
 
+  it("“quit” then ↵ quits JARVIS Desk through the bridge (JD-62)", () => {
+    const { bridge, opened, input } = renderBar();
+    fireEvent.change(input, { target: { value: "quit" } });
+    expect(options()[0]).toBe("Quit JARVIS Desk");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(bridge.appActions).toEqual(["quit"]);
+    expect(opened).toEqual([]);
+  });
+
   it("opens a window, a layout's windows, and closes on Esc", async () => {
     const { bridge, opened, input } = renderBar();
     fireEvent.change(input, { target: { value: "today" } });

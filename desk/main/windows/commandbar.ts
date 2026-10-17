@@ -51,10 +51,11 @@ export class CommandBar {
     this.win = win;
     // Above full-screen apps and on whichever Space Matthew is in.
     win.setAlwaysOnTop(true, "pop-up-menu");
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // Keeping the Dock icon (JD-62): no process-type switch, which would hide it each time the bar opens.
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
     win.once("ready-to-show", () => {
       win.show();
-      // An agent app isn't the active app: take focus so typing reaches the bar straight away.
+      // JARVIS usually isn't the active app: take focus so typing reaches the bar straight away.
       app.focus({ steal: true });
       win.focus();
     });

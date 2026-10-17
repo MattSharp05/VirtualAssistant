@@ -11,6 +11,7 @@ const ICONS: Record<CommandResult["kind"], string> = {
   session: "sessions",
   notion: "notion",
   layout: "layout",
+  command: "power",
   ask: "orb",
 };
 const KIND_HINT: Record<CommandResult["kind"], string> = {
@@ -18,6 +19,7 @@ const KIND_HINT: Record<CommandResult["kind"], string> = {
   session: "Session",
   notion: "Notion",
   layout: "Layout",
+  command: "App",
   ask: "⌘↵",
 };
 
@@ -32,6 +34,7 @@ export function describeResult(r: CommandResult): string {
       return `Notion: ${r.label}`;
     case "layout":
       return `Layout: ${r.label}`;
+    case "command":
     case "ask":
       return r.label;
   }
@@ -102,6 +105,9 @@ export default function CommandBar() {
           if (bridge.layouts) void bridge.layouts.apply(r.label).catch(() => {});
           else for (const id of r.windows) bridge.openWindow(id);
           break;
+        case "command":
+          // Main quits the whole app (JD-62), command bar included.
+          return void bridge.app?.quit();
         case "ask":
           return void ask(r.text);
       }
@@ -224,6 +230,8 @@ function Label({ result: r }: { result: CommandResult }) {
           Layout: <b>{r.label}</b>
         </>
       );
+    case "command":
+      return <b>{r.label}</b>;
     case "ask":
       return <>{r.label}</>;
   }

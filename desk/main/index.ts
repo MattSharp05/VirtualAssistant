@@ -1,5 +1,5 @@
-// JARVIS Desk main process: an agent app (no Dock icon, LSUIElement) that lives in the menu bar
-// (tray.ts) and whose UI is the overlay with the orb (windows/overlay.ts) and the feature windows it
+// JARVIS Desk main process: lives in the menu bar (tray.ts) and, unless Settings → Show in Dock is off,
+// the Dock (JD-62); its UI is the overlay with the orb (windows/overlay.ts) and the feature windows it
 // opens (windows/manager.ts). Main holds the connection to the server (connection.ts) and the settings
 // (settings.ts); renderers reach both only through the bridge (preload/index.ts). Voice (voice/) listens
 // on the Mac and publishes its orb states and cards like server events.
@@ -28,6 +28,7 @@ import {
   type MoodResponse,
   type UsageResponse,
 } from "@jarvis/shared";
+import { applicationMenu, dockClickTarget, dockMenu, orbMenu, type AppMenuActions } from "./appMenus";
 import { Connection } from "./connection";
 import { describeTurn, latencyLine } from "./latency";
 import { startHotkeyWithAccess } from "./permissions";
@@ -39,7 +40,7 @@ import { answerRpc, type RpcHandler } from "./rpcHandlers";
 import { screenRpcHandlers } from "./rpcHandlers/screenNative";
 import { isSecretKey, Settings } from "./settings";
 import { StatusFileWriter } from "./statusFiles";
-import { createTray } from "./tray";
+import { createTray, trayCheck } from "./tray";
 import { Updater } from "./updater";
 import { createVoice } from "./voice";
 import { Uploader, type UploadSource } from "./uploads";
@@ -56,10 +57,6 @@ import { registerWebViews } from "./windows/webview";
 const USAGE_EVERY_MS = 5 * 60_000;
 
 app.whenReady().then(() => {
-  app.dock?.hide();
-  // No visible menu bar for an agent app, but ⌘Q still quits while JARVIS is focused.
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "JARVIS Desk", submenu: [{ role: "quit" }] }]));
-
   const userData = app.getPath("userData");
   const settings = new Settings({
     file: join(userData, "settings.json"),
@@ -257,6 +254,53 @@ app.whenReady().then(() => {
   };
   setInterval(() => connection.status.state === "connected" && void refreshUsage(), USAGE_EVERY_MS);
 
+  // Every way out (the tray, ⌘Q, the Dock, the orb, the command bar, Settings) ends here (JD-62).
+  const quit = () => app.quit();
+  const openSettings = () => windows.openWindow("settings");
+  const setDnd = (on: boolean) => {
+    settings.set("dnd", on);
+    // The server holds Do Not Disturb for Telegram notices too.
+    connection.request("/dnd", { on }).catch(() => {});
+  };
+  const menuActions: AppMenuActions = { openSettings, commandBar: () => commandBar.open(), setDnd, quit };
+  // The menu bar while a JARVIS window is in front: ⌘Q, ⌘, and Edit (copy/paste in every window).
+  Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenu(menuActions)));
+  // The Dock icon (JD-62): shown by default (no LSUIElement), hidden at once when Show in Dock is off.
+  // Its right-click menu adds Command bar, Settings and Do Not Disturb to macOS's own Quit.
+  const dock = app.dock;
+  const setDockMenu = () => dock?.setMenu(Menu.buildFromTemplate(dockMenu(settings.get("dnd"), menuActions)));
+  if (settings.get("showInDock")) setDockMenu();
+  else dock?.hide();
+  settings.onChange((key) => {
+    if (key === "dnd" && settings.get("showInDock")) setDockMenu();
+    if (key !== "showInDock" || !dock) return;
+    // Switching the Dock icon re-activates the app; keep the window it was switched from (Settings) in front.
+    const front = BrowserWindow.getFocusedWindow();
+    const refocus = () => front && !front.isDestroyed() && front.focus();
+    if (settings.get("showInDock"))
+      void dock.show().then(() => {
+        setDockMenu();
+        refocus();
+      });
+    else {
+      dock.hide();
+      refocus();
+    }
+  });
+  // A click on the Dock icon (or opening the app again from Finder) opens the command bar, or
+  // Settings while the Desk isn't paired.
+  app.on("activate", () => {
+    const paired = Boolean(settings.get("serverUrl")) && settings.hasSecret("deviceKey");
+    if (dockClickTarget(paired) === "commandbar") commandBar.open();
+    else openSettings();
+  });
+  ipcMain.on("desk:quit", quit);
+  // The orb's right-click menu, native so it looks like macOS: Settings…, Quit JARVIS Desk.
+  ipcMain.on("desk:orb-menu", (e) => {
+    const win = BrowserWindow.fromWebContents(e.sender) ?? undefined;
+    Menu.buildFromTemplate(orbMenu(menuActions)).popup(win ? { window: win } : {});
+  });
+
   const tray = createTray(
     () => ({
       settings: settings.all(),
@@ -279,11 +323,7 @@ app.whenReady().then(() => {
       setFace: (face) => settings.set("face", face),
       setWakeWord: (on) => settings.set("wakeWordEnabled", on),
       setCameraHands: (on) => settings.set("cameraHands", on),
-      setDnd: (on) => {
-        settings.set("dnd", on);
-        // The server holds Do Not Disturb for Telegram notices too.
-        connection.request("/dnd", { on }).catch(() => {});
-      },
+      setDnd,
       notMe: () => {
         const last = voice.wake.lastTrigger;
         if (last === undefined) return;
@@ -294,12 +334,14 @@ app.whenReady().then(() => {
           console.error("wake word log:", err),
         );
       },
-      openSettings: () => windows.openWindow("settings"),
+      openSettings,
       checkForUpdates: () => void updater.check({ forced: true }),
       installUpdate: () => void updater.install(),
-      quit: () => app.quit(),
+      quit,
     },
   );
+  // The Electron smoke test checks the menu-bar icon is really there (JD-62).
+  if (scenario) (globalThis as { __deskTray?: typeof trayCheck }).__deskTray = trayCheck;
   windows.onChange(() => tray.refresh());
   settings.onChange((key) => {
     if (key === "serverUrl" || key === "deviceKey") connection.restart();
@@ -362,8 +404,8 @@ app.whenReady().then(() => {
     // The command bar has its own window; the drop card's Ask opens it prefilled (JD-40).
     id === "commandbar" ? commandBar.open(params) : windows.openWindow(id, params),
   );
-  // A window's own frame buttons. Minimise hides it (an agent app has no Dock to minimise to); the
-  // launcher brings it back where it was.
+  // A window's own frame buttons. Minimise hides it (the Dock may be off, so there's nowhere to
+  // minimise to); the launcher brings it back where it was.
   ipcMain.on("desk:frame-minimize", (e) => BrowserWindow.fromWebContents(e.sender)?.hide());
   ipcMain.on("desk:frame-close", (e) => BrowserWindow.fromWebContents(e.sender)?.close());
   // Full views (JD-39): claude.ai sessions and notion.so pages inside their windows.
