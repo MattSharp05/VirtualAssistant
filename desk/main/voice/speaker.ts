@@ -107,6 +107,12 @@ export class Speaker {
       this.replies.delete(e.messageId);
       this.sayAll(splitter, splitter.flush(), e.messageId);
       this.settle();
+    } else if (e.type === "browser.say") {
+      // A browser task asked by voice (JD-60): its question for Matthew, or its result.
+      if (!this.deps.speakReplies() || !e.text.trim()) return;
+      const splitter = new SentenceSplitter();
+      for (const s of [...splitter.push(e.text), ...splitter.flush()]) this.say(s);
+      this.settle();
     }
   }
 

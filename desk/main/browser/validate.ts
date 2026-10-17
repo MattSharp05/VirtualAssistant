@@ -11,6 +11,7 @@ import {
   type BrowserSelectRequest,
   type BrowserSnapshotRequest,
   type BrowserStatusRequest,
+  type BrowserTaskGrant,
   type BrowserTabsRequest,
   type BrowserTypeRequest,
   type BrowserWaitRequest,
@@ -71,8 +72,20 @@ export function snapshotRequest(payload: unknown): BrowserSnapshotRequest {
   return { more };
 }
 
+/** A task's grant (JD-60): its id, mode and (once Matthew approved) the approval token. */
+export function taskGrant(v: unknown): BrowserTaskGrant | undefined {
+  if (v === undefined || v === null) return undefined;
+  const p = record(v);
+  if (typeof p.taskId !== "string" || !p.taskId) throw new BrowserInputError("task needs a taskId.");
+  const mode = oneOf(p.mode, ["normal", "full"] as const, "task.mode");
+  const approval = typeof p.approval === "string" && p.approval ? p.approval.slice(0, 100) : undefined;
+  return { taskId: p.taskId.slice(0, 100), mode, ...(approval ? { approval } : {}) };
+}
+
 export function clickRequest(payload: unknown): BrowserClickRequest {
-  return { ref: parseRef(record(payload).ref) };
+  const p = record(payload);
+  const task = taskGrant(p.task);
+  return { ref: parseRef(p.ref), ...(task ? { task } : {}) };
 }
 
 export function typeRequest(payload: unknown): BrowserTypeRequest {
@@ -81,7 +94,13 @@ export function typeRequest(payload: unknown): BrowserTypeRequest {
   if (p.text.length > MAX_TYPE_CHARS)
     throw new BrowserInputError(`type takes up to ${MAX_TYPE_CHARS} characters at a time.`);
   const submit = optionalBool(p.submit, "submit");
-  return { ref: parseRef(p.ref), text: p.text, ...(submit !== undefined ? { submit } : {}) };
+  const task = taskGrant(p.task);
+  return {
+    ref: parseRef(p.ref),
+    text: p.text,
+    ...(submit !== undefined ? { submit } : {}),
+    ...(task ? { task } : {}),
+  };
 }
 
 export function selectRequest(payload: unknown): BrowserSelectRequest {

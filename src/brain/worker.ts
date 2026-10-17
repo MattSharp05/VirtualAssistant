@@ -21,8 +21,9 @@ export const WORKER_READ_TOOLS = ["overview", "list_cloud_sessions", "session_ac
 export class WorkerState implements BrainStateStore {
   private readonly file: JsonFile<{ state: BrainState }>;
 
-  constructor(dataDir: string) {
-    this.file = new JsonFile(dataDir, "worker", {
+  /** `name`: the file under DATA_DIR (browser tasks keep their own, JD-60). */
+  constructor(dataDir: string, name = "worker") {
+    this.file = new JsonFile(dataDir, name, {
       state: { messages: [], totals: { replies: 0, inputTokens: 0, outputTokens: 0, ms: 0, apiEquivalentUsd: 0 } } as BrainState,
     });
   }

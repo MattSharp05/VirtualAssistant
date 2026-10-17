@@ -1,0 +1,506 @@
+/* Browser tasks (JD-60): the task strip under the status line (44 px), a waiting task's question band,
+   and the History panel in the page's place. None of it overlaps the page: in the app the page is a
+   native view laid over its slot. */
+
+.task-strip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.task-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.task-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ink);
+}
+
+.task-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.task-button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  color: var(--accent-ink);
+}
+
+.task-start,
+.task-primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--bg-deep);
+  font-weight: 500;
+}
+
+.task-start:hover:not(:disabled),
+.task-primary:hover:not(:disabled) {
+  background: var(--accent-ink);
+  color: var(--bg-deep);
+}
+
+.task-stop {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+  color: var(--red);
+}
+
+.task-stop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  color: var(--red);
+}
+
+.task-error {
+  position: absolute;
+  right: 12px;
+  bottom: -22px;
+  z-index: 1;
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--red) 20%, var(--bg-deep));
+  color: var(--ink);
+  font-size: 12px;
+}
+
+/* ── The task box ── */
+
+.task-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-box-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-ink);
+}
+
+.task-box input,
+.task-question-reply input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: var(--bg-deep);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.task-box input::placeholder,
+.task-question-reply input::placeholder {
+  color: var(--ink-3);
+}
+
+.task-box input:focus,
+.task-question-reply input:focus {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  outline: none;
+}
+
+/* Normal / Full autonomy: a two-way switch. */
+.task-mode {
+  display: flex;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: var(--bg-deep);
+}
+
+.task-mode button {
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.task-mode button:hover {
+  color: var(--ink);
+}
+
+.task-mode button[aria-checked="true"] {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+}
+
+.task-mode button[aria-checked="true"]:last-child {
+  background: color-mix(in srgb, var(--amber) 22%, transparent);
+  color: var(--amber);
+}
+
+/* ── A task going on, or its result ── */
+
+.task-active {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.task-mode-badge {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.task-mode-badge[data-mode="full"] {
+  background: color-mix(in srgb, var(--amber) 18%, transparent);
+  color: var(--amber);
+}
+
+.task-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.task-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  color: var(--accent-ink);
+  font-size: 12px;
+}
+
+.task-state::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.task-strip[data-state="running"] .task-state::before {
+  box-shadow: 0 0 8px currentColor;
+  animation: task-pulse 1.6s ease-in-out infinite;
+}
+
+.task-strip[data-state="waiting"] .task-state,
+.task-strip[data-state="paused"] .task-state {
+  color: var(--amber);
+}
+
+.task-state[data-status="done"] {
+  color: var(--green);
+}
+
+.task-state[data-status="stopped"] {
+  color: var(--ink-3);
+}
+
+.task-state[data-status="failed"] {
+  color: var(--red);
+}
+
+.task-result {
+  color: var(--ink-2);
+}
+
+@keyframes task-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ── The question band ── */
+
+.task-question {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--glass-border);
+  border-left: 3px solid var(--amber);
+  background: color-mix(in srgb, var(--amber) 9%, transparent);
+}
+
+.task-question[data-kind="question"] {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.task-question-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-question-eyebrow {
+  color: var(--amber);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.task-question[data-kind="question"] .task-question-eyebrow {
+  color: var(--accent-ink);
+}
+
+.task-question-text p {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.task-question-actions,
+.task-question-reply {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+}
+
+.task-question-reply {
+  flex: 0 1 420px;
+  min-width: 220px;
+}
+
+.task-takeover {
+  background: var(--amber);
+}
+
+.task-takeover:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--amber) 80%, white);
+}
+
+/* ── History ── */
+
+.task-history {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.task-history-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.task-history-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.task-history-note {
+  flex: 1;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.task-history-empty {
+  margin: 0;
+  padding: 24px 16px;
+  color: var(--ink-3);
+}
+
+.task-history-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.task-history-list {
+  flex: 0 0 300px;
+  margin: 0;
+  padding: 6px;
+  overflow-y: auto;
+  border-right: 1px solid var(--glass-border);
+  list-style: none;
+}
+
+.task-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-history-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.task-history-item[aria-current="true"] {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--ink);
+}
+
+.task-history-item-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.task-history-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.task-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.task-dot[data-status="done"] {
+  background: var(--green);
+}
+
+.task-dot[data-status="failed"] {
+  background: var(--red);
+}
+
+.task-dot[data-status="stopped"] {
+  background: var(--ink-3);
+}
+
+.task-dot[data-status="waiting"],
+.task-dot[data-status="paused"] {
+  background: var(--amber);
+}
+
+.task-history-log {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 18px;
+  overflow-y: auto;
+}
+
+.task-history-log h3 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.task-history-result {
+  margin: 0 0 12px;
+  color: var(--ink-2);
+  line-height: 1.45;
+}
+
+.task-history-log ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-history-log li {
+  display: grid;
+  grid-template-columns: 44px 76px 1fr;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+.task-history-log time {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.task-log-kind {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.task-history-log li[data-kind="approval"] .task-log-kind,
+.task-history-log li[data-kind="ask"] .task-log-kind,
+.task-history-log li[data-kind="refused"] .task-log-kind {
+  color: var(--amber);
+}
+
+.task-history-log li[data-kind="done"] .task-log-kind {
+  color: var(--green);
+}
+
+.task-history-log li[data-kind="error"] .task-log-kind {
+  color: var(--red);
+}
+
+.task-log-text {
+  color: var(--ink-2);
+}
+
+.task-log-url {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}

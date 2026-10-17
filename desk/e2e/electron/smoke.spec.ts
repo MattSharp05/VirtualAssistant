@@ -152,7 +152,8 @@ test("JARVIS Desk launches its overlay with the orb", async ({}, testInfo) => {
 });
 
 // JD-59: the browser actions JARVIS calls over rpc, on a local test page in the real Browser window:
-// open, snapshot, type in a field, click a button and read the result back.
+// open, snapshot, type in a field, click a button and read the result back. JD-60: the Mac's guard
+// refuses “Place order” in a task's Normal mode (not in Full autonomy) and any typing into a password.
 // eslint-disable-next-line no-empty-pattern
 test("Browser: open, snapshot, type, click and read back", async ({}) => {
   test.skip(
@@ -165,7 +166,9 @@ test("Browser: open, snapshot, type, click and read back", async ({}) => {
     res.end(`<!doctype html><title>Greeter</title>
       <label>Name <input id="name"></label>
       <button onclick="document.getElementById('out').textContent = 'Hello, ' + document.getElementById('name').value">Greet</button>
-      <p id="out">Nobody greeted yet</p>`);
+      <p id="out">Nobody greeted yet</p>
+      <label>Password <input id="pw" type="password"></label>
+      <button onclick="document.getElementById('out').textContent = 'Ordered'">Place order</button>`);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
@@ -208,6 +211,23 @@ test("Browser: open, snapshot, type, click and read back", async ({}) => {
     const after = await rpc<Snapshot>("browser.snapshot", {});
     expect(after.text).toContain("Hello, Matthew");
     expect(after.text).toContain(`[${field}] textbox “Name” value=“Matthew”`);
+
+    const order = after.text.match(/\[(\d+)\] button “Place order”/)?.[1];
+    const password = after.text.match(/\[(\d+)\] textbox “Password”/)?.[1];
+    const refused = (kind: string, payload: unknown) =>
+      rpc(kind, payload).then(
+        () => "",
+        (err: Error) => err.message,
+      );
+    const normal = { taskId: "smoke", mode: "normal" };
+    expect(await refused("browser.click", { ref: Number(order), task: normal })).toContain(
+      "Needs Matthew's approval",
+    );
+    expect(
+      await refused("browser.type", { ref: Number(password), text: "x", task: { ...normal, mode: "full" } }),
+    ).toContain("Matthew types this himself");
+    await rpc("browser.click", { ref: Number(order), task: { taskId: "smoke", mode: "full" } });
+    expect((await rpc<Snapshot>("browser.snapshot", {})).text).toContain("Ordered");
   } finally {
     await app.close();
     server.close();

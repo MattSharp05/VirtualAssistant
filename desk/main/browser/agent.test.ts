@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { BrowserTab, DeskEvent } from "@jarvis/shared";
+import {
+  BROWSER_NEEDS_APPROVAL,
+  BROWSER_NEEDS_MATTHEW,
+  type BrowserTab,
+  type DeskEvent,
+} from "@jarvis/shared";
 import { answerRpc } from "../rpcHandlers";
 import { browserRpcHandlers } from "../rpcHandlers/browser";
 import { RING_MS } from "./actionOverlay";
@@ -407,5 +412,74 @@ describe("fitScreenshot", () => {
 
   it("names screenshots by time", () => {
     expect(screenshotName(new Date(2026, 9, 17, 9, 5, 7))).toBe("browser-2026-10-17-090507.jpg");
+  });
+});
+
+describe("BrowserAgent's risky-action guard (JD-60)", () => {
+  /** The booking page with its button and date field renamed: a checkout. */
+  function checkout(t: ReturnType<typeof setup>) {
+    const tab = t.withTab();
+    const nodes = bookingNodes().map((n) =>
+      n.nodeId === "21"
+        ? { ...n, name: { type: "string", value: "Place order" } }
+        : n.nodeId === "18"
+          ? { ...n, name: { type: "string", value: "Password" } }
+          : n,
+    );
+    const send = tab.cdp.send;
+    tab.cdp = {
+      send: async <T>(method: string, params?: Record<string, unknown>): Promise<T> =>
+        method === "Accessibility.getFullAXTree" ? ({ nodes } as T) : send<T>(method, params),
+    };
+    return tab;
+  }
+
+  it("refuses ‘Place order’ in Normal mode before anything shows or moves", async () => {
+    const t = setup();
+    const tab = checkout(t);
+    await t.agent.snapshot({});
+    await expect(t.agent.click({ ref: 7, task: { taskId: "t1", mode: "normal" } })).rejects.toThrow(
+      `${BROWSER_NEEDS_APPROVAL}: clicking ‘Place order’`,
+    );
+    expect(t.events).toEqual([]);
+    expect(tab.called("Input.dispatchMouseEvent")).toEqual([]);
+  });
+
+  it("clicks it with Matthew's approval, or in Full autonomy", async () => {
+    const t = setup();
+    const tab = checkout(t);
+    await t.agent.snapshot({});
+    await t.agent.click({ ref: 7, task: { taskId: "t1", mode: "normal", approval: "appr-1" } });
+    await t.agent.click({ ref: 7, task: { taskId: "t1", mode: "full" } });
+    expect(tab.called("Input.dispatchMouseEvent")).toHaveLength(6);
+  });
+
+  it("never types into a password field, in either mode", async () => {
+    const t = setup();
+    const tab = checkout(t);
+    await t.agent.snapshot({});
+    for (const mode of ["normal", "full"] as const)
+      await expect(
+        t.agent.type({ ref: 4, text: "hunter2", task: { taskId: "t1", mode, approval: "appr-1" } }),
+      ).rejects.toThrow(BROWSER_NEEDS_MATTHEW);
+    expect(tab.called("Input.insertText")).toEqual([]);
+  });
+
+  it("the rpc carries the task's grant through to the guard", async () => {
+    const t = setup();
+    checkout(t);
+    await t.agent.snapshot({});
+    const handlers = browserRpcHandlers(t.agent);
+    await expect(
+      handlers["browser.click"]!({ ref: 7, task: { taskId: "t1", mode: "normal" } }),
+    ).rejects.toThrow(BROWSER_NEEDS_APPROVAL);
+    await expect(
+      handlers["browser.click"]!({ ref: 7, task: { taskId: "t1", mode: "full" } }),
+    ).resolves.toMatchObject({
+      url: "https://reservas.example/taberna",
+    });
+    await expect(handlers["browser.click"]!({ ref: 7, task: { mode: "full" } })).rejects.toThrow(
+      "task needs a taskId",
+    );
   });
 });

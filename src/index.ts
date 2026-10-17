@@ -11,6 +11,8 @@ import { memory } from "./tools/memory.js";
 import { CalendarLog, useCalendarLog } from "./calendarLog.js";
 import { UploadStore } from "./uploads.js";
 import { createWorker } from "./brain/worker.js";
+import { createBrowserBrain } from "./browser/brain.js";
+import { BrowserTaskRunner, useBrowserTasks } from "./browser/tasks.js";
 import { discoverJobs, JobRunner, useJobRunner } from "./jobs/index.js";
 import { MEMORY_POLL_MS } from "./memory.js";
 import { suggesterFor } from "./suggest/index.js";
@@ -110,6 +112,24 @@ const worker = createWorker(
 const jobRunner = new JobRunner(await discoverJobs(), worker, toolContext, { dataDir: config.dataDir, bus, usage: () => jarvis.status().then((st) => st.usage) });
 useJobRunner(jarvis, jobRunner);
 scheduler.every("jobs", 60_000, () => void jobRunner.tick());
+// Browser tasks (JD-60): their own worker conversation drives the Mac's browser over rpc.
+const browserTasks = new BrowserTaskRunner({
+  dataDir: config.dataDir,
+  bus,
+  brain: createBrowserBrain({
+    claudeBin: config.claudeBin,
+    dataDir: config.dataDir,
+    models: config.brainModels,
+    defaultModel: config.brainModel,
+    model: process.env.WORKER_MODEL || undefined,
+    internalUrl: `http://127.0.0.1:${config.dashboardPort}`,
+    internalToken,
+  }),
+  mac: { connected: () => deskCtx.hub.clientCount > 0, call: (kind, payload) => deskCtx.rpc.call(kind, payload) },
+  telegram: (text) => notifier.sendTelegram(text),
+  chat: jarvis.store,
+});
+useBrowserTasks(jarvis, browserTasks);
 // The morning brief (Desk POST /brief, the first Desk voice turn of the morning, Telegram /brief).
 useBrief(jarvis, new BriefService({ ctx: toolContext, brain, bus, runner: () => jobRunner }));
 // To-do suggestions: from session reports at once, Notion QA every 30 min (Slack + email is a job).

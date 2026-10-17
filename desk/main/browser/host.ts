@@ -35,8 +35,8 @@ import {
 } from "./policy";
 import { browserCommand } from "./validate";
 
-/** Where the page sits before the renderer has measured it: below the title bar, tabs, toolbar and status. */
-export const DEFAULT_PAGE_TOP = 162;
+/** Where the page sits before the renderer has measured it: below the title bar, tabs, toolbar, status and task strip. */
+export const DEFAULT_PAGE_TOP = 207;
 const LOAD_MS = 15_000;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 

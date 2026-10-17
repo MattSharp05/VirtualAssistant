@@ -28,6 +28,7 @@ import {
 } from "@jarvis/shared";
 import type { UploadSource } from "../uploads";
 import { actionOverlayScript, FINGERPRINT_SCRIPT, RING_MS, short } from "./actionOverlay";
+import { checkClick, checkType, FIELD_INFO, fieldInfo, type GuardTarget } from "./guard";
 import { keyEvent } from "./keys";
 import { BrowserInputError } from "./policy";
 import { RefTable, snapshotLines, snapshotPart, type AXNode } from "./snapshot";
@@ -204,9 +205,11 @@ export class BrowserAgent {
     return { ...(await this.result(tab)), ...part };
   }
 
-  async click({ ref }: BrowserClickRequest): Promise<BrowserActionResult> {
+  async click({ ref, task }: BrowserClickRequest): Promise<BrowserActionResult> {
     const tab = await this.tab();
     const { entry, rect } = await this.target(tab, ref);
+    // JD-60: a risky button needs Matthew's approval in Normal mode (guard.ts), before anything shows.
+    checkClick(await this.guardTarget(tab, entry), task);
     await this.show(tab, `Clicking ${quoted(entry.name, entry.role)}`, ref, rect);
     const x = rect.x + rect.width / 2;
     const y = rect.y + rect.height / 2;
@@ -232,6 +235,8 @@ export class BrowserAgent {
   async type({ ref, text, submit }: BrowserTypeRequest): Promise<BrowserActionResult> {
     const tab = await this.tab();
     const { entry, rect } = await this.target(tab, ref);
+    // JD-60: passwords, one-time codes and card details are Matthew's to type, in every mode.
+    checkType(await this.guardTarget(tab, entry));
     const secret = /password|passcode|pin\b/i.test(entry.name);
     const what = secret ? "••••" : `‘${short(text, 30)}’`;
     await this.show(tab, `Typing ${what} into ${quoted(entry.name, entry.role)}`, ref, rect);
@@ -397,6 +402,15 @@ export class BrowserAgent {
     };
     if (rect.width < 1 || rect.height < 1) throw new BrowserInputError(`[${ref}] isn't visible on the page.`);
     return { entry, rect };
+  }
+
+  /** What guard.ts looks at: the snapshot's role and name, and the element's type and autocomplete. */
+  private async guardTarget(
+    tab: BrowserTabHandle,
+    entry: { backendNodeId: number; role: string; name: string },
+  ): Promise<GuardTarget> {
+    const info = fieldInfo(await this.callOn(tab, entry.backendNodeId, FIELD_INFO).catch(() => undefined));
+    return { role: entry.role, name: entry.name, ...info };
   }
 
   /** The caption in the window and in the page, with the ring around `rect` for RING_MS first. */

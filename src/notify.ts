@@ -39,6 +39,12 @@ export class Notifier {
     return { ...this.dndState };
   }
 
+  /** A Telegram message only (no Desk card), e.g. a browser task's result asked from Telegram (JD-60). */
+  async sendTelegram(text: string): Promise<void> {
+    if (!this.telegram) return;
+    await this.telegram(text).catch((err) => console.error("telegram send:", err));
+  }
+
   async notify(n: Notice): Promise<void> {
     const level = n.level ?? "info";
     this.bus.publish({ type: "notice", at: new Date().toISOString(), level, title: n.title, body: n.body, ...(n.link ? { link: n.link } : {}), ...(n.actions?.length ? { actions: n.actions } : {}) });
