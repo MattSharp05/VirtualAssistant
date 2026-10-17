@@ -45,7 +45,10 @@ export function popOutWindow(card: ScreenCard): string | undefined {
   return card.kind === "agenda" ? "today" : card.kind === "session" ? "sessions" : undefined;
 }
 
-/** A notice's buttons: the event's own, else Open for its link; anything to act on gets a Later. */
+/**
+ * A notice's buttons: the event's own, else Open for its link; anything to act on gets a Later. A
+ * button may call the Desk API instead (`request`: a browser task's Approve / Stop, JD-60).
+ */
 export function noticeActions(actions: NoticeAction[] | undefined, link: string | undefined): NoticeAction[] {
   const list = actions?.length ? actions : link ? [{ label: "Open", url: link }] : [];
   const hasLater = list.some((a) => !a.window && !a.url);
@@ -79,7 +82,6 @@ export function cardsReducer(state: CardsState, action: CardsAction): CardsState
   }
   const { event, dnd, now } = action;
   const seq = state.seq + 1;
-  const push = (card: OverlayCard): CardsState => ({ ...state, seq, cards: [card, ...state.cards] });
 
   switch (event.type) {
     case "card.show": {
@@ -91,8 +93,11 @@ export function cardsReducer(state: CardsState, action: CardsAction): CardsState
         cards: [{ key: `card-${event.card.id}`, type: "screen", card: event.card }, ...cards],
       };
     }
-    case "card.dismiss":
-      return cardsReducer(state, { type: "dismiss", key: `card-${event.id}` });
+    case "card.dismiss": {
+      // A card JARVIS put up, or a notice that carried this id (JD-60's questions).
+      const gone = cardsReducer(state, { type: "dismiss", key: `card-${event.id}` });
+      return cardsReducer(gone, { type: "dismiss", key: `notice-${event.id}` });
+    }
     case "notice": {
       if (
         event.title.startsWith("⏰") &&
@@ -101,15 +106,19 @@ export function cardsReducer(state: CardsState, action: CardsAction): CardsState
       )
         return state;
       const card: OverlayCard = {
-        key: `notice-${seq}`,
+        key: `notice-${event.id ?? seq}`,
         type: "notice",
         level: event.level,
         title: event.title,
         ...(event.body ? { body: event.body } : {}),
         actions: noticeActions(event.actions, event.link),
       };
+      // The same id again (a browser task's next question) replaces the old card.
+      const rest = event.id ? cardsReducer(state, { type: "dismiss", key: card.key }) : state;
       // Do Not Disturb holds notices back silently; cards Matthew asked for still show.
-      return dnd ? { ...state, seq, queued: [...state.queued, card] } : push(card);
+      return dnd
+        ? { ...rest, seq, queued: [...rest.queued, card] }
+        : { ...rest, seq, cards: [card, ...rest.cards] };
     }
     case "timer.started": {
       const cards = state.cards.filter((c) => !(c.type === "timer" && c.id === event.id));

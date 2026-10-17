@@ -34,7 +34,8 @@ export interface BrainMetrics {
  */
 export type DeskEvent =
   | { type: "orb.state"; state: OrbState; amplitude?: number }
-  | { type: "notice"; at: string; level: NoticeLevel; title: string; body?: string; link?: string; actions?: NoticeAction[] }
+  /** `id`: a notice that card.dismiss can take away again (JD-60's questions, once answered elsewhere). */
+  | { type: "notice"; id?: string; at: string; level: NoticeLevel; title: string; body?: string; link?: string; actions?: NoticeAction[] }
   /** How things are, for the orb's colour (JD-11). */
   | { type: "mood.changed"; mood: Mood; reason: string }
   // The brain's reply as it's written (JD-6). One messageId per user turn; deltas are chunks to append.
@@ -73,7 +74,11 @@ export type DeskEvent =
   /** The Mac's browser changed (main → the Browser window, JD-59; never from the server). */
   | { type: "browser.state"; state: BrowserState }
   /** JARVIS is about to act in the browser: the window's caption, and the element it will touch. */
-  | { type: "browser.action"; caption: string; ref?: number; rect?: BrowserRect };
+  | { type: "browser.action"; caption: string; ref?: number; rect?: BrowserRect }
+  /** A browser task changed (JD-60): started, a new step, a question for Matthew, paused, done… */
+  | { type: "browser.task"; task: BrowserTaskSummary }
+  /** Say this out loud (a browser task's question or result, when the task was asked by voice). */
+  | { type: "browser.say"; text: string };
 
 /** A button on a notice's card (JD-27): opens a Desk window or a link; neither just dismisses ("Later"). */
 export interface NoticeAction {
@@ -82,6 +87,8 @@ export interface NoticeAction {
   window?: string;
   params?: Record<string, string>;
   url?: string;
+  /** A Desk API call instead (JD-60's Approve / Stop on a browser task's question). */
+  request?: { path: string; body?: Record<string, unknown> };
 }
 
 /** What JARVIS puts on screen with show_on_screen. Body is short markdown. */
@@ -272,6 +279,8 @@ export interface BrowserSnapshotRequest {
 /** Refs are the numbers in the snapshot ("[12] button …"), valid until the page changes document. */
 export interface BrowserClickRequest {
   ref: number;
+  /** The browser task this click belongs to (JD-60): the Mac's risky-action guard checks it. */
+  task?: BrowserTaskGrant;
 }
 
 export interface BrowserTypeRequest {
@@ -280,6 +289,7 @@ export interface BrowserTypeRequest {
   text: string;
   /** Presses Enter afterwards. */
   submit?: boolean;
+  task?: BrowserTaskGrant;
 }
 
 export interface BrowserSelectRequest {
@@ -375,6 +385,89 @@ export type BrowserCommand =
         "back" | "forward" | "reload" | "new-tab" | "take-over" | "hand-back";
     }
   | { type: "switch-tab" | "close-tab"; tabId: string };
+
+// Browser tasks (JD-60): Matthew asks for something on the web ("book a table at Lilia for Friday 8pm
+// for 2") from the Browser window's task box, chat, voice or Telegram; the server runs it on its own
+// worker conversation with the browser_* tools, which call the browser.* rpc kinds above. Normal mode
+// asks Matthew before a step that buys, books, sends, posts, deletes or changes account settings; Full
+// autonomy doesn't. Both stop for passwords, one-time codes and card details: Matthew types those
+// himself (Take over, then Hand back). The Mac checks clicks and typing too (main/browser/guard.ts).
+
+/** Normal asks before risky steps; full doesn't. Chosen per task; Normal unless asked. */
+export type BrowserTaskMode = "normal" | "full";
+
+/** What the server sends with a click or typing in a task: the mode, and Matthew's approval for this step. */
+export interface BrowserTaskGrant {
+  taskId: string;
+  mode: BrowserTaskMode;
+  /** The token from Matthew's Approve (single use; the server checks it before sending). */
+  approval?: string;
+}
+
+/** The Mac's refusals (the start of the rpc error): Normal mode without an approval, and a secret field. */
+export const BROWSER_NEEDS_APPROVAL = "Needs Matthew's approval";
+export const BROWSER_NEEDS_MATTHEW = "Matthew types this himself";
+
+/** Where the task was asked, so the result goes back there (and is spoken when it came by voice). */
+export type BrowserTaskOrigin = "browser" | "desk-typed" | "desk-voice" | "telegram" | "dashboard";
+
+export type BrowserTaskStatus = "running" | "waiting" | "paused" | "done" | "stopped" | "failed";
+
+/** What a waiting task asks Matthew: approve a risky step, answer a question, or type a secret himself. */
+export interface BrowserTaskQuestion {
+  id: string;
+  kind: "approval" | "question" | "takeover";
+  text: string;
+  at: string;
+}
+
+/** One line of a task's log (kept 30 days): what JARVIS did, where, and what Matthew answered. */
+export interface BrowserTaskStep {
+  at: string;
+  kind: "start" | "action" | "ask" | "answer" | "approval" | "refused" | "pause" | "resume" | "done" | "stop" | "error";
+  text: string;
+  url?: string;
+}
+
+export interface BrowserTaskSummary {
+  id: string;
+  /** What Matthew asked for. */
+  text: string;
+  mode: BrowserTaskMode;
+  status: BrowserTaskStatus;
+  origin: BrowserTaskOrigin;
+  startedAt: string;
+  endedAt?: string;
+  /** The current step (the Browser window's status line). */
+  step?: string;
+  question?: BrowserTaskQuestion;
+  /** browser_done's summary, or why it stopped. */
+  result?: string;
+  /** How many steps the log holds. */
+  steps: number;
+}
+
+export interface BrowserTask extends BrowserTaskSummary {
+  log: BrowserTaskStep[];
+}
+
+/** POST /api/desk/browser/tasks → BrowserTaskSummary. `mode` from the task box's switch. */
+export interface BrowserTaskStartRequest {
+  text: string;
+  mode?: BrowserTaskMode;
+}
+
+/** GET /api/desk/browser/tasks: the last 30 days, newest first (the History menu). */
+export interface BrowserTasksResponse {
+  tasks: BrowserTaskSummary[];
+}
+
+/** POST /api/desk/browser/tasks/:id/answer → BrowserTaskSummary. "change" and "reply" carry text. */
+export interface BrowserTaskAnswerRequest {
+  questionId: string;
+  answer: "approve" | "change" | "stop" | "reply";
+  text?: string;
+}
 
 /** A saved window layout (JD-37): the built-ins (Work mode, Focus) and Matthew's own. */
 export interface LayoutSummary {

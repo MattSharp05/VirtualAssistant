@@ -230,7 +230,8 @@ function NoticeCard({
   onDismiss(): void;
 }) {
   const act = (a: NoticeAction) => {
-    if (a.window) bridge.openWindow(a.window, a.params);
+    if (a.request) void bridge.request(a.request.path, a.request.body ?? {}).catch(() => {});
+    else if (a.window) bridge.openWindow(a.window, a.params);
     else if (a.url) window.open(a.url, "_blank", "noreferrer");
     onDismiss();
   };
@@ -247,7 +248,7 @@ function NoticeCard({
             <button
               key={a.label}
               type="button"
-              className={`notice-action${i === 0 && (a.window || a.url) ? " notice-action-primary" : ""}`}
+              className={`notice-action${i === 0 && (a.window || a.url || a.request) ? " notice-action-primary" : ""}`}
               onClick={() => act(a)}
             >
               {a.label}

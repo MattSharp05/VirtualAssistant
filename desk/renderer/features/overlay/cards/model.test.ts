@@ -62,6 +62,14 @@ describe("cards beside the orb", () => {
     expect(play([notice("⏰ Timer done: Tea")], false, s, 9000).cards).toHaveLength(3);
   });
 
+  it("an id'd notice replaces its earlier card, and card.dismiss takes it away (JD-60)", () => {
+    const q = (title: string): DeskEvent => ({ type: "notice", id: "task-q", at: "", level: "warn", title });
+    const s = play([q("OK to book?"), notice("other"), q("OK to pay?")]);
+    expect(s.cards.map((c) => (c.type === "notice" ? c.title : ""))).toEqual(["OK to pay?", "other"]);
+    expect(keys(s)[0]).toBe("notice-task-q");
+    expect(keys(play([{ type: "card.dismiss", id: "task-q" }], false, s))).toEqual(["notice-2"]);
+  });
+
   it("ignores events that aren't cards", () => {
     const s = play([{ type: "tasks.changed" }]);
     expect(s).toBe(initialCards);
@@ -85,6 +93,12 @@ describe("card helpers", () => {
     ]);
     const own = [{ label: "Open session", window: "sessions" }, { label: "Later" }];
     expect(noticeActions(own, "https://x")).toEqual(own);
+    // Buttons that call the Desk API (a browser task's Approve / Stop) need no Later.
+    const ask = [
+      { label: "Approve", request: { path: "/browser/tasks/t/answer" } },
+      { label: "Change", window: "browser" },
+    ];
+    expect(noticeActions(ask, undefined)).toEqual(ask);
   });
 
   it("reads Do Not Disturb from a boolean or { on, until }", () => {

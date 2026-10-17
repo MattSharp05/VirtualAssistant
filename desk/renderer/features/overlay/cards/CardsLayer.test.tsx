@@ -69,6 +69,26 @@ describe("cards beside the orb", () => {
     expect(stack().getAllByRole("article")).toHaveLength(2);
   });
 
+  it("a browser task's question card: Approve / Change / Stop, Approve answering over the Desk API (JD-60)", async () => {
+    vi.useFakeTimers();
+    const bridge = renderOn("browser-task-normal");
+    await settle(1000);
+    const card = stack().getByRole("article", { name: "JARVIS needs your OK" });
+    expect(card.textContent).toContain("Book Taberna da Rua for 2 on Fri 23 Oct at 20:00?");
+    expect(
+      within(card)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Approve", "Change", "Stop"]);
+    fireEvent.click(within(card).getByRole("button", { name: "Approve" }));
+    await settle(10);
+    expect(bridge.requests.at(-1)).toEqual({
+      path: "/browser/tasks/task-taberna/answer",
+      body: { questionId: "q-book", answer: "approve" },
+    });
+    expect(stack().queryByRole("article", { name: "JARVIS needs your OK" })).toBeNull();
+  });
+
   it("a notice's action opens its window with params; Later and Dismiss just remove the card", async () => {
     vi.useFakeTimers();
     const open = vi.spyOn(window, "open").mockImplementation(() => null);

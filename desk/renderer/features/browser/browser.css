@@ -1,5 +1,6 @@
-/* The Browser window (JD-59): tabs (38 px), toolbar (48 px) and status line (26 px) on the glass, then
-   the page edge to edge. main/browser/host.ts guesses the same 160 px until the slot is measured. */
+/* The Browser window (JD-59): tabs (38 px), toolbar (48 px), status line (26 px) and the task strip
+   (44 px, JD-60's task.css) on the glass, then the page edge to edge. main/browser/host.ts guesses the
+   same ~207 px until the slot is measured. */
 .browser {
   display: flex;
   flex-direction: column;

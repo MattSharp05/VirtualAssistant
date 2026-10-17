@@ -65,6 +65,8 @@ export interface BrainConfig {
   name?: string;
   /** The system prompt from the registry's setup (default: JARVIS's chat prompt). */
   prompt?: (setup: BrainSetup) => string;
+  /** How long one turn may take (default 240 s; a browser task's turn runs many steps, JD-60). */
+  timeoutMs?: number;
 }
 
 /** Where a brain keeps its conversation id, model, messages and usage totals (Store for the chat). */
@@ -294,7 +296,7 @@ export class Brain {
       const proc = await this.process(model);
       this.busy++;
       try {
-        const result = await withTimeout(proc.send(prompt, handlers), TIMEOUT_MS, () => proc.kill());
+        const result = await withTimeout(proc.send(prompt, handlers), this.config.timeoutMs ?? TIMEOUT_MS, () => proc.kill());
         if (!this.store.brain().sessionId) this.store.updateBrain({ sessionId: proc.sessionId });
         this.armIdle();
         return result;
@@ -390,7 +392,7 @@ export class Brain {
       const child = spawn(this.config.claudeBin, args, { cwd: this.cwd, stdio: ["pipe", "pipe", "pipe"] });
       let stdout = "";
       let stderr = "";
-      const timer = setTimeout(() => child.kill("SIGTERM"), TIMEOUT_MS);
+      const timer = setTimeout(() => child.kill("SIGTERM"), this.config.timeoutMs ?? TIMEOUT_MS);
       child.stdout.on("data", (d) => (stdout += d));
       child.stderr.on("data", (d) => (stderr += d));
       child.on("error", (err) => {

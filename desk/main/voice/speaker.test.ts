@@ -191,6 +191,17 @@ describe("Speaker", () => {
     expect(off.speaker.busy).toBe(false);
   });
 
+  it("says a browser task's question or result (browser.say), unless speakReplies is off (JD-60)", async () => {
+    const t = setup();
+    t.speaker.onEvent({ type: "browser.say", text: "Lilia has 8pm free. Shall I book it?" });
+    expect(t.says.map((s) => s.name)).toEqual(["Lilia has 8pm free."]);
+    await t.said(0);
+    expect(t.says.map((s) => s.name)).toEqual(["Lilia has 8pm free.", "Shall I book it?"]);
+    const off = setup({ speakReplies: () => false });
+    off.speaker.onEvent({ type: "browser.say", text: "Booked." });
+    expect(off.log).toEqual([]);
+  });
+
   it("drops the rest of an interrupted reply", async () => {
     const t = setup();
     t.reply("m1", "desk-voice", "First sentence. ");
