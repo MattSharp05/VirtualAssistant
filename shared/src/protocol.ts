@@ -499,6 +499,8 @@ export interface SessionMetrics {
   contextPercent?: number;
   /** The model the latest turn ran on, else the configured one. */
   model?: string;
+  /** The configured model, only when the latest turn was served by a different one (JD-54). */
+  configuredModel?: string;
   statusBucket?: SessionStatusBucket;
   tags?: string[];
   /** The session that started this one, when the lineage names it. */

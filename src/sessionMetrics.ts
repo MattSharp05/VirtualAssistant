@@ -57,6 +57,9 @@ export function parseDetail(body: unknown): DetailMetrics {
   const tags = Array.isArray(b.tags) ? b.tags.filter((t): t is string => typeof t === "string") : undefined;
   const parent = str(lineage.parent_session_id) ?? str(lineage.parent_id) ?? str(obj(lineage.parent)?.id);
 
+  const served = str(meta.last_served_model);
+  const configured = str(b.configured_model);
+
   const out: DetailMetrics = {
     inputTokens: input,
     outputTokens: output,
@@ -70,7 +73,8 @@ export function parseDetail(body: unknown): DetailMetrics {
     contextUsedTokens: used,
     contextMaxTokens: max,
     contextPercent: used !== undefined && max ? Math.round((used / max) * 1000) / 10 : undefined,
-    model: str(meta.last_served_model) ?? str(b.configured_model),
+    model: served ?? configured,
+    configuredModel: served && configured && served !== configured ? configured : undefined,
     statusBucket: bucketOf(b.status_bucket),
     tags,
     parentId: parent,
