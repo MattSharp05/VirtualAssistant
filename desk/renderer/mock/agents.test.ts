@@ -42,6 +42,14 @@ describe("agents mock", () => {
 
   it("is in demo-day and has its scenarios", () => {
     expect(findScenario("demo-day")?.data["/agents"]).toBeDefined();
-    for (const name of ["agents", "agents-quiet", "agents-loading"]) expect(findScenario(name)).toBeDefined();
+    for (const name of [
+      "agents",
+      "agents-quiet",
+      "agents-loading",
+      "agents-empty",
+      "agents-ci-failed",
+      "agents-live",
+    ])
+      expect(findScenario(name)).toBeDefined();
   });
 });
