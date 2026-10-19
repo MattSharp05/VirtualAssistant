@@ -133,3 +133,54 @@ test("demo-day: the task box starts a task, Normal unless the request says other
     { path: "/browser/tasks", body: { text: "Find the cheapest flight to Lisbon in March", mode: "normal" } },
   ]);
 });
+
+// JD-65: the ask box as the centrepiece, the task sidebar, and closing it while the task carries on.
+
+test("browser-ask: no page, no task: the ask box is the window; Start moves it into the sidebar", async ({
+  page,
+}) => {
+  await openWindow(page, "browser", "browser-ask");
+  await waitForBridgeIdle(page);
+  const hero = page.getByRole("form", { name: "New browser task" });
+  await expect(hero.getByRole("heading", { name: "Ask JARVIS to do something on the web" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Browser task" })).toHaveCount(0);
+  await expectWindowSnapshot(page, "browser-ask");
+
+  await hero.getByLabel("Task").fill("Find the cheapest flight to Lisbon in March");
+  await hero.getByRole("radio", { name: "Full autonomy" }).click();
+  await hero.getByRole("button", { name: "Start" }).click();
+  const sidebar = page.getByRole("region", { name: "Browser task" });
+  await expect(sidebar.getByRole("status", { name: "Task state" })).toHaveText("Working");
+  await expect(sidebar.getByLabel("Progress")).toContainText("Find the cheapest flight to Lisbon in March");
+  await expect(page.getByRole("heading", { name: "Ask JARVIS to do something on the web" })).toHaveCount(0);
+  await expect(sidebar.getByRole("form", { name: "Tell JARVIS about this task" })).toBeVisible();
+  expect(await posts(page)).toEqual([
+    { path: "/browser/tasks", body: { text: "Find the cheapest flight to Lisbon in March", mode: "full" } },
+  ]);
+});
+
+test("browser-task-full: closing the sidebar leaves the task running; the status line's pill reopens it", async ({
+  page,
+}) => {
+  await openWindow(page, "browser", "browser-task-full");
+  await waitForBridgeIdle(page);
+  const sidebar = page.getByRole("region", { name: "Browser task" });
+  await expect(sidebar.getByLabel("Progress")).toContainText("Checking availability");
+  await sidebar.getByRole("button", { name: "Close the task panel" }).click();
+  await expect(sidebar).toHaveCount(0);
+  const pill = page.getByRole("button", { name: "Working · show the task" });
+  await expect(pill).toBeVisible();
+  expect(await posts(page)).toEqual([]);
+  await pill.click();
+  await expect(sidebar.getByRole("status", { name: "Task state" })).toHaveText("Working");
+});
+
+test("browser-task-sidebar-closed: the page takes the width; the pill shows the task is still going", async ({
+  page,
+}) => {
+  await openWindow(page, "browser", "browser-task-sidebar-closed");
+  await waitForBridgeIdle(page);
+  await expect(page.getByRole("region", { name: "Browser task" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Working · show the task" })).toBeVisible();
+  await expectWindowSnapshot(page, "browser-task-sidebar-closed");
+});

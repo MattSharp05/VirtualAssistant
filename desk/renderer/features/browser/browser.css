@@ -1,6 +1,6 @@
-/* The Browser window (JD-59): tabs (38 px), toolbar (48 px), status line (26 px) and the task strip
-   (44 px, JD-60's task.css) on the glass, then the page edge to edge. main/browser/host.ts guesses the
-   same ~207 px until the slot is measured. */
+/* The Browser window (JD-59): tabs (38 px), toolbar (48 px) and status line (26 px) on the glass, then
+   the page beside the task sidebar (JD-65, task.css). main/browser/host.ts guesses the same ~163 px
+   until the slot is measured. */
 .browser {
   display: flex;
   flex-direction: column;
@@ -236,9 +236,19 @@
   background: var(--accent-ink);
 }
 
+.browser-status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding-right: 8px;
+}
+
 .browser-status {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 0;
   gap: 8px;
   height: 26px;
   margin: 0;
@@ -280,11 +290,18 @@
   text-overflow: ellipsis;
 }
 
-/* ── The page ── */
+/* ── The page, and the task sidebar beside it ── */
+
+.browser-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
 
 .browser-page {
   position: relative;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
 }
@@ -297,7 +314,8 @@
 
 .browser-slot,
 .browser-preview,
-.browser-empty {
+.browser-empty,
+.browser-hero {
   flex: 1;
   min-width: 0;
 }
@@ -331,6 +349,14 @@
   max-width: 420px;
   margin: 0;
   line-height: 1.5;
+}
+
+/* No page, no task: the ask box is the window's centrepiece. */
+.browser-hero {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
 }
 
 .browser-preview {

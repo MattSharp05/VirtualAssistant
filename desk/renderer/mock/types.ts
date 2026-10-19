@@ -69,4 +69,6 @@ export interface ScenarioUi {
   launcherOpen?: boolean;
   /** The preview's clock (ISO time): windows that show "today" start here instead of the real now. */
   now?: string;
+  /** The Browser window's task sidebar starts closed (JD-65): the status line's pill reopens it. */
+  taskPanelClosed?: boolean;
 }
