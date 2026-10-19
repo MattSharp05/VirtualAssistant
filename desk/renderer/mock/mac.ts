@@ -12,6 +12,8 @@ export interface MockMacLog {
   statusTests: number;
   /** How many times Settings → Open log was pressed (JD-63). */
   logOpens: number;
+  /** How many times Settings → Sign out of web views was pressed (JD-68). */
+  webSignOuts: number;
 }
 
 const VOICES: VoiceInfo[] = [
@@ -26,6 +28,7 @@ export function createMockMac(scenario: Scenario, settings: Map<string, unknown>
   const spoken: MockMacLog["spoken"] = [];
   let statusTests = 0;
   let logOpens = 0;
+  let webSignOuts = 0;
   const folders = [...(scenario.mac?.folders ?? [])];
   return {
     spoken,
@@ -35,7 +38,11 @@ export function createMockMac(scenario: Scenario, settings: Map<string, unknown>
     get logOpens() {
       return logOpens;
     },
+    get webSignOuts() {
+      return webSignOuts;
+    },
     openLog: async () => void logOpens++,
+    signOutWebViews: async () => void webSignOuts++,
     connection: async () => scenario.mac?.connection ?? { state: "unconfigured" },
     async testConnection() {
       if (!settings.get("serverUrl")) return { ok: false, error: "Add the server URL first." };

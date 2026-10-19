@@ -160,6 +160,13 @@ describe("Settings window", () => {
     await waitFor(() => expect(bridge.mac.logOpens).toBe(1));
   });
 
+  it("Sign out of web views clears the full views' login through the bridge (JD-68)", async () => {
+    const bridge = await renderOn("settings");
+    fireEvent.click(screen.getByRole("button", { name: "Sign out of web views" }));
+    expect(await screen.findByText("Signed out of claude.ai and Notion.")).toBeTruthy();
+    expect(bridge.mac.webSignOuts).toBe(1);
+  });
+
   it("starts with Show in Dock off when it was switched off", async () => {
     await renderOn("settings-dock-off");
     expect((screen.getByRole("switch", { name: /Show in Dock/ }) as HTMLInputElement).checked).toBe(false);

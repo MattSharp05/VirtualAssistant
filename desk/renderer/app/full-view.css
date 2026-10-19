@@ -1,5 +1,5 @@
-/* Full views (JD-39): the slot main lays claude.ai or notion.so over, its first-use hint, and the
-   web preview's placeholder card. */
+/* Full views (JD-39): the slot main lays claude.ai or notion.so over, its sign-in hint bar (with
+   "Sign in with a link", JD-68), and the web preview's placeholder card. */
 .full-view,
 .full-view-placeholder {
   display: flex;
@@ -11,8 +11,8 @@
 
 .full-view-hint {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
   padding: 10px 16px;
   border-bottom: 1px solid rgba(242, 178, 76, 0.3);
   background: rgba(242, 178, 76, 0.1);
@@ -20,9 +20,24 @@
   font-size: 14px;
 }
 
+.full-view-hint[data-blocked] {
+  border-bottom-color: rgba(242, 104, 92, 0.4);
+  background: rgba(242, 104, 92, 0.1);
+}
+
+.full-view-hint-row,
+.full-view-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
 .full-view-hint p {
   flex: 1;
+  min-width: 220px;
   margin: 0;
+  line-height: 1.45;
 }
 
 .full-view-hint button {
@@ -33,12 +48,53 @@
   background: transparent;
   color: var(--ink);
   font: inherit;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .full-view-hint button:hover,
 .full-view-hint button:focus-visible {
   background: rgba(242, 178, 76, 0.16);
+}
+
+.full-view-hint button.is-primary {
+  border-color: rgba(95, 212, 230, 0.55);
+  background: rgba(95, 212, 230, 0.14);
+  color: var(--accent-ink);
+}
+
+.full-view-hint button.is-primary:hover,
+.full-view-hint button.is-primary:focus-visible {
+  background: rgba(95, 212, 230, 0.24);
+}
+
+.full-view-link input {
+  flex: 1;
+  min-width: 220px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.full-view-link input:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.full-view-link input[aria-invalid="true"] {
+  border-color: var(--red);
+}
+
+.full-view-hint .full-view-link-error {
+  flex-basis: 100%;
+  color: var(--red);
+  font-size: 13px;
 }
 
 /* Main's web view covers this; the text only shows while it loads. */
