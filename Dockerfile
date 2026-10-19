@@ -87,6 +87,8 @@ COPY --from=build --chown=node:node /app/dist/src ./dist/src
 COPY --from=build --chown=node:node /app/shared/package.json ./shared/package.json
 COPY --from=build --chown=node:node /app/shared/dist ./shared/dist
 COPY --chown=node:node public ./public
+# The worker instructions JARVIS sends as each new session's first message (JD-69).
+COPY --chown=node:node docs/routine-prompt.md ./docs/routine-prompt.md
 COPY --chown=node:node package.json ./
 VOLUME /data
 EXPOSE 8080 8081

@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { Config } from "../src/config.js";
 import { Jarvis } from "../src/jarvis.js";
+import { SessionStarter } from "../src/sessionStart.js";
 import { Store } from "../src/store.js";
 import { parseUsageResponse } from "../src/usage.js";
 import { createDashboard, createReportsServer } from "../src/web.js";
@@ -23,7 +24,10 @@ const config: Config = {
   reportsPort: 0, notionToken: undefined, brainModels: ["claude-sonnet-5-5"], brainModel: "claude-sonnet-5-5", brainWarm: false, brainConnectors: [],
 };
 const store = new Store(config.dataDir);
-const server = createDashboard(new Jarvis(config, store));
+const jarvis = new Jarvis(config, store);
+// No claude.ai login here (an empty config folder), so new jobs never reach the real sessions API.
+jarvis.starter = new SessionStarter(config, { configDir: mkdtempSync(join(tmpdir(), "jarvis-web-login-")) });
+const server = createDashboard(jarvis);
 let base = "";
 const auth = { authorization: "Basic " + Buffer.from("me:pw").toString("base64") };
 

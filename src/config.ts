@@ -6,6 +6,12 @@ export interface Config {
   /** The routine that starts new cloud sessions (claude.ai/code/routines, API trigger). */
   routineId: string | undefined;
   routineToken: string | undefined;
+  /** The repo new sessions run on unless the task names a project (DEFAULT_REPO, a GitHub URL or owner/name; JD-69). */
+  defaultRepo?: string;
+  /** The cloud environment new sessions run in (SESSION_ENVIRONMENT_ID, env_…). Unset = the API's default. */
+  sessionEnvironmentId?: string;
+  /** The cheap model for background calls such as session titles (WORKER_MODEL; default: the haiku in BRAIN_MODELS). */
+  workerModel?: string;
   dataDir: string;
   claudeBin: string;
   dashboardPort: number;
@@ -109,6 +115,9 @@ export function loadConfig(): Config {
     allowedChatId: chatId === undefined ? undefined : Number(chatId),
     routineId: optional("ROUTINE_ID"),
     routineToken: optional("ROUTINE_TOKEN"),
+    defaultRepo: optional("DEFAULT_REPO"),
+    sessionEnvironmentId: optional("SESSION_ENVIRONMENT_ID"),
+    workerModel: optional("WORKER_MODEL") ?? brainModels.find((m) => m.includes("haiku")),
     dataDir: optional("DATA_DIR") ?? "./data",
     claudeBin: optional("CLAUDE_BIN") ?? "claude",
     dashboardPort: port,

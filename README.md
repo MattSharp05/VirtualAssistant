@@ -16,7 +16,7 @@ happens in cloud sessions.
 ![The JARVIS dashboard (sample data)](docs/dashboard.png)
 
 ```
- Dashboard / Telegram ──► JARVIS container ──fire routine (HTTP)──────► new cloud session
+ Dashboard / Telegram ──► JARVIS container ──sessions API (HTTP)──────► new cloud session
                                   │         ──claude -p --cloud <id>──► existing cloud session
                                   │                                          │
  Telegram / dashboard ◄──────────── session runs scripts/report.sh ──────────┘
@@ -24,7 +24,7 @@ happens in cloud sessions.
 
 | Action | How | Docs |
 |---|---|---|
-| Start a session | Routines API trigger (`POST /v1/claude_code/routines/{id}/fire`) | [routines](https://code.claude.com/docs/en/routines) |
+| Start a session | The sessions API with the container's claude.ai login (`POST /v1/code/sessions`: a normal, titled session in the Claude Code sidebar). Fallback: the routine's API trigger | [routines](https://code.claude.com/docs/en/routines) |
 | Message a running session | `claude -p --cloud <session-id>` in the container | [follow-ups from the CLI](https://code.claude.com/docs/en/claude-code-on-the-web#send-follow-ups-from-the-cli) |
 | Hear back | The session runs `scripts/report.sh` (Telegram and/or the dashboard) | [network access](https://code.claude.com/docs/en/cloud-environments) |
 
@@ -42,7 +42,16 @@ add an environment named `JARVIS`.
   instead, keep the default allowlist, and add `api.telegram.org`.
 - No environment variables yet.
 
-**A2. Make the routine that starts sessions.** At claude.ai/code/routines → **New routine**:
+**New sessions** are created directly with the container's claude.ai login (B4): each gets a short
+title from the task ("JD-65: Fix sign-in"), runs on `DEFAULT_REPO` (or the repo of a project the task
+names, e.g. "in trip", from `PROJECTS`) in `SESSION_ENVIRONMENT_ID` (the `env_…` id of the `JARVIS`
+environment; empty = your default), and is tagged `project:<slug>`, `role:builder|task` and
+`jarvis:<job>`. The worker instructions in [docs/routine-prompt.md](docs/routine-prompt.md) go at
+the top of its first message. The routine below is only the **fallback** for when that API is
+unavailable; its sessions are routine runs (titled "Jarvis Worker", hidden from the sidebar, 30
+fires an hour). To title the older ones, ask JARVIS to "rename my JARVIS sessions".
+
+**A2. Make the routine (fallback).** At claude.ai/code/routines → **New routine**:
 - **Repository:** `MattSharp05/VirtualAssistant` (it clones `main`, which has `scripts/report.sh`).
 - **Environment:** `JARVIS`.
 - **Instructions:** paste everything below the line in [docs/routine-prompt.md](docs/routine-prompt.md).
@@ -66,7 +75,8 @@ cd VirtualAssistant
 ```bash
 cp .env.example .env
 ```
-Open `.env` and fill in `ROUTINE_ID` and `ROUTINE_TOKEN` from A3. Leave the rest empty for now.
+Open `.env` and fill in `DEFAULT_REPO`, `SESSION_ENVIRONMENT_ID` (optional) and, for the fallback,
+`ROUTINE_ID` and `ROUTINE_TOKEN` from A3. Leave the rest empty for now.
 
 **B3. Build the image.**
 ```bash
@@ -289,7 +299,7 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
 |---|---|---|
 | **Plan usage** (5-hour and weekly) | Dashboard tiles, `/status` | Asked from the CLI every minute; amber from 75%, red from 90% |
 | Routine fires used | Dashboard tile, `/status` | Container: timestamps of each new task |
-| Time to start a session | "Started j1 in 1.4s" | Container: the routine API call |
+| Time to start a session | "Started j1 in 4.2s" | Container: the title call + the sessions API call (or the routine fire) |
 | Time to deliver a follow-up | "Sent to j1 in 2.1s" | Container: the `claude -p --cloud` call |
 | **Time taken per response** | Report footer: `⏱ 4m12s since your message` | Session: now minus the send time JARVIS stamped on the message |
 | **JARVIS chat: time, tokens, steps** | Under each reply | The CLI's own result (`duration_ms`, `usage`, `num_turns`) |
@@ -307,8 +317,9 @@ Anthropic changes it, the tiles say "not available" and nothing else breaks.
 
 ## Limits to know
 
-- **Routines: 30 fires per hour per routine, and 100 per hour per account.** A "fire" is one API
-  call that starts one new session, so only a new task uses one; follow-ups and reports don't.
+- **Routines (fallback only): 30 fires per hour per routine, and 100 per hour per account.** New
+  sessions normally come from the sessions API and use no fire. A "fire" is one API call that
+  starts one new session, so only a new task that falls back uses one; follow-ups and reports don't.
   "Run now" on the website counts too. The hour rolls: each fire frees up 60 minutes after it
   happened. JARVIS counts its own fires and refuses a 31st with the time the next slot frees,
   rather than letting the API return 429.
@@ -331,6 +342,7 @@ Anthropic changes it, the tiles say "not available" and nothing else breaks.
 | Symptom | Fix |
 |---|---|
 | "Claude: not signed in", or sends fail with "needs a claude.ai sign-in" | Run B4 again. Don't set `CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY` in `.env`: they override the login and can't drive cloud sessions. |
+| New sessions come from the routine ("Started j3 via the routine") | The sessions API failed; the container log says why (`sessions API couldn't start …`). Usually the login: run B4 again. |
 | Start fails with HTTP 401/403 | `ROUTINE_TOKEN` is wrong or was regenerated. Copy the current one. |
 | Start fails with HTTP 404 | `ROUTINE_ID` is wrong. Take it from the fire URL. |
 | Session starts but never reports on Telegram | Check the `JARVIS` environment: Custom allowlist includes `api.telegram.org`, and both Telegram variables are set. |
@@ -361,6 +373,6 @@ npm run -w @jarvis/desk start    # build and launch the app (needs the Electron 
 ```
 
 Layout: `src/jarvis.ts` (what JARVIS can do), `src/web.ts` + `public/index.html` (dashboard),
-`src/bot.ts` (Telegram), `src/routines.ts` (fire API), `src/cloud.ts` (CLI wrapper),
+`src/bot.ts` (Telegram), `src/sessionStart.ts` + `src/sessionTitle.ts` (new sessions, titles, tags), `src/routines.ts` (fallback fire API), `src/cloud.ts` (CLI wrapper, session create),
 `src/usage.ts` (plan usage), `src/store.ts` (jobs, reports and fires on the volume), `scripts/`
 (runs inside cloud sessions).

@@ -104,7 +104,7 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
         `Claude login: ${s.auth.loggedIn ? "yes" : "NO"} (${s.auth.detail})`,
         ...(s.auth.warning ? [`⚠️ ${s.auth.warning}`] : []),
         ...usage,
-        `Routine: ${s.routineConfigured ? s.routineId : "not configured (ROUTINE_ID / ROUTINE_TOKEN)"}`,
+        `New sessions: sessions API; routine fallback ${s.routineConfigured ? s.routineId : "not configured (ROUTINE_ID / ROUTINE_TOKEN)"}`,
         `Routine fires this hour: ${s.firesThisHour}/${s.firesPerHour}`,
         `Notion: ${s.notion.state === "ok" ? `connected, ${s.notion.shared} pages shared` : s.notion.state === "off" ? "off (NOTION_TOKEN unset)" : s.notion.detail}`,
         `Current job: ${store.currentJob()?.id ?? "none"}`,
@@ -117,9 +117,8 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     if (!task) return ctx.reply("Usage: /new <task>");
     try {
       const { job, ms, fireNumber } = await jarvis.startJob(task);
-      await ctx.reply(
-        `Started ${job.id} in ${seconds(ms)} (fire ${fireNumber}/30 this hour). It'll report here when it has something.\n${job.url}`,
-      );
+      const how = fireNumber ? ` via the routine (fire ${fireNumber}/30 this hour)` : job.title ? `: "${job.title}"` : "";
+      await ctx.reply(`Started ${job.id} in ${seconds(ms)}${how}. It'll report here when it has something.\n${job.url}`);
     } catch (err) {
       await ctx.reply(`Couldn't start the job: ${(err as Error).message}`);
     }
