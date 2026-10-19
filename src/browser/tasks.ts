@@ -23,6 +23,7 @@ import {
   type BrowserTaskMode,
   type BrowserTaskOrigin,
   type BrowserTaskQuestion,
+  type BrowserTaskResults,
   type BrowserTaskStep,
   type BrowserTaskSummary,
   type NoticeAction,
@@ -30,7 +31,7 @@ import {
 } from "@jarvis/shared";
 import type { EventBus } from "../events.js";
 import { JarvisError } from "../jarvis.js";
-import { BROWSER_TASK_PROMPT, browserTaskText } from "../prompts.js";
+import { BROWSER_TASK_PROMPT, browserFollowUpText, browserTaskText } from "../prompts.js";
 import { JsonFile } from "../storage.js";
 import type { BrainMessage } from "../store.js";
 import { modeFromText, modeRules } from "./risk.js";
@@ -41,6 +42,9 @@ export { BROWSER_TASK_PROMPT };
 export const KEEP_DAYS = 30;
 const KEEP_TASKS = 200;
 const KEEP_STEPS = 300;
+/** The results panel scrolls; the overlay card shows the first few. */
+const KEEP_RESULTS = 30;
+const CARD_ITEMS = 12;
 /** Turns that end with no browser_done and nothing to wait for get this many nudges, then the task fails. */
 export const MAX_NUDGES = 2;
 
@@ -82,10 +86,10 @@ export interface TaskAction {
   approval?: string;
 }
 
-/** The card browser_done may put up with the result. */
+/** The card browser_done may put up with the result: `url` on an item that is a real, single page. */
 export interface ResultCard {
   title?: string;
-  items?: { label: string; detail?: string }[];
+  items?: { label: string; detail?: string; url?: string }[];
   link?: { label: string; url: string };
 }
 
@@ -126,6 +130,8 @@ export class BrowserTaskRunner {
   private wake?: () => void;
   /** The last page JARVIS was on (for questions: "on lilia.example"). */
   private lastUrl = "";
+  /** Where a follow-up's answer goes (JD-66), when it isn't where the task was asked. */
+  private replyTo?: BrowserTaskOrigin;
 
   constructor(private readonly deps: BrowserTaskDeps) {
     this.file = new JsonFile<TasksFile>(deps.dataDir, "browser-tasks", { tasks: [] });
@@ -193,15 +199,48 @@ export class BrowserTaskRunner {
     void this.save((tasks) => [task, ...tasks]);
     this.inbox = undefined;
     this.lastUrl = "";
+    this.replyTo = undefined;
     this.publish(task);
     void this.status(`Starting: ${short(text, 80)}`);
     void this.loop(task.id, browserTaskText(text, modeRules(mode), at));
     return summary(task);
   }
 
+  /**
+   * A follow-up on a finished task (JD-66): a question or an instruction about its results ("is that one
+   * direct?", "add it to my to-do list"). The newest task, when it's done and nothing else has started
+   * since, takes more turns of the same conversation (no reset), browsing again if it needs to.
+   */
+  followUp(id: string, request: { text: string; item?: number }, origin: BrowserTaskOrigin = "browser"): BrowserTaskSummary {
+    const text = request.text.trim();
+    if (!text) throw new JarvisError("Say what to do with it.");
+    const t = this.reopenable(id);
+    if (!this.deps.mac.connected()) throw new JarvisError(NOT_CONNECTED);
+    const item = request.item === undefined ? undefined : t.results?.items[request.item];
+    if (request.item !== undefined && !item) throw new JarvisError("That result isn't on the task.");
+    this.log(id, { kind: "answer", text: `Matthew followed up${item ? ` on “${short(item.label, 80)}”` : ""}: ${short(text, 300)}`, ...(item?.url ? { url: item.url } : {}) });
+    this.update(id, { status: "running", step: "Following up", endedAt: undefined });
+    this.inbox = undefined;
+    this.replyTo = origin;
+    void this.status(`Following up: ${short(text, 80)}`);
+    const reopened = summary(this.find(id)!);
+    void this.loop(id, browserFollowUpText({ task: t.text, result: t.result ?? "", item, text, now: this.iso() }), false);
+    return reopened;
+  }
+
+  /** The task a follow-up reopens: done, the newest, and nothing running (its conversation is still the brain's). */
+  private reopenable(id: string): StoredTask {
+    const t = this.mine(id);
+    const going = this.current();
+    if (going) throw new JarvisError(`A browser task is already ${going.status}: “${short(going.text)}”. Stop it first, or wait for it.`);
+    if (t.status !== "done") throw new JarvisError(`That task ${t.status === "stopped" ? "was stopped" : "didn't finish"}, so it can't be picked up again. Start a new one.`);
+    if (this.file.get().tasks[0]?.id !== id) throw new JarvisError("Another browser task has started since, so this one can't be picked up again. Start a new one.");
+    return t;
+  }
+
   /** The task's conversation: one turn, then wait for Matthew if it asked, until it's done or stopped. */
-  private async loop(id: string, first: string): Promise<void> {
-    this.deps.brain.reset(); // every task is a fresh conversation
+  private async loop(id: string, first: string, fresh = true): Promise<void> {
+    if (fresh) this.deps.brain.reset(); // every task is a fresh conversation; a follow-up carries on the same one
     let message: string | null = first;
     let nudges = 0;
     while (message !== null) {
@@ -329,12 +368,15 @@ export class BrowserTaskRunner {
     void this.status(`Waiting for you · ${short(question.text, 90)}`);
   }
 
-  /** browser_done: the result, back where it was asked and as a card. */
+  /** browser_done: the result, back where it was asked and as a card. A follow-up's answer keeps the earlier results. */
   done(summaryText: string, card?: ResultCard): BrowserTaskSummary {
     const t = this.usable(true);
     const result = short(summaryText, 1500) || "Done.";
-    const ended = this.finish(t.id, "done", result);
-    this.deliver(ended, result, card);
+    const results = resultsOf(card);
+    this.finish(t.id, "done", result);
+    if (results) this.update(t.id, { results });
+    const ended = this.find(t.id)!;
+    this.deliver(ended, result, results);
     return summary(ended);
   }
 
@@ -497,33 +539,69 @@ export class BrowserTaskRunner {
     await this.deps.mac.call(BROWSER_RPC.status, { text }).catch(() => undefined);
   }
 
-  /** The result as a card, and back where it was asked: Telegram, or the chat (spoken for voice). */
-  private deliver(t: StoredTask, text: string, card?: ResultCard): void {
+  /**
+   * The result back where it was asked: Telegram, or the chat (spoken for voice), and as a card beside the
+   * orb. Asked from the Browser window, the window's results panel shows it instead (JD-66).
+   */
+  private deliver(t: StoredTask, text: string, results?: BrowserTaskResults): void {
     const { bus } = this.deps;
-    const items = (card?.items ?? []).slice(0, 12).map((i) => ({ label: short(String(i.label ?? ""), 120), ...(i.detail ? { detail: short(String(i.detail), 80) } : {}) }));
+    const followUp = this.replyTo !== undefined;
+    const origin = this.replyTo ?? t.origin;
+    this.replyTo = undefined;
+    const items = (results?.items ?? []).slice(0, CARD_ITEMS);
     const shown: ScreenCard = {
       id: `browser-task-${t.id}`,
       createdAt: this.iso(),
-      title: short(card?.title || (t.status === "done" ? `Done: ${t.text}` : `Couldn't finish: ${t.text}`), 80),
+      title: short(results?.title || (t.status === "done" ? `Done: ${t.text}` : `Couldn't finish: ${t.text}`), 80),
       body: text,
       kind: items.length ? "list" : "text",
       ...(items.length ? { items } : {}),
-      ...(card?.link?.url ? { link: { label: short(card.link.label || "Open", 40), url: card.link.url } } : {}),
+      ...(results?.link ? { link: results.link } : {}),
     };
-    bus.publish({ type: "card.show", card: shown });
-    if (t.origin === "telegram") void this.deps.telegram?.(`🌐 ${text}`);
-    if (t.origin === "desk-voice") bus.publish({ type: "browser.say", text });
-    const channel = CHANNEL[t.origin];
+    if (origin !== "browser") bus.publish({ type: "card.show", card: shown });
+    if (origin === "telegram") void this.deps.telegram?.(`🌐 ${text}`);
+    if (origin === "desk-voice") bus.publish({ type: "browser.say", text });
+    const channel = CHANNEL[origin];
     if (channel && channel !== "telegram") {
       // The chat window shows it as JARVIS's reply; it's in the conversation's history too.
       this.deps.chat?.addBrainMessage({ at: this.iso(), from: "jarvis", channel, text });
       bus.publish({
         type: "brain.done",
-        messageId: `browser-task-${t.id}`,
+        messageId: `browser-task-${t.id}${followUp ? `-${t.steps}` : ""}`,
         text,
         metrics: { ms: Date.parse(t.endedAt ?? this.iso()) - Date.parse(t.startedAt), model: "browser task", inputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, outputTokens: 0, turns: t.steps },
       });
     }
+  }
+}
+
+/** browser_done's card as the task's results: short labels, and only http(s) urls. */
+function resultsOf(card: ResultCard | undefined): BrowserTaskResults | undefined {
+  if (!card || typeof card !== "object") return undefined;
+  const items = (Array.isArray(card.items) ? card.items : [])
+    .filter((i) => i && String(i.label ?? "").trim())
+    .slice(0, KEEP_RESULTS)
+    .map((i) => {
+      const url = webUrl(i.url);
+      return { label: short(String(i.label), 120), ...(i.detail ? { detail: short(String(i.detail), 80) } : {}), ...(url ? { url } : {}) };
+    });
+  const link = webUrl(card.link?.url);
+  if (!items.length && !link && !card.title) return undefined;
+  return {
+    title: short(String(card.title ?? ""), 80),
+    items,
+    ...(link ? { link: { label: short(card.link?.label || "Open", 40), url: link } } : {}),
+  };
+}
+
+/** An http(s) address, or nothing. */
+function webUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
   }
 }
 

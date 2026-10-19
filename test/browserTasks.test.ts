@@ -11,7 +11,7 @@ import {
   type BrowserTaskSummary,
   type DeskEvent,
 } from "@jarvis/shared";
-import { BROWSER_TURN_MS, browserSetup, createBrowserBrain } from "../src/browser/brain.js";
+import { BROWSER_BRAIN_TASK_TOOLS, BROWSER_TURN_MS, browserSetup, createBrowserBrain } from "../src/browser/brain.js";
 import { modeFromText, modeRules } from "../src/browser/risk.js";
 import { BROWSER_TASK_PROMPT, BrowserTaskRunner, KEEP_DAYS, NOT_CONNECTED, useBrowserTasks, type TaskBrain } from "../src/browser/tasks.js";
 import type { Config } from "../src/config.js";
@@ -472,7 +472,8 @@ test("the Desk routes: start from the task box, list, read a log, 400 for a seco
 
 test("only the browser brain gets the browser_* step tools; the chat brain is blocked from them", async () => {
   const setupFor = browserSetup("/data");
-  assert.deepEqual(setupFor.jarvisTools, BROWSER_TASK_TOOLS);
+  assert.deepEqual(setupFor.jarvisTools, [...BROWSER_TASK_TOOLS, "add_task"], "plus add_task: a result onto his to-do list (JD-66)");
+  assert.deepEqual(BROWSER_BRAIN_TASK_TOOLS, ["add_task"], "nothing else of the tasks group, and nothing else in Notion");
   assert.ok(BROWSER_TASK_TOOLS.includes("browser_click") && BROWSER_TASK_TOOLS.includes("browser_ask") && BROWSER_TASK_TOOLS.includes("browser_done"));
   assert.ok(!BROWSER_TASK_TOOLS.includes("browser_task"));
   assert.deepEqual(setupFor.allowedTools, [], "no claude.ai connectors (and so --strict-mcp-config)");
@@ -508,8 +509,193 @@ process.stdin.on("end", () => console.log(JSON.stringify({ type: "result", resul
   assert.equal(arg("--system-prompt"), BROWSER_TASK_PROMPT);
   assert.equal(arg("--tools"), "Read");
   assert.ok(argv.includes("--strict-mcp-config"));
-  assert.deepEqual(arg("--allowedTools").split(","), BROWSER_TASK_TOOLS.map((t) => `mcp__jarvis__${t}`));
+  assert.deepEqual(arg("--allowedTools").split(","), [...BROWSER_TASK_TOOLS, "add_task"].map((t) => `mcp__jarvis__${t}`));
   assert.ok(argv.includes("--session-id"));
   assert.equal(BROWSER_TURN_MS, 15 * 60_000);
   assert.ok(existsSync(join(dir, "browser-worker.json")), "its usage is kept apart from the worker's");
+});
+
+// ── Results and follow-ups (JD-66) ──
+
+const FLIGHTS = {
+  title: "Tampa → Johannesburg, Dec 10–12",
+  items: [
+    { label: "Fri Dec 11 · JetBlue + Turkish", detail: "$958", url: "https://skyfare.example/fare/tpa-jnb-dec11-958" },
+    { label: "Thu Dec 10 · Air Canada + Emirates", detail: "$1,188", url: "javascript:alert(1)" },
+    { label: "Sat Dec 12 · cheapest date", detail: "$1,018" },
+  ],
+};
+
+test("a result item's url goes browser_done → the task's results → the card; only http(s) urls", async () => {
+  const t = setup([async (call) => void (await call("browser_done", { summary: "Found 3 options.", card: FLIGHTS }))]);
+  const task = t.runner.start({ text: "Find one-way flights, Tampa to Johannesburg, Dec 10–12", origin: "telegram" });
+  await settle();
+  const done = t.runner.get(task.id)!;
+  assert.equal(done.results?.title, FLIGHTS.title);
+  assert.deepEqual(
+    done.results?.items.map((i) => i.url),
+    ["https://skyfare.example/fare/tpa-jnb-dec11-958", undefined, undefined],
+  );
+  assert.deepEqual(t.runner.list()[0].results, done.results, "the Browser window's list has them too");
+  const [card] = cards(t.events);
+  assert.deepEqual(card.card.items?.[0], { label: "Fri Dec 11 · JetBlue + Turkish", detail: "$958", url: "https://skyfare.example/fare/tpa-jnb-dec11-958" });
+  assert.equal(card.card.items?.[1].url, undefined);
+  assert.ok(t.events.some((e) => e.type === "browser.task" && e.task.status === "done" && e.task.results?.items.length === 3));
+});
+
+test("asked from the Browser window, the results go to its results panel, not a card beside the orb", async () => {
+  const t = setup([async (call) => void (await call("browser_done", { summary: "Found 3 options.", card: FLIGHTS }))]);
+  const task = t.runner.start({ text: "Find flights", origin: "browser" });
+  await settle();
+  assert.equal(cards(t.events).length, 0);
+  assert.equal(t.runner.get(task.id)!.results?.items.length, 3);
+});
+
+test("a done task takes a follow-up on the same conversation (no reset) and browses again to answer", async () => {
+  const t = setup([
+    async (call) => {
+      await call("browser_open", { url: "https://skyfare.example/search" });
+      await call("browser_done", { summary: "Found 3 options. Cheapest is Fri Dec 11 at $958.", card: FLIGHTS });
+    },
+    async (call) => {
+      await call("browser_open", { url: "https://skyfare.example/fare/tpa-jnb-dec11-958", step: "Opening the Dec 11 fare" });
+      assert.match(await call("browser_snapshot"), /Check availability/);
+      await call("browser_done", { summary: "It has 2 stops: Toronto, then Istanbul." });
+    },
+  ]);
+  const task = t.runner.start({ text: "Find one-way flights, Tampa to Johannesburg, Dec 10–12", origin: "browser" });
+  await settle();
+  assert.equal(t.runner.get(task.id)!.status, "done");
+
+  const again = t.runner.followUp(task.id, { text: "Where are the stops?", item: 0 });
+  assert.equal(again.status, "running");
+  assert.equal(again.step, "Following up");
+  await settle();
+
+  assert.equal(t.brain.resets, 1, "the follow-up carries on the same conversation");
+  assert.equal(t.brain.turns.length, 2);
+  assert.match(t.brain.turns[1], /Matthew follows up on the task \(“Find one-way flights[^”]*”; you finished with: “Found 3 options/);
+  assert.match(t.brain.turns[1], /About this result: Fri Dec 11 · JetBlue \+ Turkish · \$958 · https:\/\/skyfare.example\/fare\/tpa-jnb-dec11-958/);
+  assert.match(t.brain.turns[1], /He says:\nWhere are the stops\?/);
+  assert.deepEqual(t.mac.kinds(), ["browser.open", "browser.open", "browser.snapshot"], "the reopened task can use the browser again");
+  assert.ok(t.mac.statuses().includes("Following up: Where are the stops?"));
+
+  const done = t.runner.get(task.id)!;
+  assert.equal(done.status, "done");
+  assert.equal(done.result, "It has 2 stops: Toronto, then Istanbul.");
+  assert.equal(done.results?.items.length, 3, "an answer without a card keeps the results");
+  const followed = done.log.find((s) => s.kind === "answer")!;
+  assert.equal(followed.text, "Matthew followed up on “Fri Dec 11 · JetBlue + Turkish”: Where are the stops?");
+  assert.equal(followed.url, "https://skyfare.example/fare/tpa-jnb-dec11-958");
+  assert.deepEqual(
+    done.log.map((s) => s.kind),
+    ["start", "action", "done", "answer", "action", "done"],
+  );
+  // And once more: a done task can be followed up as long as it's still the newest.
+  assert.equal(t.runner.followUp(task.id, { text: "Thanks" }).status, "running");
+});
+
+test("a follow-up's answer goes back where the follow-up was asked", async () => {
+  const t = setup([
+    async (call) => void (await call("browser_done", { summary: "Found 3 options.", card: FLIGHTS })),
+    async (call) => void (await call("browser_done", { summary: "Added “Book flight: Fri Dec 11, JetBlue + Turkish, $958” to your to-do list." })),
+  ]);
+  const task = t.runner.start({ text: "Find flights", origin: "browser" });
+  await settle();
+  const out = await t.tool("browser_task_control").handler({ action: "follow_up", text: "add the first one to my to-do list", from: "desk-typed" }, t.ctx);
+  assert.match(out, /Following up on “Find flights”/);
+  await settle();
+  assert.deepEqual(
+    t.chat.map((m) => [m.channel, m.text]),
+    [["desk-typed", "Added “Book flight: Fri Dec 11, JetBlue + Turkish, $958” to your to-do list."]],
+  );
+  const done = t.events.filter((e): e is Extract<DeskEvent, { type: "brain.done" }> => e.type === "brain.done");
+  assert.equal(done.length, 1);
+  assert.notEqual(done[0].messageId, `browser-task-${task.id}`, "its own chat message, not the task's first reply");
+  assert.equal(cards(t.events).length, 1, "a text card for the chat's answer");
+});
+
+test("a follow-up is refused once a different task has started, while one runs, or when it didn't finish", async () => {
+  const open = gate();
+  const t = setup([
+    async (call) => void (await call("browser_done", { summary: "First." })),
+    async (call) => void (await call("browser_done", { summary: "Second." })),
+    open.turn,
+  ]);
+  const first = t.runner.start({ text: "First task", origin: "browser" });
+  await settle();
+  assert.throws(() => t.runner.followUp(first.id, { text: "  " }), /Say what to do with it/);
+  assert.throws(() => t.runner.followUp(first.id, { text: "This one", item: 5 }), /That result isn't on the task/);
+  const second = t.runner.start({ text: "Second task", origin: "browser" });
+  await settle();
+  assert.throws(() => t.runner.followUp(first.id, { text: "More about it" }), /Another browser task has started since/);
+  assert.equal(t.brain.turns.length, 2, "no turn was taken for the refused follow-up");
+  t.runner.followUp(second.id, { text: "And?" });
+  await settle();
+  assert.throws(() => t.runner.followUp(second.id, { text: "And?" }), /already running/);
+  t.runner.stop(second.id);
+  open.end();
+  assert.throws(() => t.runner.followUp(second.id, { text: "And?" }), /was stopped/);
+  const third = setup([async (call) => void (await call("browser_done", { summary: "Done." }))]);
+  const task = third.runner.start({ text: "Third", origin: "browser" });
+  await settle();
+  third.mac.connectedNow = false;
+  assert.throws(() => third.runner.followUp(task.id, { text: "And?" }), /The Desk isn't connected/);
+});
+
+test("the follow-up route: 200 with the reopened task, 404 for none, 400 when it can't be picked up", async () => {
+  const t = setup([async (call) => void (await call("browser_done", { summary: "Found 3 options.", card: FLIGHTS }))]);
+  const task = t.runner.start({ text: "Find flights", origin: "browser" });
+  await settle();
+  const route = t.route("POST", "/browser/tasks/:id/followup");
+  await assert.rejects(Promise.resolve().then(() => route.handler(t.req({ id: "nope" }, { text: "hi" }))), (err: Error & { status?: number }) => err.status === 404);
+  await assert.rejects(Promise.resolve().then(() => route.handler(t.req({ id: task.id }, { text: "" }))), (err: Error & { status?: number }) => err.status === 400);
+  const reopened = (await route.handler(t.req({ id: task.id }, { text: "Is it refundable?", item: 0 }))) as BrowserTaskSummary;
+  assert.equal(reopened.status, "running");
+  assert.match(t.runner.get(task.id)!.log.at(-1)!.text, /followed up on “Fri Dec 11/);
+});
+
+test("the reopened conversation resumes the browser brain's session (--resume), it isn't reset", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "jarvis-browser-resume-"));
+  const bin = join(dir, "claude");
+  const argvLog = join(dir, "argv.jsonl");
+  writeFileSync(
+    bin,
+    `#!/usr/bin/env node
+require("node:fs").appendFileSync(${JSON.stringify(argvLog)}, JSON.stringify(process.argv.slice(2)) + "\\n");
+process.stdin.resume();
+process.stdin.on("end", () => console.log(JSON.stringify({ type: "result", result: "ok", num_turns: 1 })));
+`,
+  );
+  chmodSync(bin, 0o755);
+  const real = createBrowserBrain({ claudeBin: bin, dataDir: dir, models: ["claude-haiku-5-5"], defaultModel: "claude-haiku-5-5", internalUrl: "http://127.0.0.1:1", internalToken: "t" });
+  let resets = 0;
+  // The real brain runs the CLI; the browser_* calls it would make come straight from here.
+  const summaries = ["Found it.", "Yes, it's refundable."];
+  const t = setup([]);
+  const runner = new BrowserTaskRunner({ dataDir: dir, bus: new EventBus(), mac: t.mac, brain: {
+    reset: () => void (resets++, real.reset()),
+    chat: async (text) => {
+      await real.chat(text, "worker");
+      await t.tool("browser_open").handler({ url: "https://skyfare.example" }, ctx);
+      await t.tool("browser_done").handler({ summary: summaries.shift() }, ctx);
+    },
+  } });
+  const jarvis = new Jarvis({ dataDir: dir, brainConnectors: [] } as unknown as Config, new Store(dir));
+  useBrowserTasks(jarvis, runner);
+  const ctx: ToolContext = { jarvis, config: jarvis.config, desk: { bus: new EventBus(), hub: { clientCount: 1 } } as unknown as DeskContext };
+  const task = runner.start({ text: "Find a flight", origin: "browser" });
+  await settle();
+  for (let i = 0; i < 50 && runner.get(task.id)!.status !== "done"; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.equal(runner.get(task.id)!.status, "done");
+  runner.followUp(task.id, { text: "Is it refundable?" });
+  for (let i = 0; i < 50 && runner.get(task.id)!.status !== "done"; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.equal(runner.get(task.id)!.result, "Yes, it's refundable.");
+  assert.equal(resets, 1);
+  const runs = readFileSync(argvLog, "utf8").trim().split("\n").map((l) => JSON.parse(l) as string[]);
+  assert.equal(runs.length, 2);
+  const session = runs[0][runs[0].indexOf("--session-id") + 1];
+  assert.ok(session);
+  assert.equal(runs[1][runs[1].indexOf("--resume") + 1], session, "the follow-up resumes the task's conversation");
+  assert.deepEqual(t.mac.kinds(), ["browser.open", "browser.open"]);
 });
