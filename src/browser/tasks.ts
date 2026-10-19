@@ -132,6 +132,8 @@ export class BrowserTaskRunner {
   private lastUrl = "";
   /** Where a follow-up's answer goes (JD-66), when it isn't where the task was asked. */
   private replyTo?: BrowserTaskOrigin;
+  /** The newest loop: a follow-up asked while the last turn still winds down retires that turn's loop. */
+  private runs = 0;
 
   constructor(private readonly deps: BrowserTaskDeps) {
     this.file = new JsonFile<TasksFile>(deps.dataDir, "browser-tasks", { tasks: [] });
@@ -241,15 +243,17 @@ export class BrowserTaskRunner {
   /** The task's conversation: one turn, then wait for Matthew if it asked, until it's done or stopped. */
   private async loop(id: string, first: string, fresh = true): Promise<void> {
     if (fresh) this.deps.brain.reset(); // every task is a fresh conversation; a follow-up carries on the same one
+    const run = ++this.runs;
     let message: string | null = first;
     let nudges = 0;
     while (message !== null) {
       try {
         await this.deps.brain.chat(message, "worker");
       } catch (err) {
-        if (this.isActive(id)) this.fail(id, `The browser brain stopped: ${(err as Error).message}`);
+        if (run === this.runs && this.isActive(id)) this.fail(id, `The browser brain stopped: ${(err as Error).message}`);
         return;
       }
+      if (run !== this.runs) return;
       const t = this.find(id);
       if (!t || !ACTIVE.has(t.status)) return;
       if (this.inbox !== undefined) {
@@ -372,10 +376,10 @@ export class BrowserTaskRunner {
   done(summaryText: string, card?: ResultCard): BrowserTaskSummary {
     const t = this.usable(true);
     const result = short(summaryText, 1500) || "Done.";
-    const results = resultsOf(card);
-    this.finish(t.id, "done", result);
-    if (results) this.update(t.id, { results });
-    const ended = this.find(t.id)!;
+    // A card with no rows (a title, a link) doesn't replace a follow-up's earlier results.
+    const found = resultsOf(card);
+    const results = found && (found.items.length || !t.results) ? found : undefined;
+    const ended = this.finish(t.id, "done", result, results ? { results } : {});
     this.deliver(ended, result, results);
     return summary(ended);
   }
@@ -513,9 +517,9 @@ export class BrowserTaskRunner {
     });
   }
 
-  private finish(id: string, status: "done" | "stopped" | "failed", result: string): StoredTask {
+  private finish(id: string, status: "done" | "stopped" | "failed", result: string, extra: Partial<StoredTask> = {}): StoredTask {
     this.log(id, { kind: status === "done" ? "done" : status === "stopped" ? "stop" : "error", text: result });
-    this.update(id, { status, result, endedAt: this.iso(), question: undefined, step: undefined, approvals: [] });
+    this.update(id, { status, result, endedAt: this.iso(), question: undefined, step: undefined, approvals: [], ...extra });
     void this.status(""); // the toolbar's line goes back to "Ready"
     return this.find(id)!;
   }
@@ -550,7 +554,8 @@ export class BrowserTaskRunner {
     this.replyTo = undefined;
     const items = (results?.items ?? []).slice(0, CARD_ITEMS);
     const shown: ScreenCard = {
-      id: `browser-task-${t.id}`,
+      // A follow-up's answer is its own card: the list card stays.
+      id: `browser-task-${t.id}${followUp ? `-${t.steps}` : ""}`,
       createdAt: this.iso(),
       title: short(results?.title || (t.status === "done" ? `Done: ${t.text}` : `Couldn't finish: ${t.text}`), 80),
       body: text,

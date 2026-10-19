@@ -199,7 +199,8 @@ export default function BrowserWindow() {
                   results: (
                     <TaskResults
                       results={results}
-                      busy={tasks.tasks.some(isActive)}
+                      // Only the newest task, once done, takes a follow-up (src/browser/tasks.ts).
+                      busy={task?.status !== "done" || tasks.tasks[0]?.id !== task.id}
                       onOpen={(url) => command({ type: "go", address: url })}
                       onFollowUp={followUp}
                     />

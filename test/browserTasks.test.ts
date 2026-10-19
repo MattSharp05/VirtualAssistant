@@ -699,3 +699,50 @@ process.stdin.on("end", () => console.log(JSON.stringify({ type: "result", resul
   assert.equal(runs[1][runs[1].indexOf("--resume") + 1], session, "the follow-up resumes the task's conversation");
   assert.deepEqual(t.mac.kinds(), ["browser.open", "browser.open"]);
 });
+
+test("a follow-up asked while the last turn is still winding down retires that turn's loop (no nudge, no second loop)", async () => {
+  const winding = gate();
+  const answering = gate();
+  const t = setup([
+    async (call) => {
+      await call("browser_done", { summary: "Found 3 options.", card: FLIGHTS });
+      await winding.turn(); // the CLI's turn goes on a moment after browser_done
+    },
+    async (call) => {
+      await answering.turn();
+      await call("browser_done", { summary: "It's refundable.", card: { title: "Just a title" } });
+    },
+  ]);
+  const task = t.runner.start({ text: "Find flights", origin: "telegram" });
+  await settle();
+  assert.equal(t.runner.get(task.id)!.status, "done");
+  t.runner.followUp(task.id, { text: "Is the first one refundable?", item: 0 }, "telegram");
+  await settle();
+  winding.end(); // the old turn ends while the follow-up's is still working
+  await settle();
+  answering.end();
+  await settle();
+  assert.equal(t.brain.turns.length, 2, "no “You ended your turn without browser_done” nudge");
+  const done = t.runner.get(task.id)!;
+  assert.equal(done.status, "done");
+  assert.equal(done.result, "It's refundable.");
+  assert.equal(done.results?.items.length, 3, "a card with no rows keeps the earlier results");
+  const shown = cards(t.events);
+  assert.deepEqual(
+    shown.map((c) => [c.card.id === `browser-task-${task.id}`, c.card.kind]),
+    [
+      [true, "list"],
+      [false, "text"],
+    ],
+    "the follow-up's answer is its own card; the list card stays",
+  );
+  assert.deepEqual(t.telegram, ["🌐 Found 3 options.", "🌐 It's refundable."]);
+});
+
+test("browser_task_control follow_up needs the channel it was asked on", async () => {
+  const t = setup([async (call) => void (await call("browser_done", { summary: "Found it." }))]);
+  t.runner.start({ text: "Find flights", origin: "browser" });
+  await settle();
+  assert.match(await t.tool("browser_task_control").handler({ action: "follow_up", text: "And?" }, t.ctx), /Give `from`/);
+  assert.equal(t.brain.turns.length, 1);
+});

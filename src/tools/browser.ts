@@ -199,7 +199,9 @@ const chatTools: ToolDef[] = [
         if (!last) return "There's no browser task to follow up on.";
         const text = optional(a, "text");
         if (!text) return "Say what he wants done with it.";
-        const now = r.followUp(last.id, { text }, ORIGINS.find((o) => o === a.from) ?? "desk-typed");
+        const from = ORIGINS.find((o) => o === a.from);
+        if (!from) return "Give `from`: the channel in the message's stamp, so the answer goes back there.";
+        const now = r.followUp(last.id, { text }, from);
         return `Following up on “${now.text}” in the Browser window. Tell him in one line; the answer comes back by itself.`;
       }
       if (!t) {
