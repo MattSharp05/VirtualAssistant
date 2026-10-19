@@ -40,8 +40,9 @@ export type CardsAction =
   /** Show everything Do Not Disturb held back (badge clicked, or DND turned off). */
   | { type: "release" };
 
-/** Which window a card's Pop out opens; kinds without one have no Pop out. */
+/** Which window a card's Pop out opens; kinds without one have no Pop out. A browser task's results open the Browser window's panel (JD-66). */
 export function popOutWindow(card: ScreenCard): string | undefined {
+  if (card.id.startsWith("browser-task-") && card.kind === "list") return "browser";
   return card.kind === "agenda" ? "today" : card.kind === "session" ? "sessions" : undefined;
 }
 
