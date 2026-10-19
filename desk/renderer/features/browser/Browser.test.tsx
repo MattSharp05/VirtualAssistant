@@ -149,13 +149,15 @@ describe("Browser window", () => {
     expect(screen.queryByRole("heading", { name: "Book a table" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Close tab Alfama, Lisbon · Maps" }));
     fireEvent.click(screen.getByRole("button", { name: "Close tab Book a table · Taberna da Rua" }));
-    await screen.findByRole("heading", { name: "No page open" });
+    await screen.findByRole("heading", { name: "Ask JARVIS to do something on the web" });
     expect(hide).toHaveBeenCalled();
   });
 
-  it("with no tabs, says what the window is for", async () => {
+  it("with no tabs and no task, the ask box is the window (no sidebar)", async () => {
     renderBrowser("empty");
-    await screen.findByRole("heading", { name: "No page open" });
+    await screen.findByRole("heading", { name: "Ask JARVIS to do something on the web" });
+    expect(screen.getByRole("form", { name: "New browser task" }).dataset.placement).toBe("hero");
+    expect(screen.queryByRole("region", { name: "Browser task" })).toBeNull();
     expect(screen.getByRole("status", { name: "Status" }).textContent).toContain("Ready when you ask");
   });
 });

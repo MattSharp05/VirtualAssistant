@@ -185,3 +185,91 @@ describe("Browser window tasks (JD-60)", () => {
     expect(screen.getByRole("region", { name: "Page" })).toBeTruthy();
   });
 });
+
+describe("Browser window task sidebar (JD-65)", () => {
+  afterEach(() => {
+    cleanup();
+    bridge.close();
+  });
+
+  it("no page, no task: the ask box is the window; Start moves it into the sidebar with the task", async () => {
+    renderOn("browser-ask");
+    await flush();
+    const hero = screen.getByRole("form", { name: "New browser task" });
+    expect(hero.dataset.placement).toBe("hero");
+    expect(screen.queryByRole("region", { name: "Browser task" })).toBeNull();
+    fireEvent.change(within(hero).getByLabelText("Task"), { target: { value: "Find flights to Lisbon" } });
+    fireEvent.click(within(hero).getByRole("button", { name: "Start" }));
+    await flush();
+    await flush();
+    const sidebar = screen.getByRole("region", { name: "Browser task" });
+    expect(screen.queryByRole("heading", { name: "Ask JARVIS to do something on the web" })).toBeNull();
+    expect(within(sidebar).getByRole("status", { name: "Task state" }).textContent).toBe("Working");
+    expect(within(sidebar).getByLabelText("Progress").textContent).toContain("Find flights to Lisbon");
+    // The box is docked at the sidebar's foot now, talking to the task.
+    const docked = within(sidebar).getByRole("form", { name: "Tell JARVIS about this task" });
+    expect(docked.dataset.placement).toBe("docked");
+    expect(posts()).toEqual([["/browser/tasks", { text: "Find flights to Lisbon", mode: "normal" }]]);
+  });
+
+  it("the sidebar is the task's log: each step, then what's going on now", async () => {
+    renderOn("browser-task-full");
+    await flush();
+    await flush();
+    const log = screen.getByLabelText("Progress");
+    expect(log.textContent).toContain(
+      "Book a table at Taberna da Rua for Friday 8pm for 2, do it on your own",
+    );
+    expect(log.textContent).toContain("Choosing 2 people, Fri 23 Oct, 20:00");
+    expect(log.textContent).toContain("Booking the table");
+  });
+
+  it("closing the sidebar never stops the task; the pill reopens it", async () => {
+    renderOn("browser-task-full");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "Close the task panel" }));
+    expect(screen.queryByRole("region", { name: "Browser task" })).toBeNull();
+    const pill = screen.getByRole("button", { name: "Working · show the task" });
+    expect(posts()).toEqual([]);
+    fireEvent.click(pill);
+    const sidebar = screen.getByRole("region", { name: "Browser task" });
+    expect(within(sidebar).getByRole("status", { name: "Task state" }).textContent).toBe("Working");
+    expect(screen.queryByRole("button", { name: /show the task/ })).toBeNull();
+  });
+
+  it("starts closed in its scenario, and the question still asks while it's closed", async () => {
+    renderOn("browser-task-sidebar-closed");
+    await flush();
+    expect(screen.queryByRole("region", { name: "Browser task" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Working · show the task" })).toBeTruthy();
+    cleanup();
+    bridge.close();
+    renderOn("browser-task-normal");
+    await flush();
+    fireEvent.click(screen.getByRole("button", { name: "Close the task panel" }));
+    expect(screen.getByRole("region", { name: "JARVIS needs your OK" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Waiting for you · show the task" })).toBeTruthy();
+  });
+
+  it("while JARVIS waits for an OK, the docked box tells it what to do instead", async () => {
+    renderOn("browser-task-normal");
+    await flush();
+    const box = screen.getByRole("form", { name: "Tell JARVIS about this task" });
+    fireEvent.change(within(box).getByLabelText("Message"), { target: { value: "Make it 21:00" } });
+    fireEvent.click(within(box).getByRole("button", { name: "Send" }));
+    await flush();
+    expect(posts()).toEqual([
+      [
+        "/browser/tasks/task-taberna/answer",
+        { questionId: "q-book", answer: "change", text: "Make it 21:00" },
+      ],
+    ]);
+  });
+
+  it("while it just works, the docked box waits for it to ask", async () => {
+    renderOn("browser-task-full");
+    await flush();
+    const box = screen.getByRole("form", { name: "Tell JARVIS about this task" });
+    expect((within(box).getByLabelText("Message") as HTMLInputElement).disabled).toBe(true);
+  });
+});

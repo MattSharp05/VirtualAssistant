@@ -2,6 +2,8 @@
 // in the Browser window. Normal mode waiting on Matthew's OK to book (the question band, and its card
 // beside the orb); Full autonomy working on its own (Pause / Stop, no questions); and the password
 // stop, where Matthew takes over to sign in and hands back. Each has the History menu's past tasks.
+// JD-65: the ask box as the window's centrepiece (no page, no task), and a task running with its
+// sidebar closed (the status line's pill brings it back).
 import type { BrowserState, BrowserTask } from "@jarvis/shared";
 import { browserTaskRoutes, pastTasks, questionNotice, tasksData } from "../browserTasks";
 import type { Scenario } from "../types";
@@ -93,7 +95,13 @@ const password: BrowserTask = {
   ],
 };
 
-const scenario = (name: string, description: string, current: BrowserTask, status: string): Scenario => {
+const scenario = (
+  name: string,
+  description: string,
+  current: BrowserTask,
+  status: string,
+  ui: Scenario["ui"] = {},
+): Scenario => {
   const notice = questionNotice(current);
   return {
     name,
@@ -102,7 +110,7 @@ const scenario = (name: string, description: string, current: BrowserTask, statu
     events: notice ? [{ after: 100, event: notice }] : [],
     routes: [browserTaskRoutes],
     browser: page(status),
-    ui: { now: NOW },
+    ui: { now: NOW, ...ui },
   };
 };
 
@@ -115,10 +123,26 @@ const scenarios: Scenario[] = [
   ),
   scenario(
     "browser-task-full",
-    "Browser task, Full autonomy: JARVIS books the table on its own; Pause and Stop, no questions.",
+    "Browser task, Full autonomy: JARVIS books the table on its own; the sidebar's log, Pause and Stop, no questions.",
     full,
     "Booking the table",
   ),
+  scenario(
+    "browser-task-sidebar-closed",
+    "Browser task running with its sidebar closed: the page gets the width, the task carries on, and the status line's pill reopens the log.",
+    full,
+    "Booking the table",
+    { taskPanelClosed: true },
+  ),
+  {
+    name: "browser-ask",
+    description:
+      "Browser with no page and no task: the ask box is the window's centrepiece; Start moves it into the task sidebar.",
+    data: tasksData(pastTasks),
+    events: [],
+    routes: [browserTaskRoutes],
+    ui: { now: NOW },
+  },
   scenario(
     "browser-task-password-stop",
     "Browser task: stopped at a password field in either mode; Take over, type it, Hand back.",
