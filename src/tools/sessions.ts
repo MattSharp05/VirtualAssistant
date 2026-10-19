@@ -53,9 +53,16 @@ const group: ToolGroup = {
     {
       name: "start_session",
       description:
-        "Start a new cloud session on a task (fires the JARVIS routine: uses one of 30 fires per hour and plan usage).",
+        "Start a new cloud session on a task: a normal Claude Code session with a short title, on the default repo or the project the task names (\"in trip\", a ticket ID). Uses plan usage.",
       inputSchema: schema({ task: str("The task, written as a complete instruction") }, ["task"]),
       handler: (a, ctx) => core(ctx).start(String(a.task ?? "")),
+    },
+    {
+      name: "rename_jarvis_sessions",
+      description:
+        "One-off: give the older sessions JARVIS started through the routine (all titled \"Jarvis Worker\") a title from their task. Only when Matthew asks.",
+      inputSchema: schema({}),
+      handler: (_a, ctx) => core(ctx).renameRoutineSessions(),
     },
   ],
 };

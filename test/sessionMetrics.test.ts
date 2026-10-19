@@ -95,6 +95,13 @@ test("parseDetail reads usage, context, models, status, tags, lineage and times"
   assert.equal(bucketOf("SESSION_STATUS_BUCKET_REVIEW_READY"), "review_ready");
 });
 
+test("parseDetail: the parent comes from top-level parent_session_id first (the live API's field, JD-69)", () => {
+  const d = parseDetail(detail({ lineage: undefined, parent_session_id: "session_01TOP" }));
+  assert.equal(d.parentId, "session_01TOP");
+  assert.equal(parseDetail(detail({ parent_session_id: "session_01TOP" })).parentId, "session_01TOP", "it beats the lineage guess");
+  assert.equal(parseDetail(detail({ lineage: undefined })).parentId, undefined);
+});
+
 test("parseDetail: a session without usage leaves everything unknown, never 0", () => {
   const d = parseDetail({ id: "session_01OLD", created_at: at(0), external_metadata: { usage: { input_tokens: 5 } } });
   assert.deepEqual(d, { inputTokens: 5, createdAt: at(0) }, "only known keys, and no total from a partial usage");

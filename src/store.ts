@@ -16,8 +16,14 @@ export interface Job {
   createdAt: string;
   lastMessageAt?: string;
   messagesSent?: number;
-  /** started: JARVIS fired the routine. attached: you pasted its link. reported: it reported in first. */
+  /** started: JARVIS started it. attached: you pasted its link. reported: it reported in first. */
   kind?: "started" | "attached" | "reported";
+  /** How a started session was made (JD-69): the sessions API, the API + a CLI message, or the routine. Absent on older jobs (all routine). */
+  via?: "api" | "api+cli" | "routine";
+  /** The session's title as JARVIS set it (JD-69). */
+  title?: string;
+  /** The tags it was created with (project:, role:, jarvis:<job id>). */
+  tags?: string[];
   /** Set when a report moved this name to a newer session (a successor orchestrator took over). */
   sessionUpdatedAt?: string;
 }
@@ -109,6 +115,16 @@ export class Store {
 
   getJob(id: string): Job | undefined {
     return this.state.jobs.find((j) => j.id === id.toLowerCase());
+  }
+
+  /** Changes a job's fields (a rename sets its title). */
+  updateJob(id: string, patch: Partial<Omit<Job, "id">>): Job | undefined {
+    const job = this.getJob(id);
+    if (job) {
+      Object.assign(job, patch);
+      this.save();
+    }
+    return job;
   }
 
   findBySession(sessionId: string): Job | undefined {

@@ -86,7 +86,19 @@ export class CoreTools {
 
   async start(task: string): Promise<string> {
     const { job, ms, fireNumber } = await this.jarvis.startJob(task);
-    return `Started ${job.id} in ${(ms / 1000).toFixed(1)}s (routine fire ${fireNumber}/30 this hour): ${job.url}`;
+    const how = fireNumber ? ` via the routine fallback (fire ${fireNumber}/30 this hour)` : job.title ? `, titled "${job.title}"` : "";
+    return `Started ${job.id} in ${(ms / 1000).toFixed(1)}s${how}: ${job.url}`;
+  }
+
+  async renameRoutineSessions(): Promise<string> {
+    const { renamed, failed } = await this.jarvis.renameRoutineSessions();
+    if (!renamed.length && !failed.length) return "Nothing to rename: every session JARVIS started already has its own title.";
+    const lines = [
+      ...(renamed.length ? [`Renamed ${renamed.length}: ${renamed.map((j) => `${j.id} → "${j.title}"`).join("; ")}.`] : []),
+      ...(failed.length ? [`Couldn't rename ${failed.length} (${failed[0].error}).`] : []),
+      "They're still routine runs, so the Claude Code sidebar won't list them (only the routine's runs page and JARVIS's Sessions window). New sessions appear in the sidebar.",
+    ];
+    return lines.join(" ");
   }
 
   private needNotion(): Notion {

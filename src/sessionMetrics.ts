@@ -3,7 +3,7 @@
 //
 // UNDOCUMENTED, and contained like the session list (sessions.ts) with the same OAuth login:
 //   GET /v1/code/sessions/{id}          detail: external_metadata.usage / context_usage, models,
-//                                       status_bucket, tags, lineage, created_at / updated_at
+//                                       status_bucket, tags, parent_session_id, created_at / updated_at
 //   GET /v1/code/sessions/{id}/events   transcript events; no cursor = the newest page, before_id
 //                                       pages back, after_id reads only what came after an event
 // Field names were checked on a live session (2026-10-17) but nothing is promised, so every value
@@ -55,7 +55,8 @@ export function parseDetail(body: unknown): DetailMetrics {
   const used = num(context.used_tokens);
   const max = num(context.max_tokens);
   const tags = Array.isArray(b.tags) ? b.tags.filter((t): t is string => typeof t === "string") : undefined;
-  const parent = str(lineage.parent_session_id) ?? str(lineage.parent_id) ?? str(obj(lineage.parent)?.id);
+  // The API gives the parent as top-level parent_session_id (seen 2026-10-19); the lineage forms are older guesses.
+  const parent = str(b.parent_session_id) ?? str(lineage.parent_session_id) ?? str(lineage.parent_id) ?? str(obj(lineage.parent)?.id);
   const repo = repoOf(b.session_context);
 
   const served = str(meta.last_served_model);

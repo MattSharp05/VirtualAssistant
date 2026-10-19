@@ -1,6 +1,34 @@
-// Text JARVIS sends into cloud sessions. The routine's saved prompt (docs/routine-prompt.md)
-// carries the standing rules, including how to report back on Telegram; these only add the
-// job handle, the send time (so reports can say how long the work took) and the instruction.
+// Text JARVIS sends into cloud sessions. The worker instructions (docs/routine-prompt.md) carry the
+// standing rules, including how to report back; the routine keeps its own copy, and a session JARVIS
+// creates itself gets them at the top of its first message (JD-69). The job text adds the job
+// handle, the send time (so reports can say how long the work took) and the instruction.
+
+import { readFileSync } from "node:fs";
+
+/** Used only if docs/routine-prompt.md is missing from the image. */
+const FALLBACK_INSTRUCTIONS = [
+  "You are a JARVIS worker: a Claude Code cloud session started by Matthew's personal assistant, JARVIS.",
+  "Your task follows. It starts with `JARVIS job: <id>` and `Sent at: <time>`; remember both.",
+  'Report with scripts/report.sh <job id> <sent-at time> "<message>": a one-line acknowledgement, when you finish (with the branch or PR), whenever you need a decision, and if you get stuck.',
+  "Work on a new branch and never push to main. Never merge pull requests.",
+].join("\n");
+
+/** The worker instructions: everything below the first `---` line of docs/routine-prompt.md. */
+export function loadWorkerInstructions(path: string | URL = new URL("../../docs/routine-prompt.md", import.meta.url)): string {
+  try {
+    const text = readFileSync(path, "utf8");
+    const i = text.search(/^---\s*$/m);
+    const body = (i >= 0 ? text.slice(i).replace(/^---\s*/, "") : text).trim();
+    return body || FALLBACK_INSTRUCTIONS;
+  } catch {
+    return FALLBACK_INSTRUCTIONS;
+  }
+}
+
+/** The first message of a session JARVIS creates: the worker instructions, then the job text. */
+export function sessionPromptText(instructions: string, jobId: string, task: string, sentAt: Date): string {
+  return [instructions.trim(), "", "---", "", newJobText(jobId, task, sentAt)].join("\n");
+}
 
 export function newJobText(jobId: string, task: string, sentAt: Date): string {
   return [`JARVIS job: ${jobId}`, `Sent at: ${sentAt.toISOString()}`, "", "Task from Matthew:", task.trim()].join("\n");
