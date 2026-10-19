@@ -468,6 +468,44 @@ test("the Desk routes: start from the task box, list, read a log, 400 for a seco
   assert.equal(stopped.status, "stopped");
 });
 
+test("deleting a finished task removes it from browser-tasks.json and list(); an active one must be stopped first", async () => {
+  const t = setup([async (call) => void (await call("browser_ask", { question: "OK?", kind: "approval" }))]);
+  const task = t.runner.start({ text: "Renew the parking permit", origin: "browser" });
+  await settle();
+  assert.throws(() => t.runner.forget(task.id), /waiting\. Stop it first/);
+  assert.throws(() => t.runner.forget("nope"), /No browser task nope/);
+  t.runner.stop(task.id);
+  await settle();
+  await t.runner.forget(task.id);
+  assert.deepEqual(t.runner.list(), []);
+  assert.equal(t.runner.get(task.id), undefined);
+  const stored = JSON.parse(readFileSync(join(t.dir, "browser-tasks.json"), "utf8")) as { tasks: { id: string }[] };
+  assert.equal(stored.tasks.some((x) => x.id === task.id), false, "gone from the 30-day log on disk");
+  const reopened = new BrowserTaskRunner({ dataDir: t.dir, bus: new EventBus(), brain: new FakeBrain([]), mac: new FakeMac() });
+  assert.equal(reopened.get(task.id), undefined, "still gone after a restart");
+});
+
+test("the delete routes: POST …/delete and DELETE …/:id answer with the list left; 400 while active, 404 for none", async () => {
+  const t = setup([async (call) => void (await call("browser_ask", { question: "OK?", kind: "approval" }))]);
+  const first = t.runner.start({ text: "Find flights", origin: "browser" });
+  await settle();
+  const del = t.route("POST", "/browser/tasks/:id/delete");
+  await assert.rejects(Promise.resolve().then(() => del.handler(t.req({ id: first.id }))), (err: Error & { status?: number }) => err.status === 400 && /Stop it first/.test(err.message));
+  await assert.rejects(Promise.resolve().then(() => del.handler(t.req({ id: "nope" }))), (err: Error & { status?: number }) => err.status === 404);
+  t.runner.stop(first.id);
+  await settle();
+  const left = (await del.handler(t.req({ id: first.id }))) as { tasks: BrowserTaskSummary[] };
+  assert.deepEqual(left.tasks, []);
+
+  const second = t.runner.start({ text: "Find hotels", origin: "browser" });
+  await settle();
+  t.runner.stop(second.id);
+  await settle();
+  const viaDelete = (await t.route("DELETE", "/browser/tasks/:id").handler(t.req({ id: second.id }))) as { tasks: BrowserTaskSummary[] };
+  assert.deepEqual(viaDelete.tasks, []);
+  await assert.rejects(Promise.resolve().then(() => t.route("GET", "/browser/tasks/:id").handler(t.req({ id: second.id }))), (err: Error & { status?: number }) => err.status === 404);
+});
+
 // ── Which brain gets which tools ──
 
 test("only the browser brain gets the browser_* step tools; the chat brain is blocked from them", async () => {
