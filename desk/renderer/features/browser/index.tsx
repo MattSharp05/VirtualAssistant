@@ -14,6 +14,7 @@ import { Tabs } from "./Tabs";
 import { TaskComposer } from "./TaskComposer";
 import { TaskHistory } from "./TaskHistory";
 import { TaskQuestion } from "./TaskQuestion";
+import { TaskResults } from "./TaskResults";
 import { Glyph, TaskSidebar } from "./TaskSidebar";
 import { isActive, shownTask, stateLabel } from "./taskModel";
 import { Toolbar } from "./Toolbar";
@@ -94,6 +95,18 @@ export default function BrowserWindow() {
     if (ok) setPanelOpen(true);
     return ok;
   };
+  /** JD-66: a follow-up typed under a result carries on the task; its answer lands in the sidebar's log. */
+  const followUp = async (text: string, item: number) => {
+    if (!task) return false;
+    const ok = await tasks.followUp(task.id, text, item);
+    if (ok) {
+      // Keep it in the sidebar even if the answer arrives before this window saw it running.
+      setFollowed(task.id);
+      setPanelOpen(true);
+    }
+    return ok;
+  };
+  const results = task?.results?.items.length ? task.results : undefined;
   const active = state.tabs.find((t) => t.active);
   // No page and nothing going on: the ask box is the window. Otherwise the sidebar holds it (and the
   // task), unless Matthew closed it; then the status line's pill brings it back.
@@ -181,6 +194,18 @@ export default function BrowserWindow() {
             onClear={() => setCleared(task?.id)}
             onClose={() => setPanelOpen(false)}
             takeLaunch={takeLaunch}
+            {...(results
+              ? {
+                  results: (
+                    <TaskResults
+                      results={results}
+                      busy={tasks.tasks.some(isActive)}
+                      onOpen={(url) => command({ type: "go", address: url })}
+                      onFollowUp={followUp}
+                    />
+                  ),
+                }
+              : {})}
           />
         )}
       </div>

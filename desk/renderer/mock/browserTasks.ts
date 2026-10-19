@@ -4,6 +4,7 @@
 import type {
   BrowserTask,
   BrowserTaskMode,
+  BrowserTaskResultItem,
   BrowserTaskStep,
   BrowserTaskSummary,
   BrowserTasksResponse,
@@ -170,7 +171,27 @@ export function questionNotice(t: BrowserTask): DeskEvent | undefined {
 }
 
 const FULL = /on your own|full autonomy|without asking/i;
-const TASK = /^\/browser\/tasks\/([^/]+)(?:\/(pause|resume|stop|answer))?$/;
+const TASK = /^\/browser\/tasks\/([^/]+)(?:\/(pause|resume|stop|answer|followup))?$/;
+
+/** How long the mock's follow-up takes to answer (JD-66). */
+export const FOLLOW_UP_MS = 600;
+
+/** The mock browser brain's answer to a follow-up: adds a to-do, or reads the result again. */
+function followUpAnswer(text: string, item?: BrowserTaskResultItem): string {
+  const what = item ? `${item.label}${item.detail ? `, ${item.detail}` : ""}` : "the results";
+  if (/to-?do|task|remind/i.test(text)) return `Added “Book: ${what}” to your to-do list.`;
+  if (!item?.url)
+    return `${item ? `“${item.label}” isn't one page yet` : "Those are the options I found"}: I can search that day directly if you want a real itinerary.`;
+  return `Checked ${host(item.url)} again: ${what} has 2 stops (Toronto, then Istanbul), 44h 20m in all.`;
+}
+
+const host = (url: string) => {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+};
 
 /** GET /browser/tasks(/:id) and the writes, on the bridge's own copy of the tasks. */
 export const browserTaskRoutes: MockRoute = (path, body, { data, emit }) => {
@@ -235,6 +256,50 @@ export const browserTaskRoutes: MockRoute = (path, body, { data, emit }) => {
     if (t.status === "waiting" && t.question?.kind === "takeover")
       return save(running("Carrying on", "resume", "Matthew handed the browser back"));
     return summary(t);
+  }
+  if (action === "followup") {
+    const { text = "", item } = (body ?? {}) as { text?: string; item?: number };
+    if (!text.trim()) throw new Error("Say what to do with it.");
+    if (t.status !== "done")
+      throw new Error("That task didn't finish, so it can't be picked up again. Start a new one.");
+    if (tasks[0]?.id !== t.id)
+      throw new Error(
+        "Another browser task has started since, so this one can't be picked up again. Start a new one.",
+      );
+    const picked = item === undefined ? undefined : t.results?.items[item];
+    const asked = step(
+      at,
+      "answer",
+      `Matthew followed up${picked ? ` on “${picked.label}”` : ""}: ${text}`,
+      picked?.url,
+    );
+    const reopened: BrowserTask = {
+      ...rest,
+      status: "running",
+      step: "Following up",
+      log: [...t.log, asked],
+      steps: t.steps + 1,
+    };
+    delete reopened.endedAt;
+    // The answer comes a moment later, like the browser brain's turn.
+    setTimeout(() => {
+      const now = (data[TASKS_KEY] as BrowserTask[] | undefined) ?? [];
+      const current = now.find((x) => x.id === t.id);
+      if (current?.status !== "running") return;
+      const result = followUpAnswer(text, picked);
+      const done: BrowserTask = {
+        ...current,
+        status: "done",
+        endedAt: new Date().toISOString(),
+        result,
+        log: [...current.log, step(new Date().toISOString(), "done", result)],
+        steps: current.steps + 1,
+      };
+      delete done.step;
+      data[TASKS_KEY] = [done, ...now.filter((x) => x.id !== t.id)];
+      emit({ type: "browser.task", task: summary(done) });
+    }, FOLLOW_UP_MS);
+    return save(reopened);
   }
   const { answer, text } = (body ?? {}) as { answer?: string; text?: string };
   if (answer === "stop") return save(ended());
