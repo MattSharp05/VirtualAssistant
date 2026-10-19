@@ -1,6 +1,13 @@
 // Scenarios drive the mock bridge (web preview, e2e, JARVIS_DESK_SCENARIO): a named, deterministic
 // state plus events replayed with timings (docs/TDD.md → Scenario system).
-import type { BrowserState, ConnectionTest, DeskConnection, DeskEvent, VoiceInfo } from "@jarvis/shared";
+import type {
+  BrowserState,
+  ConnectionTest,
+  DeskConnection,
+  DeskEvent,
+  FullViewSignIn,
+  VoiceInfo,
+} from "@jarvis/shared";
 
 /** An event replayed `after` ms after the previous one (or after the bridge starts). */
 export interface TimedEvent {
@@ -42,6 +49,11 @@ export interface Scenario extends Required<Omit<ScenarioPart, "routes">> {
   mac?: MockMac;
   /** The Browser window's toolbar and tabs (JD-59); none open without it (mock/browser.ts). */
   browser?: BrowserState;
+  /**
+   * Full views as in the app (JD-68): windows get a webview bridge whose page reports this sign-in
+   * state. Without it the preview shows Full view's placeholder card.
+   */
+  fullView?: FullViewSignIn;
 }
 
 export interface MockMac {

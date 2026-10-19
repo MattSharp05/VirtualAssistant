@@ -10,6 +10,7 @@ import {
 } from "@jarvis/shared";
 import { createMockBrowser, type MockBrowserLog } from "./browser";
 import { createMockMac, type MockMacLog } from "./mac";
+import { createMockWebview } from "./webview";
 import type { Scenario } from "./types";
 
 const WORD_MS = 60;
@@ -185,6 +186,8 @@ export function createMockBridge(scenario: Scenario): MockBridge {
     chats: chatLog,
     mac: createMockMac(scenario, settings),
     browser: createMockBrowser(scenario.browser, emit),
+    // Full views as in the app (JD-68), only for scenarios that ask for them.
+    ...(scenario.fullView ? { webview: createMockWebview(scenario.fullView, later) } : {}),
     overlay: {
       setInteractive: (on) => void (interactive = on),
       orbClicked: () => void orbClicks++,

@@ -282,6 +282,15 @@
   padding-top: 10px;
 }
 
+/* Sign out of web views (JD-68) sits in a row, level with its label. */
+.settings-web-signout {
+  padding-top: 0;
+}
+
+.settings-test + .settings-row {
+  margin-top: 12px;
+}
+
 .settings-test-result {
   font-size: 13px;
 }

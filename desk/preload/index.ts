@@ -1,7 +1,7 @@
 // The only door between the renderer and the rest of the app: window.desk implements DeskBridge
 // (shared/protocol.ts) over IPC; main talks to the server (docs/TDD.md → Architecture).
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from "electron";
-import { PROTOCOL_VERSION, type DeskBridge, type DeskEvent } from "@jarvis/shared";
+import { PROTOCOL_VERSION, type DeskBridge, type DeskEvent, type FullViewSignIn } from "@jarvis/shared";
 
 const bridge: DeskBridge = {
   protocolVersion: PROTOCOL_VERSION,
@@ -32,6 +32,7 @@ const bridge: DeskBridge = {
     pickFolder: () => ipcRenderer.invoke("desk:mac-pick-folder"),
     testStatusFiles: () => ipcRenderer.invoke("desk:mac-status-test"),
     openLog: () => ipcRenderer.invoke("desk:mac-open-log"),
+    signOutWebViews: () => ipcRenderer.invoke("desk:webview-sign-out"),
   },
   overlay: {
     setInteractive: (on) => ipcRenderer.send("desk:hit", on),
@@ -74,6 +75,12 @@ const bridge: DeskBridge = {
   webview: {
     show: (url, bounds) => ipcRenderer.send("desk:webview-show", url, bounds),
     hide: () => ipcRenderer.send("desk:webview-hide"),
+    openLink: (url) => ipcRenderer.send("desk:webview-open-link", url),
+    onSignIn(fn) {
+      const listener = (_e: IpcRendererEvent, state: FullViewSignIn) => fn(state);
+      ipcRenderer.on("desk:webview-signin", listener);
+      return () => ipcRenderer.removeListener("desk:webview-signin", listener);
+    },
   },
   browser: {
     state: () => ipcRenderer.invoke("desk:browser-state"),

@@ -1216,6 +1216,15 @@ export interface HandWindow {
   minSize: { width: number; height: number };
 }
 
+/**
+ * A full view's sign-in state (JD-68): on a sign-in page (claude.ai's, Notion's or a provider's), and
+ * whether Google refused to sign in inside the app ("This browser or app may not be secure").
+ */
+export interface FullViewSignIn {
+  signInPage: boolean;
+  googleBlocked: boolean;
+}
+
 export interface DeskBridge {
   protocolVersion: number;
   /** Live events from the server's stream. Returns an unsubscribe function. */
@@ -1271,6 +1280,8 @@ export interface DeskBridge {
     testStatusFiles(): Promise<void>;
     /** Settings → Open log (JD-63): shows desk.log (~/Library/Logs/JARVIS Desk) in Finder. */
     openLog?(): Promise<void>;
+    /** Settings → Connection → Sign out of web views (JD-68): clears the full views' shared login. */
+    signOutWebViews?(): Promise<void>;
   };
   /** Saved window layouts (JD-37): applying one opens, moves and closes windows. Absent in the preview. */
   layouts?: {
@@ -1297,6 +1308,13 @@ export interface DeskBridge {
   webview?: {
     show(url: string, bounds: { x: number; y: number; width: number; height: number }): void;
     hide(): void;
+    /**
+     * Loads a sign-in link pasted from an email (JD-68) in this window's full view, without changing
+     * the page show() asked for. Main refuses anything but https claude.ai and Notion links.
+     */
+    openLink?(url: string): void;
+    /** Where this window's full view is with signing in (JD-68); returns the unsubscribe. */
+    onSignIn?(fn: (state: FullViewSignIn) => void): () => void;
   };
   /**
    * The Mac's browser (JD-59): its toolbar state (then browser.state events), Matthew's toolbar

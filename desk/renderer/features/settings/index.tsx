@@ -344,7 +344,40 @@ function ConnectionSection({
           )}
         </div>
       </div>
+      {bridge.mac?.signOutWebViews && <WebSignOut signOut={bridge.mac.signOutWebViews} />}
     </Section>
+  );
+}
+
+/** Sign out of web views (JD-68): forgets the claude.ai and Notion login every full view shares. */
+function WebSignOut({ signOut }: { signOut: () => Promise<void> }) {
+  const [state, setState] = useState<"working" | "done" | { error: string }>();
+  const run = async () => {
+    setState("working");
+    try {
+      await signOut();
+      setState("done");
+    } catch (err) {
+      setState({ error: errorText(err) });
+    }
+  };
+  return (
+    <Row label="Web views" hint="claude.ai and Notion full views share one login, kept between launches.">
+      <div className="settings-test settings-web-signout">
+        <button
+          type="button"
+          className="settings-button"
+          onClick={() => void run()}
+          disabled={state === "working"}
+        >
+          {state === "working" ? "Signing out…" : "Sign out of web views"}
+        </button>
+        <div role="status" aria-label="Sign-out result" className="settings-test-result">
+          {state === "done" && <span className="is-ok">Signed out of claude.ai and Notion.</span>}
+          {typeof state === "object" && <span className="is-error">{state.error}</span>}
+        </div>
+      </div>
+    </Row>
   );
 }
 
