@@ -21,6 +21,8 @@ export interface BrowserTasksView {
   resume(id: string): void;
   stop(id: string): void;
   answer(id: string, answer: BrowserTaskAnswerRequest): void;
+  /** Picks a finished task back up (JD-66): a question or instruction, about one of its results. */
+  followUp(id: string, text: string, item?: number): Promise<boolean>;
   log(id: string): Promise<BrowserTask | undefined>;
   /** Deletes a finished task for good (JD-67); false (with `error` set) when the server refused. */
   remove(id: string): Promise<boolean>;
@@ -80,6 +82,8 @@ export function useBrowserTasks(bridge: DeskBridge): BrowserTasksView {
       resume: (id: string) => void post(`/browser/tasks/${id}/resume`),
       stop: (id: string) => void post(`/browser/tasks/${id}/stop`),
       answer: (id: string, a: BrowserTaskAnswerRequest) => void post(`/browser/tasks/${id}/answer`, { ...a }),
+      followUp: async (id: string, text: string, item?: number) =>
+        !!(await post(`/browser/tasks/${id}/followup`, { text, ...(item === undefined ? {} : { item }) })),
       log: (id: string) => bridge.request<BrowserTask>(`/browser/tasks/${id}`).catch(() => undefined),
       remove: async (id: string) => {
         try {

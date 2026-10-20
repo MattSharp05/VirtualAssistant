@@ -126,7 +126,18 @@ export const BROWSER_TASK_TOOL_DEFS: ToolDef[] = [
           description: "Optional card beside the orb",
           properties: {
             title: str("Card title"),
-            items: { type: "array", items: { type: "object", properties: { label: str("Row"), detail: str("Secondary text, e.g. a price or time") }, required: ["label"] } },
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  label: str("Row"),
+                  detail: str("Secondary text, e.g. a price or time"),
+                  url: str("The result's own page (a flight's booking page, one listing), when it is a real, single page; Matthew opens it with one click"),
+                },
+                required: ["label"],
+              },
+            },
             link: { type: "object", properties: { label: str("Link text"), url: str("URL") }, required: ["url"] },
           },
         },
@@ -171,17 +182,28 @@ const chatTools: ToolDef[] = [
   {
     name: "browser_task_control",
     description:
-      "The running browser task: status, or Matthew's answer to its question (approve, change with text, reply with text), or pause / resume / stop.",
+      "The running browser task: status, or Matthew's answer to its question (approve, change with text, reply with text), or pause / resume / stop. follow_up (with text) picks up the last task after it's done: a question about its results or what to do with one (\"add the second one to my to-do list\").",
     inputSchema: schema(
       {
-        action: { type: "string", enum: ["status", "approve", "change", "reply", "pause", "resume", "stop"] },
-        text: str("For change / reply: what he said"),
+        action: { type: "string", enum: ["status", "approve", "change", "reply", "pause", "resume", "stop", "follow_up"] },
+        text: str("For change / reply / follow_up: what he said"),
+        from: { type: "string", enum: ORIGINS, description: "For follow_up: the channel in the message's stamp (via …)" },
       },
       ["action"],
     ),
     handler: async (a, ctx) => {
       const r = runner(ctx);
       const t = r.active;
+      if (a.action === "follow_up") {
+        const last = r.list()[0];
+        if (!last) return "There's no browser task to follow up on.";
+        const text = optional(a, "text");
+        if (!text) return "Say what he wants done with it.";
+        const from = ORIGINS.find((o) => o === a.from);
+        if (!from) return "Give `from`: the channel in the message's stamp, so the answer goes back there.";
+        const now = r.followUp(last.id, { text }, from);
+        return `Following up on “${now.text}” in the Browser window. Tell him in one line; the answer comes back by itself.`;
+      }
       if (!t) {
         const last = r.list()[0];
         return last ? `No browser task is running. The last one (“${last.text}”) ${last.status}${last.result ? `: ${last.result}` : "."}` : "No browser task is running.";

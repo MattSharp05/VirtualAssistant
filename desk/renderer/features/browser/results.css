@@ -1,0 +1,116 @@
+/* A finished task's results (JD-66), in the task sidebar's results slot (task.css scrolls it). */
+.task-results {
+  padding: 12px 12px 14px;
+}
+
+.task-results-title {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.task-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.task-result-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 4px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.task-result-row:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.task-result-row:disabled {
+  cursor: default;
+}
+
+.task-result-row svg {
+  flex: 0 0 auto;
+  color: var(--ink-3);
+}
+
+.task-result-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-result-host {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+
+.task-result-detail {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent-ink);
+}
+
+.task-result-ask {
+  display: flex;
+  gap: 6px;
+}
+
+.task-result-ask input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: var(--bg-deep);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.task-result-ask input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.task-result-ask .task-button {
+  height: 28px;
+}
+
+.task-results-link {
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}

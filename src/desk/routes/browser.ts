@@ -5,10 +5,11 @@
 //   POST /api/desk/browser/tasks { text, mode? }     → BrowserTaskSummary (asked from the window's box)
 //   POST /api/desk/browser/tasks/:id/pause | /resume | /stop      → BrowserTaskSummary
 //   POST /api/desk/browser/tasks/:id/answer BrowserTaskAnswerRequest → BrowserTaskSummary
+//   POST /api/desk/browser/tasks/:id/followup BrowserTaskFollowUpRequest → BrowserTaskSummary (JD-66)
 //   POST /api/desk/browser/tasks/:id/delete (or DELETE …/:id)  → BrowserTasksResponse (JD-67: a finished
 //                                                     task gone from the 30-day log; 400 while it's active)
 // Every change is also a browser.task event on the live stream.
-import type { BrowserTaskAnswerRequest, BrowserTasksResponse } from "@jarvis/shared";
+import type { BrowserTaskAnswerRequest, BrowserTaskFollowUpRequest, BrowserTasksResponse } from "@jarvis/shared";
 import { browserTasksFor, type BrowserTaskRunner } from "../../browser/tasks.js";
 import { JarvisError } from "../../jarvis.js";
 import { DeskHttpError, type DeskContext, type DeskRoute } from "./index.js";
@@ -82,6 +83,20 @@ const routes: DeskRoute[] = [
           ...(typeof body.text === "string" ? { text: body.text } : {}),
         }),
       );
+    },
+  },
+  {
+    method: "POST",
+    path: "/browser/tasks/:id/followup",
+    handler: ({ params, body, ctx }) => {
+      const request: BrowserTaskFollowUpRequest = {
+        text: String(body.text ?? ""),
+        ...(Number.isInteger(body.item) ? { item: body.item as number } : {}),
+      };
+      return withRunner(ctx, (r) => {
+        if (!r.get(params.id)) throw new DeskHttpError(404, "no such browser task");
+        return r.followUp(params.id, request);
+      });
     },
   },
 ];

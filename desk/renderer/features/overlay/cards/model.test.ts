@@ -99,6 +99,9 @@ describe("card helpers", () => {
     expect(popOutWindow(c("session"))).toBe("sessions");
     expect(popOutWindow(c("list"))).toBeUndefined();
     expect(popOutWindow(c("text"))).toBeUndefined();
+    // A browser task's results pop out into the Browser window's results panel (JD-66).
+    expect(popOutWindow({ ...c("list"), id: "browser-task-t1" })).toBe("browser");
+    expect(popOutWindow({ ...c("text"), id: "browser-task-t1" })).toBeUndefined();
   });
 
   it("gives notices their own actions, Open for a bare link, and a Later when there's something to do", () => {

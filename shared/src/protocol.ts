@@ -98,7 +98,8 @@ export interface ScreenCard {
   title: string;
   body: string;
   kind: "text" | "list" | "agenda" | "session";
-  items?: { label: string; detail?: string }[];
+  /** `url`: the row's own page (a browser task's result, JD-66), opened directly. */
+  items?: { label: string; detail?: string; url?: string }[];
   link?: { label: string; url: string };
 }
 
@@ -443,8 +444,23 @@ export interface BrowserTaskSummary {
   question?: BrowserTaskQuestion;
   /** browser_done's summary, or why it stopped. */
   result?: string;
+  /** browser_done's results (JD-66): the Browser window's results panel. A follow-up without new ones keeps these. */
+  results?: BrowserTaskResults;
   /** How many steps the log holds. */
   steps: number;
+}
+
+/** One result of a browser task: `url` when it's a real, single page (opened directly, no agent turn). */
+export interface BrowserTaskResultItem {
+  label: string;
+  detail?: string;
+  url?: string;
+}
+
+export interface BrowserTaskResults {
+  title: string;
+  items: BrowserTaskResultItem[];
+  link?: { label: string; url: string };
 }
 
 export interface BrowserTask extends BrowserTaskSummary {
@@ -467,6 +483,16 @@ export interface BrowserTaskAnswerRequest {
   questionId: string;
   answer: "approve" | "change" | "stop" | "reply";
   text?: string;
+}
+
+/**
+ * POST /api/desk/browser/tasks/:id/followup → BrowserTaskSummary (JD-66). Reopens the newest task when
+ * it's done and nothing else has started since: the same conversation takes one more turn (it can browse
+ * again). `item` is the result it's about (an index into `results.items`), when asked under one.
+ */
+export interface BrowserTaskFollowUpRequest {
+  text: string;
+  item?: number;
 }
 
 /** A saved window layout (JD-37): the built-ins (Work mode, Focus) and Matthew's own. */
