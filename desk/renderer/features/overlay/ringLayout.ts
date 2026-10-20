@@ -17,6 +17,7 @@ const RING = [
   { id: "today", title: "Today", icon: "today" },
   { id: "calendar", title: "Calendar", icon: "calendar" },
   { id: "todo", title: "To-do", icon: "todo" },
+  { id: "ideas", title: "Ideas", icon: "idea" },
   { id: "notion", title: "Notion", icon: "notion" },
   { id: "system", title: "System", icon: "system" },
 ];
