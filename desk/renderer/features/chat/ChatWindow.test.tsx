@@ -92,4 +92,63 @@ describe("Chat window", () => {
     expect(texts).toEqual(["older", "newer"]);
     expect(screen.queryByRole("button", { name: "Earlier messages" })).toBeNull();
   });
+
+  describe("multi-line compose (JD-70)", () => {
+    const box = () => screen.getByRole("textbox", { name: "Message JARVIS" }) as HTMLTextAreaElement;
+
+    it("is a textarea with the keys hint beside today's totals", async () => {
+      mount(bridge);
+      await flush();
+      expect(box().tagName).toBe("TEXTAREA");
+      expect(box().rows).toBe(1);
+      expect(screen.getByText("↵ send · ⇧↵ new line")).toBeTruthy();
+    });
+
+    it("Enter sends the draft and clears the box", async () => {
+      mount(bridge);
+      await flush();
+      fireEvent.change(box(), { target: { value: "hello there" } });
+      const enter = fireEvent.keyDown(box(), { key: "Enter" });
+      await flush();
+      expect(enter).toBe(false); // default prevented: no stray newline
+      expect(bridge.chats.map((c) => c.text)).toEqual(["hello there"]);
+      expect(box().value).toBe("");
+      expect(screen.getByText("hello there")).toBeTruthy();
+    });
+
+    it("Shift+Enter doesn't send, and line breaks reach the log", async () => {
+      mount(bridge);
+      await flush();
+      fireEvent.change(box(), { target: { value: "first line" } });
+      const shiftEnter = fireEvent.keyDown(box(), { key: "Enter", shiftKey: true });
+      expect(shiftEnter).toBe(true); // left to the browser, which inserts the newline
+      expect(bridge.chats).toEqual([]);
+      fireEvent.change(box(), { target: { value: "first line\nsecond line" } });
+      fireEvent.keyDown(box(), { key: "Enter" });
+      await flush();
+      expect(bridge.chats.map((c) => c.text)).toEqual(["first line\nsecond line"]);
+      const bubbles = [...document.querySelectorAll(".chat-msg-mine .chat-bubble")];
+      expect(bubbles.at(-1)?.textContent).toBe("first line\nsecond line");
+    });
+
+    it("Enter that ends an IME composition doesn't send", async () => {
+      mount(bridge);
+      await flush();
+      fireEvent.change(box(), { target: { value: "にほんご" } });
+      fireEvent.keyDown(box(), { key: "Enter", isComposing: true });
+      fireEvent.keyDown(box(), { key: "Enter", keyCode: 229 });
+      await flush();
+      expect(bridge.chats).toEqual([]);
+      expect(box().value).toBe("にほんご");
+    });
+
+    it("Enter on a blank draft sends nothing", async () => {
+      mount(bridge);
+      await flush();
+      fireEvent.change(box(), { target: { value: "   " } });
+      fireEvent.keyDown(box(), { key: "Enter" });
+      await flush();
+      expect(bridge.chats).toEqual([]);
+    });
+  });
 });
