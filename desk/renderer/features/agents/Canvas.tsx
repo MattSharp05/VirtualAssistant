@@ -1,5 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent, type PointerEvent } from "react";
-import { pan, wheelFactor, zoomAt, type Layout, type Viewport } from "./layout";
+import { labelOffset, pan, wheelFactor, zoomAt, type Layout, type Viewport } from "./layout";
+import { Minimap } from "./Minimap";
+import type { BandTone } from "./model";
 import { NodeCard } from "./NodeCard";
 
 /** A pointer that moves this far is a drag (pan), not a click. */
@@ -14,6 +16,10 @@ interface CanvasProps {
   onView(view: Viewport | ((view: Viewport) => Viewport)): void;
   /** The canvas's size on screen (for Fit and zooming around the centre). */
   onSize(size: { w: number; h: number }): void;
+  /** The last size reported (for the minimap's viewport). */
+  size: { w: number; h: number };
+  /** Each project band's status tint, by project id. */
+  tones: ReadonlyMap<string, BandTone>;
   onFit(): void;
   selected?: string;
   flash: ReadonlySet<string>;
@@ -23,12 +29,15 @@ interface CanvasProps {
 }
 
 /**
- * The pannable, zoomable surface: SVG edges under HTML cards, both in one transformed world layer.
+ * The pannable, zoomable surface: full-width project bands (screen space, so they always span the
+ * canvas) under SVG edges and HTML cards in one transformed world layer, and the overview minimap.
+ * Each band's label column is pinned to the canvas's left edge when the world's is off screen.
  * Drag anywhere pans (a drag that starts on a card doesn't click it); ⌘/ctrl + wheel and trackpad
  * pinches zoom around the pointer; the plain wheel scrolls. Keyboard: arrows pan, + / − zoom, 0 fits.
  */
 export function Canvas(props: CanvasProps) {
-  const { layout, view, onView, onSize, onFit, selected, flash, collapsed, onSelect, onToggle } = props;
+  const { layout, view, onView, onSize, size, tones, onFit, selected, flash, collapsed, onSelect, onToggle } =
+    props;
   const el = useRef<HTMLDivElement>(null);
   // The latest view for the native wheel listener and the drag, without re-binding them.
   const viewRef = useRef(view);
@@ -113,6 +122,7 @@ export function Canvas(props: CanvasProps) {
   };
 
   const { bounds } = layout;
+  const offset = labelOffset(view);
   return (
     <div
       ref={el}
@@ -129,6 +139,16 @@ export function Canvas(props: CanvasProps) {
       onClickCapture={onClickCapture}
       onKeyDown={onKeyDown}
     >
+      <div className="agents-bands" aria-hidden="true">
+        {layout.bands.map((b) => (
+          <div
+            key={b.id}
+            className="agents-band"
+            data-band={b.id}
+            style={{ top: b.y * view.k + view.y, height: b.h * view.k }}
+          />
+        ))}
+      </div>
       <div
         className="agents-world"
         style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}
@@ -156,9 +176,13 @@ export function Canvas(props: CanvasProps) {
             collapsed={collapsed.has(p.node.id)}
             onSelect={onSelect}
             onToggle={onToggle}
+            offset={offset}
           />
         ))}
       </div>
+      {layout.bands.length > 0 && (
+        <Minimap layout={layout} tones={tones} view={view} size={size} onView={onView} />
+      )}
     </div>
   );
 }

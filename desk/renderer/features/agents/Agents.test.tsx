@@ -100,15 +100,15 @@ describe("Agents window", () => {
     expect(screen.getByRole("button", { name: /^Builder JD-54/ })).toBeTruthy();
   });
 
-  it("filters: active only, one project, and a ticket search", async () => {
+  it("filters: active only and a ticket search; a jump chip filters nothing away", async () => {
     renderOn("agents");
     await card(/^Builder JD-47/);
     fireEvent.click(screen.getByRole("button", { name: "Active only" }));
     expect(screen.queryByRole("button", { name: /^Builder JD-47/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "All" }));
-    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "project:trip" } });
-    expect(screen.queryByRole("button", { name: "Project JARVIS Desk" })).toBeNull();
-    fireEvent.change(screen.getByLabelText("Project"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Jump to Trip planner/ }));
+    expect(screen.getByRole("button", { name: "Project JARVIS Desk" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Project Trip planner" })).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Search by ticket ID"), { target: { value: "JD-57" } });
     expect(screen.getAllByRole("button", { name: /^Builder/ })).toHaveLength(1);
     expect(screen.getByText("1 match")).toBeTruthy();
@@ -134,7 +134,7 @@ describe("Agents window", () => {
     renderOn("agents");
     await card("Project JARVIS Desk");
     const canvas = screen.getByRole("group", { name: "Agent tree" });
-    const world = canvas.firstElementChild as HTMLElement;
+    const world = canvas.querySelector<HTMLElement>(".agents-world")!;
     const before = world.style.transform;
     act(() => void fireEvent.keyDown(canvas, { key: "ArrowLeft" }));
     expect(world.style.transform).not.toBe(before);
@@ -142,6 +142,51 @@ describe("Agents window", () => {
     expect(screen.getByLabelText("Zoom level").textContent).toBe("120%");
     fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
     expect(screen.getByLabelText("Zoom level").textContent).toBe("100%");
+  });
+
+  it("four projects: a band, a jump chip with its active count and a minimap bar each", async () => {
+    renderOn("agents-projects");
+    await card("Project Gogentic site");
+    const chips = within(screen.getByRole("group", { name: "Jump to project" })).getAllByRole("button");
+    expect(chips.map((c) => c.textContent)).toEqual([
+      "JARVIS Desk 4",
+      "Trip planner 2",
+      "mk 2",
+      "Gogentic site 0",
+    ]);
+    expect(document.querySelectorAll(".agents-band")).toHaveLength(4);
+    const map = screen.getByRole("group", { name: "Overview map" });
+    expect(within(map).getByText("Overview · 4 projects")).toBeTruthy();
+    const tones = [...map.querySelectorAll<HTMLElement>(".agents-minimap-band")].map((b) => [
+      b.dataset.band,
+      b.dataset.tone,
+    ]);
+    expect(Object.fromEntries(tones)).toEqual({
+      "project:jarvis": "waiting",
+      "project:trip": "waiting",
+      "project:mk": "waiting",
+      "project:gogentic": "quiet",
+    });
+    expect(screen.getByRole("button", { name: "Project Gogentic site" }).textContent).toContain(
+      "0 active · quiet",
+    );
+  });
+
+  it("the project label stays pinned to the left edge when panning right", async () => {
+    renderOn("agents");
+    await card("Project JARVIS Desk");
+    const canvas = screen.getByRole("group", { name: "Agent tree" });
+    const label = document.querySelector<HTMLElement>('[data-node-id="project:jarvis"]')!;
+    const orch = document.querySelector<HTMLElement>('[data-node-id="session:session_01JDorch13"]')!;
+    const labelX = () => Number(/translate\(([-\d.]+)px/.exec(label.style.transform)![1]);
+    expect(labelX()).toBe(0);
+    const orchBefore = orch.style.transform;
+    for (let i = 0; i < 10; i++) act(() => void fireEvent.keyDown(canvas, { key: "ArrowRight" }));
+    // The world moved 600 px left; the label moved right inside it by as much as is off screen.
+    expect(labelX()).toBeGreaterThan(0);
+    expect(orch.style.transform).toBe(orchBefore);
+    fireEvent.click(screen.getByRole("button", { name: "Project JARVIS Desk" }));
+    expect(within(panel()).getByRole("heading", { name: /JARVIS Desk/ })).toBeTruthy();
   });
 
   it("empty and loading states", async () => {

@@ -5,8 +5,8 @@ import { FullView } from "../../app/FullView";
 import { useWindowParam } from "../../app/useWindowParam";
 import { Canvas } from "./Canvas";
 import { DetailPanel, type FullViewTarget } from "./DetailPanel";
-import { fit, layoutTree, reveal, zoomAt, type Viewport } from "./layout";
-import { allIds, buildTree, changedIds, findNode, type TreeFilter } from "./model";
+import { bandBounds, CARD, fit, layoutTree, reveal, zoomAt, type Viewport } from "./layout";
+import { allIds, buildTree, changedIds, findNode, projectTone, type TreeFilter } from "./model";
 import { Toolbar } from "./Toolbar";
 import "./agents.css";
 
@@ -18,7 +18,8 @@ export const FLASH_MS = 1600;
  * projects → orchestrators → builders that pans, zooms, collapses and filters. Clicking a card opens
  * its details; Open shows claude.ai or Notion in the window's Full view and GitHub in the browser.
  * agents.changed re-fetches without touching the viewport or the selection, and flashes what changed.
- * openWindow("agents", { node }) selects a node.
+ * openWindow("agents", { node }) selects a node. Each project sits in its own band with a pinned label;
+ * jump chips fit a band and the overview minimap moves the view (JD-75).
  */
 export default function AgentsWindow() {
   const bridge = useBridge();
@@ -84,6 +85,8 @@ export default function AgentsWindow() {
   const tree = useMemo(() => (graph ? buildTree(graph, filter) : []), [graph, filter]);
   const layout = useMemo(() => layoutTree(tree, collapsed), [tree, collapsed]);
   const node = findNode(tree, selected);
+  const tones = useMemo(() => new Map((graph?.projects ?? []).map((p) => [p.id, projectTone(p)])), [graph]);
+  const shown = useMemo(() => new Set(layout.bands.map((b) => b.id)), [layout]);
 
   if (needsFit && graph && size.w > 0) {
     setNeedsFit(false);
@@ -105,8 +108,19 @@ export default function AgentsWindow() {
     (id: string) => {
       setSelected(id);
       // The panel covers the canvas's right side: bring the card into what's left of it.
+      // A project's label is as tall as its band: bring its top into view, not all of it.
       const placed = layout.nodes.find((p) => p.node.id === id);
-      if (placed) setView((v) => reveal(v, placed, { w: Math.max(0, size.w - PANEL_W), h: size.h }));
+      const rect =
+        placed && (placed.depth === 0 ? { ...placed, h: Math.min(placed.h, CARD.project.h) } : placed);
+      if (rect) setView((v) => reveal(v, rect, { w: Math.max(0, size.w - PANEL_W), h: size.h }));
+    },
+    [layout, size],
+  );
+  // A jump chip fits its project's band (nothing is filtered away).
+  const onJump = useCallback(
+    (id: string) => {
+      const band = layout.bands.find((b) => b.id === id);
+      if (band) setView(fit(bandBounds(band, layout.bounds), size));
     },
     [layout, size],
   );
@@ -137,6 +151,8 @@ export default function AgentsWindow() {
         projects={graph?.projects ?? []}
         filter={filter}
         onFilter={onFilter}
+        onJump={onJump}
+        shown={shown}
         zoom={view.k}
         onZoom={(f) => setView((v) => zoomAt(v, { x: size.w / 2, y: size.h / 2 }, f))}
         onFit={refit}
@@ -178,6 +194,8 @@ export default function AgentsWindow() {
                 view={view}
                 onView={setView}
                 onSize={onSize}
+                size={size}
+                tones={tones}
                 onFit={refit}
                 selected={node?.id}
                 flash={flash}

@@ -90,10 +90,10 @@ test.describe("fixed clock", () => {
     await expect(page.getByRole("button", { name: /^Builder Try the dashboard/ })).toHaveCount(0);
     await page.getByRole("button", { name: "All", exact: true }).click();
 
-    await page.getByLabel("Project", { exact: true }).selectOption({ label: "Trip planner" });
-    await expect(page.getByRole("button", { name: "Project JARVIS Desk", exact: true })).toHaveCount(0);
-    await expect(builders(page)).toHaveCount(2);
-    await page.getByLabel("Project", { exact: true }).selectOption({ label: "All projects" });
+    // A jump chip moves the view; it filters nothing away.
+    await page.getByRole("button", { name: /^Jump to Trip planner/ }).click();
+    await expect(page.getByRole("button", { name: "Project JARVIS Desk", exact: true })).toHaveCount(1);
+    await expect(builders(page)).toHaveCount(8);
 
     await page.getByLabel("Search by ticket ID").fill("jd-57");
     await expect(builders(page)).toHaveCount(1);
@@ -127,6 +127,82 @@ test.describe("fixed clock", () => {
     await expect(panel).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(panel).toHaveCount(0);
+  });
+
+  test("agents-projects: four bands, jump chips bring a band into view, the label stays pinned left", async ({
+    page,
+  }) => {
+    await openWindow(page, "agents", "agents-projects");
+    await waitForBridgeIdle(page);
+    await expect(page.locator(".agents-band")).toHaveCount(4);
+    const canvas = (await page.getByRole("group", { name: "Agent tree" }).boundingBox())!;
+    const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
+    // Each label fills its band, and every card of a project sits inside its band.
+    for (const id of ["project:jarvis", "project:trip", "project:mk", "project:gogentic"]) {
+      const band = await box(`.agents-band[data-band="${id}"]`);
+      const label = await box(`[data-node-id="${id}"]`);
+      expect(Math.abs(label.y - band.y)).toBeLessThan(2);
+      expect(Math.abs(label.height - band.height)).toBeLessThan(2);
+    }
+    const mkBand = await box('.agents-band[data-band="project:mk"]');
+    for (const id of ["session:session_01MKorch", "session:session_01MK81", "session:session_01MK79"]) {
+      const b = await box(`[data-node-id="${id}"]`);
+      expect(b.y >= mkBand.y && b.y + b.height <= mkBand.y + mkBand.height, id).toBe(true);
+    }
+
+    // Zoom in, then jump: that project's band comes into view.
+    for (let i = 0; i < 4; i++) await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.getByRole("button", { name: /^Jump to mk/ }).click();
+    const band = await box('.agents-band[data-band="project:mk"]');
+    expect(band.y).toBeGreaterThanOrEqual(canvas.y - 1);
+    expect(band.y + band.height).toBeLessThanOrEqual(canvas.y + canvas.height + 1);
+    await page.getByRole("button", { name: /^Jump to JARVIS Desk/ }).click();
+
+    // Pan right (wheel): the world moves left but the label stays at the canvas's left edge.
+    const label = page.locator('[data-node-id="project:jarvis"]');
+    const orch = page.locator('[data-node-id="session:session_01JDorch13"]');
+    const orchBefore = (await orch.boundingBox())!.x;
+    await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    await page.mouse.wheel(500, 0);
+    await expect.poll(async () => (await orch.boundingBox())!.x).toBeLessThan(orchBefore - 100);
+    expect(Math.abs((await label.boundingBox())!.x - canvas.x)).toBeLessThanOrEqual(1);
+    await page.getByRole("button", { name: "Project JARVIS Desk", exact: true }).click();
+    await expect(page.getByRole("complementary", { name: "Details" })).toBeVisible();
+  });
+
+  test("agents-projects: the minimap shows every band and the viewport; clicking it moves the view", async ({
+    page,
+  }) => {
+    await openWindow(page, "agents", "agents-projects");
+    await waitForBridgeIdle(page);
+    const map = page.getByRole("group", { name: "Overview map" });
+    await expect(map).toBeVisible();
+    await expect(map.locator(".agents-minimap-band")).toHaveCount(4);
+    await expect(map.locator('[data-band="project:mk"]')).toHaveAttribute("data-tone", "waiting");
+    await expect(map.locator('[data-band="project:gogentic"]')).toHaveAttribute("data-tone", "quiet");
+    const viewport = page.getByTestId("minimap-viewport");
+    await expect(viewport).toBeVisible();
+
+    for (let i = 0; i < 6; i++) await page.getByRole("button", { name: "Zoom in" }).click();
+    const before = await transform(page);
+    const vpBefore = (await viewport.boundingBox())!;
+    // Click the bottom bar (Gogentic site): the view moves down to it.
+    const bar = (await map.locator('[data-band="project:gogentic"]').boundingBox())!;
+    await page.mouse.click(bar.x + bar.width / 2, bar.y + bar.height / 2);
+    expect(await transform(page)).not.toBe(before);
+    expect((await viewport.boundingBox())!.y).toBeGreaterThan(vpBefore.y);
+    await expect(page.locator('[data-node-id="project:gogentic"]')).toBeInViewport();
+    // Clicking the map selects nothing on the canvas.
+    await expect(page.getByRole("complementary", { name: "Details" })).toHaveCount(0);
+
+    // Dragging in the map moves the view with it.
+    const area = (await map.locator(".agents-minimap-area").boundingBox())!;
+    await page.mouse.move(area.x + 10, area.y + 10);
+    await page.mouse.down();
+    const mid = await transform(page);
+    await page.mouse.move(area.x + area.width - 10, area.y + 20, { steps: 5 });
+    await page.mouse.up();
+    expect(await transform(page)).not.toBe(mid);
   });
 
   test("agents-ci-failed: every check with its state in the panel", async ({ page }) => {
