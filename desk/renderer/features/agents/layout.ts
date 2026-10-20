@@ -159,11 +159,11 @@ export function bandBounds(band: Band, bounds: Bounds): Bounds {
 }
 
 /**
- * How far right (world px) a band's label column moves so it stays pinned to the canvas's left edge:
- * 0 while the world's left edge is on screen, else as far as the screen's left edge.
+ * How far (world px) a band's label column moves so it always sits at the canvas's left edge,
+ * whether the world is panned left past it or fitted with room to its left.
  */
 export function labelOffset(view: Viewport): number {
-  return Math.max(0, -view.x / view.k);
+  return -view.x / view.k;
 }
 
 /** A smooth S from the middle of the parent's right edge to the middle of the child's left edge. */

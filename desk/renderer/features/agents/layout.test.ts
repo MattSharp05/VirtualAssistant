@@ -138,9 +138,9 @@ describe("project bands", () => {
     expect(bandBounds(b, many.bounds)).toEqual({ x: many.bounds.x, y: b.y, w: many.bounds.w, h: b.h });
   });
 
-  it("labelOffset keeps the label at the world's left edge, then pins it to the screen's", () => {
-    expect(labelOffset({ x: 40, y: 0, k: 1 })).toBe(0);
-    expect(labelOffset({ x: 0, y: 0, k: 1 })).toBe(0);
+  it("labelOffset pins the label to the screen's left edge, panned either way", () => {
+    expect(labelOffset({ x: 40, y: 0, k: 1 })).toBe(-40);
+    expect(labelOffset({ x: 0, y: 0, k: 1 })).toBe(-0);
     expect(labelOffset({ x: -300, y: 0, k: 1 })).toBe(300);
     // At half zoom 300 screen px are 600 world px: the label's screen x is 0 either way.
     const v = { x: -300, y: 0, k: 0.5 };

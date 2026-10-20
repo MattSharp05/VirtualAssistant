@@ -179,11 +179,18 @@ describe("Agents window", () => {
     const label = document.querySelector<HTMLElement>('[data-node-id="project:jarvis"]')!;
     const orch = document.querySelector<HTMLElement>('[data-node-id="session:session_01JDorch13"]')!;
     const labelX = () => Number(/translate\(([-\d.]+)px/.exec(label.style.transform)![1]);
-    expect(labelX()).toBe(0);
+    const world = canvas.querySelector<HTMLElement>(".agents-world")!;
+    const screenX = () => {
+      const [, x, k] = /translate\(([-\d.]+)px, [-\d.]+px\) scale\(([-\d.]+)\)/.exec(world.style.transform)!;
+      return labelX() * Number(k) + Number(x);
+    };
+    expect(screenX()).toBeCloseTo(0);
+    const before = labelX();
     const orchBefore = orch.style.transform;
     for (let i = 0; i < 10; i++) act(() => void fireEvent.keyDown(canvas, { key: "ArrowRight" }));
-    // The world moved 600 px left; the label moved right inside it by as much as is off screen.
-    expect(labelX()).toBeGreaterThan(0);
+    // The world moved 600 px left; the label moved right inside it by as much, staying at the edge.
+    expect(labelX()).toBeGreaterThan(before);
+    expect(screenX()).toBeCloseTo(0);
     expect(orch.style.transform).toBe(orchBefore);
     fireEvent.click(screen.getByRole("button", { name: "Project JARVIS Desk" }));
     expect(within(panel()).getByRole("heading", { name: /JARVIS Desk/ })).toBeTruthy();
