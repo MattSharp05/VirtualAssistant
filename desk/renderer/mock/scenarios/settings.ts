@@ -16,6 +16,7 @@ const paired = {
   statusFiles: { barehandsDir: "/Users/matthew/Projects/barehands/status" },
   face: "corner",
   checkForUpdates: true,
+  autoInstallUpdates: true,
   showInDock: true,
 };
 

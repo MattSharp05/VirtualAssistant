@@ -1,4 +1,6 @@
-# JARVIS Desk packaging (ADR 0010): an ad-hoc-signed arm64 .dmg, no Apple developer account.
+# JARVIS Desk packaging (ADR 0010): an ad-hoc-signed arm64 .dmg, no Apple developer account. The .zip
+# for automatic updates (JD-74) is made from release/mac-arm64 by scripts/zip-mac.mjs, with ditto:
+# electron-builder's own zip drops the signature's resources.
 appId: ai.jarvis.desk
 productName: JARVIS Desk
 directories:

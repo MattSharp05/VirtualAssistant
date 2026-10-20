@@ -1,7 +1,8 @@
 # Releases JARVIS Desk (ADR 0010): push a tag desk-vX.Y.Z, or run this workflow by hand with a version
 # (Actions → Release JARVIS Desk → Run workflow), and it builds the ad-hoc-signed arm64 .dmg on a macOS
 # runner and publishes it as a GitHub Release (creating the tag when run by hand). The repo is public,
-# so no token setup.
+# so no token setup. JD-74: the release also carries a .zip of the app and latest-mac.json (version, zip
+# URL, size, sha256), which the installed app uses to update itself; the .dmg stays for first installs.
 name: Release JARVIS Desk
 
 on:
@@ -36,14 +37,25 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=desk-v$VERSION" >> "$GITHUB_OUTPUT"
           cd desk && npm version --no-git-tag-version --allow-same-version "$VERSION" >/dev/null
-      - name: Build the .dmg
+      - name: Build the .dmg and the .zip
         working-directory: desk
         run: npm run dist:mac
+      - name: Write latest-mac.json
+        working-directory: desk
+        run: node scripts/latest-mac.mjs "${{ steps.version.outputs.version }}"
+      - name: Check the release files
+        working-directory: desk/release
+        run: |
+          ls -l
+          for pattern in "*.dmg" "*.zip" "latest-mac.json"; do
+            set -- $pattern
+            if [ ! -s "$1" ]; then echo "::error::Missing $pattern in desk/release"; exit 1; fi
+          done
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" desk/release/*.dmg \
+          gh release create "${{ steps.version.outputs.tag }}" desk/release/*.dmg desk/release/*.zip desk/release/latest-mac.json \
             --target "$GITHUB_SHA" \
             --title "JARVIS Desk ${{ steps.version.outputs.version }}" \
             --generate-notes \
