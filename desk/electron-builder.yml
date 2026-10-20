@@ -43,6 +43,8 @@ mac:
     - target: zip
       arch: arm64
   category: public.app-category.productivity
+  # The zip's name (JD-74); dmg.artifactName below overrides it for the .dmg.
+  artifactName: JARVIS-Desk-${version}-${arch}-mac.${ext}
   # "-" = ad-hoc signature: required for arm64 apps to launch; Gatekeeper still asks once (right-click → Open).
   identity: "-"
   hardenedRuntime: false
@@ -52,5 +54,3 @@ mac:
     NSCameraUsageDescription: JARVIS uses the camera only when Camera hands is on, to track your hands.
 dmg:
   artifactName: JARVIS-Desk-${version}-${arch}.${ext}
-zip:
-  artifactName: JARVIS-Desk-${version}-${arch}-mac.${ext}
