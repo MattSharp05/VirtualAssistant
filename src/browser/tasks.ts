@@ -167,6 +167,13 @@ export class BrowserTaskRunner {
     return t && summary(t);
   }
 
+  /** Deletes a finished task (done, stopped or failed) from the 30-day log for good (JD-67). */
+  forget(id: string): Promise<void> {
+    const t = this.mine(id);
+    if (ACTIVE.has(t.status)) throw new JarvisError(`The task is ${t.status}. Stop it first, then delete it.`);
+    return this.save((tasks) => tasks.filter((x) => x.id !== id));
+  }
+
   // ── Starting ──
 
   /** Starts a task (queued work isn't a thing: one browser, one task). Throws when one is going or no Desk. */

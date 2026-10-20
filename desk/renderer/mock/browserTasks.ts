@@ -1,6 +1,7 @@
 // Browser tasks in the mock bridge (JD-60): a history of tasks with their logs, and the routes the
 // Browser window's task strip and the question cards call (start, pause, resume, stop, answer), each
-// answered as the server would (src/browser/tasks.ts) and followed by a browser.task event.
+// answered as the server would (src/browser/tasks.ts) and followed by a browser.task event. History's
+// delete (JD-67) drops a finished task from the bridge's copy.
 import type {
   BrowserTask,
   BrowserTaskMode,
@@ -170,7 +171,7 @@ export function questionNotice(t: BrowserTask): DeskEvent | undefined {
 }
 
 const FULL = /on your own|full autonomy|without asking/i;
-const TASK = /^\/browser\/tasks\/([^/]+)(?:\/(pause|resume|stop|answer))?$/;
+const TASK = /^\/browser\/tasks\/([^/]+)(?:\/(pause|resume|stop|answer|delete))?$/;
 
 /** GET /browser/tasks(/:id) and the writes, on the bridge's own copy of the tasks. */
 export const browserTaskRoutes: MockRoute = (path, body, { data, emit }) => {
@@ -204,6 +205,12 @@ export const browserTaskRoutes: MockRoute = (path, body, { data, emit }) => {
   const t = tasks.find((x) => x.id === id);
   if (!t) throw new Error(`No browser task ${id}.`);
   if (!action) return t;
+  if (action === "delete") {
+    if (["running", "waiting", "paused"].includes(t.status))
+      throw new Error(`The task is ${t.status}. Stop it first, then delete it.`);
+    data[TASKS_KEY] = tasks.filter((x) => x.id !== id);
+    return { tasks: tasks.filter((x) => x.id !== id).map(summary) } satisfies BrowserTasksResponse;
+  }
   const rest: BrowserTask = { ...t };
   delete rest.question;
   const running = (s: string, kind: BrowserTaskStep["kind"], line: string): BrowserTask => ({

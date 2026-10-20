@@ -1,0 +1,54 @@
+/* History's delete (JD-67): the trash button beside the chosen task's title and its confirm band. */
+.task-history-detail-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.task-history-detail-head h3 {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-history-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 7px;
+}
+
+.task-history-delete:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+  color: var(--red);
+}
+
+.task-history-hint {
+  margin: 0 0 10px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.task-history-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border-left: 3px solid var(--red);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--red) 9%, transparent);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.task-history-confirm span {
+  flex: 1;
+  min-width: 180px;
+}
+
+.task-history-delete-error {
+  margin: 0 0 12px;
+  color: var(--red);
+  font-size: 12px;
+}

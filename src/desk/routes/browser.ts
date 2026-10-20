@@ -5,6 +5,8 @@
 //   POST /api/desk/browser/tasks { text, mode? }     → BrowserTaskSummary (asked from the window's box)
 //   POST /api/desk/browser/tasks/:id/pause | /resume | /stop      → BrowserTaskSummary
 //   POST /api/desk/browser/tasks/:id/answer BrowserTaskAnswerRequest → BrowserTaskSummary
+//   POST /api/desk/browser/tasks/:id/delete (or DELETE …/:id)  → BrowserTasksResponse (JD-67: a finished
+//                                                     task gone from the 30-day log; 400 while it's active)
 // Every change is also a browser.task event on the live stream.
 import type { BrowserTaskAnswerRequest, BrowserTasksResponse } from "@jarvis/shared";
 import { browserTasksFor, type BrowserTaskRunner } from "../../browser/tasks.js";
@@ -27,6 +29,15 @@ function withRunner<T>(ctx: DeskContext, work: (r: BrowserTaskRunner) => T): T {
     if (err instanceof JarvisError) throw new DeskHttpError(400, err.message);
     throw err;
   }
+}
+
+/** Deletes a finished task for good and answers with the list left. */
+async function forget(ctx: DeskContext, id: string): Promise<BrowserTasksResponse> {
+  await withRunner(ctx, (r) => {
+    if (!r.get(id)) throw new DeskHttpError(404, "no such browser task");
+    return r.forget(id);
+  });
+  return withRunner(ctx, (r) => ({ tasks: r.list() }));
 }
 
 const routes: DeskRoute[] = [
@@ -56,6 +67,8 @@ const routes: DeskRoute[] = [
   { method: "POST", path: "/browser/tasks/:id/pause", handler: ({ params, ctx }) => withRunner(ctx, (r) => r.pause(params.id)) },
   { method: "POST", path: "/browser/tasks/:id/resume", handler: ({ params, ctx }) => withRunner(ctx, (r) => r.resume(params.id)) },
   { method: "POST", path: "/browser/tasks/:id/stop", handler: ({ params, ctx }) => withRunner(ctx, (r) => r.stop(params.id)) },
+  { method: "POST", path: "/browser/tasks/:id/delete", handler: ({ params, ctx }) => forget(ctx, params.id) },
+  { method: "DELETE", path: "/browser/tasks/:id", handler: ({ params, ctx }) => forget(ctx, params.id) },
   {
     method: "POST",
     path: "/browser/tasks/:id/answer",

@@ -1,7 +1,8 @@
 // Browser tasks (JD-60), for the preview, e2e and snapshots: JARVIS booking a table at Taberna da Rua
 // in the Browser window. Normal mode waiting on Matthew's OK to book (the question band, and its card
 // beside the orb); Full autonomy working on its own (Pause / Stop, no questions); and the password
-// stop, where Matthew takes over to sign in and hands back. Each has the History menu's past tasks.
+// stop, where Matthew takes over to sign in and hands back. Each has the History menu's past tasks;
+// browser-task-history has only finished ones, each deletable for good from History (JD-67).
 // JD-65: the ask box as the window's centrepiece (no page, no task), and a task running with its
 // sidebar closed (the status line's pill brings it back).
 import type { BrowserState, BrowserTask } from "@jarvis/shared";
@@ -149,6 +150,16 @@ const scenarios: Scenario[] = [
     password,
     "Waiting for you · The page asks for a password",
   ),
+  {
+    name: "browser-task-history",
+    description:
+      "Browser task History with only finished tasks: open History, pick one, the trash button, then Delete for good.",
+    data: tasksData(pastTasks),
+    events: [],
+    routes: [browserTaskRoutes],
+    browser: page("Ready"),
+    ui: { now: NOW },
+  },
 ];
 
 export default scenarios;
