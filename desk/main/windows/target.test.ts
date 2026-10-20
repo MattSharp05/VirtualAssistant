@@ -11,6 +11,15 @@ describe("parseWindowId", () => {
     });
   });
 
+  it("takes a session id as an option: each popped-out session is its own window (JD-72)", () => {
+    expect(parseWindowId("sessions?solo=mk")).toEqual({ feature: "sessions", query: "solo=mk" });
+    expect(parseWindowId("sessions?solo=session_01SM")).toEqual({
+      feature: "sessions",
+      query: "solo=session_01SM",
+    });
+    expect(parseWindowId("sessions?solo=a/b")).toBeUndefined();
+  });
+
   it("refuses anything that isn't a feature name with simple options", () => {
     for (const id of ["", "../today", "Today", "today?section", "today?a=b?c=d", "today?a=<b>"])
       expect(parseWindowId(id), id).toBeUndefined();

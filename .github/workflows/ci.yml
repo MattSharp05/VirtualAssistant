@@ -43,6 +43,8 @@ jobs:
               - "desk/preload/**"
               - "desk/package.json"
               - "desk/electron-builder.yml"
+              - "desk/e2e/electron/**"
+              - "desk/scripts/**"
               - "desk/build/**"
               - "package-lock.json"
               - ".github/workflows/ci.yml"
@@ -126,6 +128,9 @@ jobs:
     timeout-minutes: 15
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      # electron-builder skips signing on pull requests; ad-hoc sign like a release, so the update
+      # smoke test (JD-74) can check the app's signature.
+      CSC_FOR_PULL_REQUEST: "true"
       # The Electron smoke test needs the real binary here.
       ELECTRON_SKIP_BINARY_DOWNLOAD: ""
     steps:

@@ -2,15 +2,17 @@
 // needs Matthew.
 //   GET  /api/desk/sessions               → DeskSession[] (needs-you first, then newest activity), each
 //                                           with metrics: tokens, cost, context, wall time, status (JD-53)
+//                                           and the project they name (JD-72)
 //   GET  /api/desk/sessions/:id           → SessionDetail (activity, last 5 reports, link); its
 //                                           session.metrics adds turns, tool calls, PRs, active time
 //   POST /api/desk/sessions/:id/send { text } → SessionSendResponse (the Telegram/brain send path)
 // :id is a tracked name ("mk") or a cloud session id. New reports publish sessions.changed
 // (src/notifyRules.ts), and so does a message sent from here.
-import type { DeskSession, ReportKind, SessionDetail, SessionGroup, SessionReport, SessionSendResponse } from "@jarvis/shared";
+import type { DeskSession, ReportKind, SessionDetail, SessionGroup, SessionMetrics, SessionReport, SessionSendResponse } from "@jarvis/shared";
 import { sessionActivity } from "../../activity.js";
 import { JarvisError } from "../../jarvis.js";
 import { classify } from "../../notifyRules.js";
+import { projectName } from "../../sessionUsage.js";
 import type { CloudSession } from "../../sessions.js";
 import { parseSessionId, sessionUrl, type Job, type Report } from "../../store.js";
 import { DeskHttpError, type DeskContext, type DeskRoute } from "./index.js";
@@ -76,7 +78,14 @@ async function listFor(ctx: DeskContext, withMetrics = false): Promise<DeskSessi
   const list = mergeSessions(cloud.available ? cloud.sessions : [], jarvis.store.recentJobs(1000), jarvis.store.recentReports(200).reverse());
   if (!withMetrics) return list;
   const metrics = await jarvis.metrics.summaries(list.map((s) => s.sessionId));
-  return list.map((s) => (metrics.has(s.sessionId) ? { ...s, metrics: metrics.get(s.sessionId) } : s));
+  return list.map((s) => withProject(s, metrics.get(s.sessionId)));
+}
+
+/** A row with its metrics and the project they name (JD-72: project:<name> tag, else the repo's name). */
+export function withProject(s: DeskSession, metrics: SessionMetrics | undefined): DeskSession {
+  if (!metrics) return s;
+  const project = projectName(metrics);
+  return { ...s, metrics, ...(project ? { project } : {}) };
 }
 
 async function find(ctx: DeskContext, id: string): Promise<DeskSession> {
@@ -101,7 +110,7 @@ const routes: DeskRoute[] = [
             .map((r) => ({ text: r.text, at: r.receivedAt, kind: classify(r.text) }))
         : [];
       const [activity, metrics] = await Promise.all([sessionActivity(session.sessionId, 15), ctx.jarvis.metrics.full(session.sessionId)]);
-      return { session: metrics ? { ...session, metrics } : session, activity, reports, link: session.url };
+      return { session: withProject(session, metrics), activity, reports, link: session.url };
     },
   },
   {

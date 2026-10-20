@@ -15,6 +15,7 @@ const paths: Record<string, string> = {
   spark: "M12 3l2 7 7 2-7 2-2 7-2-7-7-2 7-2z",
   orb: "M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z",
   refresh: "M20 11a8 8 0 1 0-2 5.3M20 4v7h-7",
+  popout: "M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
   minimize: "M6 12h12",
   close: "M6 6l12 12M18 6 6 18",
   search: "M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5 20 20",

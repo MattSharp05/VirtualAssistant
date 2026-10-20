@@ -63,7 +63,8 @@
 
 .chat button:focus-visible,
 .chat select:focus-visible,
-.chat input:focus-visible {
+.chat input:focus-visible,
+.chat textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -140,6 +141,7 @@
 }
 
 .chat-meta,
+.chat-hint,
 .chat-today,
 .chat-calendar-time {
   font-family: var(--font-mono);
@@ -236,7 +238,7 @@
 
 .chat-compose {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 10px;
   padding: 14px 16px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -264,18 +266,26 @@
   opacity: 0.6;
 }
 
+/* A textarea that grows with its text (height set from scrollHeight) up to six lines, then scrolls. */
 .chat-input {
+  display: block;
   flex: 1;
   min-width: 0;
   height: 44px;
+  min-height: 44px;
+  max-height: calc(6 * 1.45em + 24px);
   box-sizing: border-box;
-  padding: 0 14px;
+  margin: 0;
+  padding: 11px 14px;
+  overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
   background: var(--bg-deep);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 15px;
+  line-height: 1.45;
+  resize: none;
 }
 
 .chat-input::placeholder {
@@ -301,6 +311,10 @@
   cursor: default;
 }
 
-.chat-today {
-  padding: 0 18px 12px;
+/* Under the compose bar: the keys hint (lined up with the text box) and today's totals. */
+.chat-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px 12px 70px;
 }

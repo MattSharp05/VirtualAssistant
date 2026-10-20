@@ -71,4 +71,6 @@ export interface ScenarioUi {
   now?: string;
   /** The Browser window's task sidebar starts closed (JD-65): the status line's pill reopens it. */
   taskPanelClosed?: boolean;
+  /** The Sessions window starts popped out on this session (JD-72), as `sessions?solo=<id>` does. */
+  sessionsSolo?: string;
 }

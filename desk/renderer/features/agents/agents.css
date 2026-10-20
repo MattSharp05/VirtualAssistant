@@ -75,7 +75,42 @@
   color: var(--accent-ink);
 }
 
-.agents-select,
+/* Jump chips: one per project with its active count (JD-75). */
+.agents-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agents-chip {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agents-chip:hover:not(:disabled) {
+  border-color: rgba(95, 212, 230, 0.4);
+  background: rgba(95, 212, 230, 0.08);
+}
+
+.agents-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.agents-chip-count {
+  margin-left: 2px;
+  font-family: var(--font-mono);
+  color: var(--accent-ink);
+}
+
 .agents-search {
   height: 36px;
   box-sizing: border-box;
@@ -85,10 +120,6 @@
   color: var(--ink);
   font: inherit;
   font-size: 13px;
-}
-
-.agents-select {
-  padding: 0 8px;
 }
 
 .agents-search {
@@ -327,9 +358,117 @@
   border-color: rgba(255, 255, 255, 0.22);
 }
 
+/* A project is its band's label column (JD-75): full band height, pinned to the canvas's left edge. */
+.agents-node[data-kind="project"] {
+  z-index: 2;
+}
+
 .agents-node[data-kind="project"] .agents-card {
-  border-color: rgba(95, 212, 230, 0.32);
-  background: linear-gradient(180deg, rgba(95, 212, 230, 0.1), rgba(18, 25, 33, 0.92));
+  justify-content: center;
+  gap: 6px;
+  padding: 0 16px;
+  border: 0;
+  border-right: 1px solid rgba(95, 212, 230, 0.25);
+  border-radius: 0;
+  background: rgb(17, 22, 28);
+}
+
+.agents-node[data-kind="project"] .agents-card:hover {
+  background: rgb(24, 32, 41);
+}
+
+.agents-node[data-kind="project"][data-selected] .agents-card {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.agents-node[data-kind="project"] .agents-card-title {
+  font-size: 17px;
+}
+
+.agents-label-meta {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agents-label-meta b {
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+/* ── Project bands (screen space, so they always span the canvas) ── */
+.agents-bands {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.agents-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  border-top: 1px solid rgba(95, 212, 230, 0.18);
+  border-bottom: 1px solid rgba(95, 212, 230, 0.18);
+  background: rgba(95, 212, 230, 0.035);
+}
+
+/* ── Overview minimap ── */
+.agents-minimap {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 190px;
+  height: 128px;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(17, 22, 28, 0.94);
+  cursor: default;
+}
+
+.agents-minimap .agents-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.agents-minimap-area {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.agents-minimap-band {
+  position: absolute;
+  box-sizing: border-box;
+  border-bottom: 1px solid rgba(17, 22, 28, 0.94);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.agents-minimap-band[data-tone="working"] {
+  background: rgba(95, 212, 230, 0.26);
+}
+
+.agents-minimap-band[data-tone="waiting"] {
+  background: rgba(242, 178, 76, 0.32);
+}
+
+.agents-minimap-view {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1.5px solid var(--accent);
+  border-radius: 3px;
+  pointer-events: none;
 }
 
 .agents-node[data-selected] .agents-card {

@@ -9,7 +9,7 @@ import type { Config } from "../src/config.js";
 import { DeviceStore } from "../src/desk/auth.js";
 import { DeskRpc } from "../src/desk/rpc.js";
 import { DeskRouter, type DeskContext } from "../src/desk/routes/index.js";
-import { groupFor, IDLE_AFTER_MS, mergeSessions } from "../src/desk/routes/sessions.js";
+import { groupFor, IDLE_AFTER_MS, mergeSessions, withProject } from "../src/desk/routes/sessions.js";
 import { SseHub } from "../src/desk/sse.js";
 import { EventBus } from "../src/events.js";
 import { Jarvis } from "../src/jarvis.js";
@@ -153,6 +153,16 @@ test("GET /sessions and /sessions/:id: grouped list, reports newest first, activ
   assert.equal((await s.get("/sessions/nope")).status, 404);
 });
 
+test("JD-72: a row's project is its project:<name> tag, else its repo's name, else absent", () => {
+  const row = mergeSessions([{ id: "session_01P", title: "P", url: "u" }], [], [], NOW)[0]!;
+  const at = new Date(NOW).toISOString();
+  assert.equal(withProject(row, { checkedAt: at, tags: ["urgent", "project: jarvis"], repo: "o/mk" }).project, "jarvis");
+  assert.equal(withProject(row, { checkedAt: at, repo: "MattSharp05/VirtualAssistant" }).project, "VirtualAssistant");
+  const none = withProject(row, { checkedAt: at, tags: ["urgent"] });
+  assert.ok(none.metrics && !("project" in none), "no tag and no repo: no project");
+  assert.equal(withProject(row, undefined), row, "no metrics: unchanged");
+});
+
 test("JD-53: rows carry tokens, cost, context, wall time and status; the detail adds activity; no usage = unknown", async (t) => {
   const s = await start();
   t.after(s.stop);
@@ -162,6 +172,7 @@ test("JD-53: rows carry tokens, cost, context, wall time and status; the detail 
     "/v1/code/sessions/session_01MK": {
       status_bucket: "SESSION_STATUS_BUCKET_WORKING",
       created_at: created,
+      tags: ["project:jarvis"],
       external_metadata: {
         usage: { input_tokens: 100, output_tokens: 200, cache_read_tokens: 3000, cache_write_tokens: 400, cost_usd: 1.5 },
         context_usage: { used_tokens: 250_000, max_tokens: 1_000_000 },
@@ -192,12 +203,15 @@ test("JD-53: rows carry tokens, cost, context, wall time and status; the detail 
   assert.equal(mk.statusBucket, "working");
   assert.ok(mk.wallMs! >= 90 * 60_000 - 1000);
   assert.equal(mk.turns, undefined, "activity is detail only");
+  assert.equal(list.find((x) => x.id === "mk")!.project, "jarvis");
+  assert.ok(!("project" in list.find((x) => x.id === "session_01SM")!), "untagged, no repo: no project");
   const sm = list.find((x) => x.id === "session_01SM")!.metrics!;
   assert.equal(sm.statusBucket, "review_ready");
   assert.ok(!("costUsd" in sm) && !("totalTokens" in sm) && !("contextPercent" in sm), "unknown, not 0");
 
   const detail = (await (await s.get("/sessions/mk")).json()) as SessionDetail;
   assert.equal(detail.session.metrics?.turns, 1);
+  assert.equal(detail.session.project, "jarvis");
   assert.equal(detail.session.metrics?.toolCalls, 1);
   assert.deepEqual(detail.session.metrics?.prs, ["https://github.com/o/mk/pull/81"]);
   assert.ok((detail.session.metrics?.activeMs ?? 0) >= 90 * 60_000 - 1000, "the open turn counts to now");

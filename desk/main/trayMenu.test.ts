@@ -77,6 +77,15 @@ describe("tray menu (mockup 8)", () => {
     expect(act.checkForUpdates).toHaveBeenCalled();
   });
 
+  it("offers Restart to update once an update is downloaded (JD-74)", () => {
+    const act = actions();
+    const update = { version: "1.2.10", ready: "1.2.10" };
+    const items = trayMenu(state({ update }), act).filter((i) => /update/i.test(i.label ?? ""));
+    expect(items.map((i) => i.label)).toEqual(["Restart to update (v1.2.10)", "Check for updates"]);
+    items[0]!.click!();
+    expect(act.installUpdate).toHaveBeenCalledOnce();
+  });
+
   it("ticks the current face and toggles, and each click flips its setting", () => {
     const act = actions();
     const items = trayMenu(state(), act);

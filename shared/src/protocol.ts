@@ -834,6 +834,8 @@ export interface DeskSession {
   url: string;
   /** What the session has used (JD-53); absent when its detail couldn't be read. */
   metrics?: SessionMetrics;
+  /** Its project (JD-72): the `project:<name>` tag, else the repo's name; absent when neither. */
+  project?: string;
 }
 
 /** The sessions API's status bucket, lower-cased without its prefix ("working", "completed"…). */
