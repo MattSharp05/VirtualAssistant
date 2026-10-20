@@ -48,6 +48,8 @@ export type DeskEvent =
   | { type: "voice.transcript"; text: string; final: boolean }
   /** JARVIS Tasks changed (added, completed, edited); windows re-fetch /tasks. */
   | { type: "tasks.changed" }
+  /** Matthew's ideas changed (JD-73: added, edited, deleted, or an action ran); the Ideas window re-fetches /ideas. */
+  | { type: "ideas.changed" }
   /** JARVIS changed Matthew's calendar (JD-14); the Calendar window's "Changed by JARVIS" log. */
   | { type: "calendar.changed"; entry: CalendarChange }
   /** A fresh Today digest is ready (JD-17); GET /api/desk/today. */
@@ -569,7 +571,7 @@ export interface ChatModelResponse {
 // ── JARVIS Tasks (a Notion database Matthew can see and edit; ADR 0006) ──
 
 export type TaskStatus = "Suggested" | "Open" | "Done" | "Dismissed";
-export type TaskSource = "You" | "Slack" | "Email" | "Session" | "Notion QA";
+export type TaskSource = "You" | "Slack" | "Email" | "Session" | "Notion QA" | "Idea";
 export type TaskPriority = "P1" | "P2" | "P3";
 
 export interface TaskItem {
@@ -609,6 +611,70 @@ export interface NewTask {
   due?: string;
   project?: string;
   priority?: TaskPriority;
+}
+
+// ── Ideas (JD-73): quick notes tagged to a project, kept in JARVIS's own store (DATA_DIR/ideas.json, not Notion) ──
+
+/** What an idea can be turned into (the Ideas window's "Then" row). */
+export type IdeaAction = "todo" | "chat" | "session";
+
+/** One thing done with an idea, oldest first: a Suggested to-do, a chat with JARVIS, a cloud session. */
+export interface IdeaHistoryEntry {
+  kind: IdeaAction;
+  at: string;
+  /** The session (or the to-do's Notion row), when there is one to open. */
+  link?: string;
+  /** A short name for it: the session's job name. */
+  label?: string;
+}
+
+export interface DeskIdea {
+  id: string;
+  /** Free text; the first line is its title in lists. */
+  text: string;
+  /** A project slug (PROJECTS / project: tags); absent = Unsorted. */
+  project?: string;
+  createdAt: string;
+  updatedAt: string;
+  history: IdeaHistoryEntry[];
+}
+
+/** A project an idea can be tagged with: PROJECTS plus project: tags seen on sessions. */
+export interface IdeaProject {
+  slug: string;
+  name: string;
+}
+
+/**
+ * GET /api/desk/ideas → every idea (newest first) and the projects to tag them with.
+ * POST /ideas { text, project? } → DeskIdea; POST (or PUT) /ideas/:id { text?, project? } → DeskIdea
+ * (project null or "" = Unsorted); DELETE /ideas/:id (or POST /ideas/:id/delete) → { ok }.
+ * Changes publish ideas.changed.
+ */
+export interface IdeasResponse {
+  ideas: DeskIdea[];
+  projects: IdeaProject[];
+}
+
+export interface NewIdea {
+  text: string;
+  project?: string;
+}
+
+/** POST /api/desk/ideas/:id/<todo|chat|session> { context? }: the context is optional extra words. */
+export interface IdeaActionRequest {
+  context?: string;
+}
+
+/** The idea with its new history entry, and what the action made. */
+export interface IdeaActionResponse {
+  idea: DeskIdea;
+  /** todo: the Suggested task (or the one already made from this idea). */
+  task?: TaskItem;
+  /** chat: the brain turn, streamed as brain.* events with this id. */
+  messageId?: string;
+  /** session: the job JARVIS tracks it as, and its link. */
+  session?: { name: string; url: string };
 }
 
 /** GET /api/desk/mood */

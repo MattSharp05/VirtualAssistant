@@ -83,4 +83,33 @@ describe("To-do window", () => {
     expect(chat).toHaveBeenCalledWith("add call Sam on Friday", "desk-typed");
     expect((await screen.findByRole("status")).textContent).toBe("Asked JARVIS: “add call Sam on Friday”");
   });
+
+  it("shows a suggestion made from an idea (JD-73) with its Idea source and why", async () => {
+    const base = findScenario("todo")!;
+    const suggested = {
+      view: "suggested",
+      tasks: [
+        {
+          id: "idea-task",
+          name: "Weekly cost digest in Today",
+          status: "Suggested",
+          source: "Idea",
+          project: "JARVIS Desk",
+          why: "before Friday",
+          createdAt: "2026-10-20T08:00:00Z",
+        },
+      ],
+    };
+    bridge = createMockBridge({ ...base, data: { ...base.data, "/tasks?view=suggested": suggested } });
+    render(
+      <BridgeProvider value={{ bridge, scenario: "todo" }}>
+        <Todo />
+      </BridgeProvider>,
+    );
+    const row = (await screen.findByText("Weekly cost digest in Today")).closest(
+      ".todo-suggestion",
+    ) as HTMLElement;
+    expect(within(row).getByText("Idea", { exact: true })).toBeTruthy();
+    expect(within(row).getByText("before Friday")).toBeTruthy();
+  });
 });

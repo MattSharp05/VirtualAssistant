@@ -83,6 +83,7 @@ describe("Overlay + orb", () => {
       "Today",
       "Calendar",
       "To-do",
+      "Ideas",
       "Notion",
       "System",
     ]);

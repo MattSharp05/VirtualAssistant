@@ -13,6 +13,7 @@ describe("launcher ring", () => {
       "today",
       "calendar",
       "todo",
+      "ideas",
       "notion",
       "system",
     ]);
@@ -28,11 +29,11 @@ describe("launcher ring", () => {
       expect(Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y)).toBeGreaterThan(44);
   });
 
-  it("widens the ring as buttons are added, so all eight keep clear of each other", () => {
+  it("widens the ring as buttons are added, so all nine keep clear of each other", () => {
     expect(ringRadius(2, 120)).toBe(200);
-    const r = ringRadius(8, 120);
+    const r = ringRadius(9, 120);
     expect(r).toBeGreaterThan(200);
-    const p = ringPositions(8, r);
+    const p = ringPositions(9, r);
     for (let i = 1; i < p.length; i++)
       expect(Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y)).toBeGreaterThanOrEqual(60);
   });
