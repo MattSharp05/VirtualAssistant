@@ -1,5 +1,6 @@
-# JARVIS Desk packaging (ADR 0010): an ad-hoc-signed arm64 .dmg, no Apple developer account, and a .zip
-# of the same app for automatic updates (JD-74; release.yml adds latest-mac.json beside them).
+# JARVIS Desk packaging (ADR 0010): an ad-hoc-signed arm64 .dmg, no Apple developer account. The .zip
+# for automatic updates (JD-74) is made from release/mac-arm64 by scripts/zip-mac.mjs, with ditto:
+# electron-builder's own zip drops the signature's resources.
 appId: ai.jarvis.desk
 productName: JARVIS Desk
 directories:
@@ -40,11 +41,7 @@ mac:
   target:
     - target: dmg
       arch: arm64
-    - target: zip
-      arch: arm64
   category: public.app-category.productivity
-  # The zip's name (JD-74); dmg.artifactName below overrides it for the .dmg.
-  artifactName: JARVIS-Desk-${version}-${arch}-mac.${ext}
   # "-" = ad-hoc signature: required for arm64 apps to launch; Gatekeeper still asks once (right-click → Open).
   identity: "-"
   hardenedRuntime: false
