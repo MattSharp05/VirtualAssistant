@@ -1,18 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { agents } from "../../mock/data/agents";
+import { manyProjects } from "../../mock/scenarios/agents-projects";
 import {
+  BAND_PAD,
   CARD,
   COL_GAP,
   FIT_PADDING,
   MAX_ZOOM,
   MIN_ZOOM,
+  PROJECT_GAP,
   ROW_GAP,
+  bandBounds,
+  centreOn,
   edgePath,
   fit,
+  labelOffset,
   layoutTree,
+  mapToWorld,
+  mapTransform,
   pan,
   reveal,
+  visibleWorld,
   wheelFactor,
+  worldToMap,
   zoomAt,
   type PlacedNode,
 } from "./layout";
@@ -59,8 +69,9 @@ describe("layoutTree", () => {
     expect(Math.min(...trip.map((p) => p.y))).toBeGreaterThan(jarvisBottom);
   });
 
-  it("draws one edge per visible child, from the parent's right edge to the child's left edge", () => {
-    expect(layout.edges).toHaveLength(layout.nodes.length - tree.length);
+  it("draws one edge per visible child of a run, from the parent's right edge to the child's left edge", () => {
+    // Projects draw no edges: their band shows what belongs to them.
+    expect(layout.edges).toHaveLength(layout.nodes.filter((p) => p.depth >= 2).length);
     const e = layout.edges.find((x) => x.to === "session:session_01JD54")!;
     const p = at("session:session_01JDorch13");
     expect(e.d.startsWith(`M${p.x + p.w} ${p.y + p.h / 2}`)).toBe(true);
@@ -79,6 +90,98 @@ describe("layoutTree", () => {
     const right = Math.max(...layout.nodes.map((p) => p.x + p.w));
     expect(layout.bounds.x + layout.bounds.w).toBe(right);
     expect(layoutTree([]).bounds).toEqual({ x: 0, y: 0, w: 0, h: 0 });
+  });
+});
+
+describe("project bands", () => {
+  const many = layoutTree(buildTree(manyProjects, { activity: "all" }));
+
+  it("gives every project a band holding all of its cards, BAND_PAD in from its edges", () => {
+    expect(many.bands.map((b) => b.id)).toEqual(manyProjects.projects.map((p) => p.id));
+    for (const band of many.bands) {
+      const own = many.nodes.filter((p) => p.node.project.id === band.id && p.depth > 0);
+      for (const p of own) {
+        expect(p.y, p.node.id).toBeGreaterThanOrEqual(band.y + BAND_PAD);
+        expect(p.y + p.h, p.node.id).toBeLessThanOrEqual(band.y + band.h - BAND_PAD);
+      }
+      if (own.length) {
+        expect(Math.min(...own.map((p) => p.y))).toBe(band.y + BAND_PAD);
+        expect(Math.max(...own.map((p) => p.y + p.h))).toBe(band.y + band.h - BAND_PAD);
+      }
+    }
+  });
+
+  it("stacks bands top to bottom PROJECT_GAP apart; an empty project gets a label-high band", () => {
+    expect(many.bands[0]!.y).toBe(0);
+    for (let i = 1; i < many.bands.length; i++) {
+      const prev = many.bands[i - 1]!;
+      expect(many.bands[i]!.y).toBe(prev.y + prev.h + PROJECT_GAP);
+    }
+    expect(many.bands.find((b) => b.id === "project:gogentic")!.h).toBe(CARD.project.h);
+  });
+
+  it("makes the project card its band's label column, as tall as the band", () => {
+    for (const band of many.bands) {
+      const label = many.nodes.find((p) => p.node.id === band.id)!;
+      expect(label).toMatchObject({ x: 0, y: band.y, w: CARD.project.w, h: band.h });
+    }
+  });
+
+  it("collapsing a project shrinks its band to the label", () => {
+    const shut = layoutTree(tree, new Set(["project:jarvis"]));
+    expect(shut.bands[0]!.h).toBe(CARD.project.h);
+    expect(shut.bands[1]!.y).toBe(CARD.project.h + PROJECT_GAP);
+  });
+
+  it("bandBounds spans the tree's width at the band's height", () => {
+    const b = many.bands[2]!;
+    expect(bandBounds(b, many.bounds)).toEqual({ x: many.bounds.x, y: b.y, w: many.bounds.w, h: b.h });
+  });
+
+  it("labelOffset pins the label to the screen's left edge, panned either way", () => {
+    expect(labelOffset({ x: 40, y: 0, k: 1 })).toBe(-40);
+    expect(labelOffset({ x: 0, y: 0, k: 1 })).toBe(-0);
+    expect(labelOffset({ x: -300, y: 0, k: 1 })).toBe(300);
+    // At half zoom 300 screen px are 600 world px: the label's screen x is 0 either way.
+    const v = { x: -300, y: 0, k: 0.5 };
+    expect(labelOffset(v) * v.k + v.x).toBe(0);
+  });
+});
+
+describe("minimap maths", () => {
+  const world = { x: 0, y: 0, w: 1000, h: 400 };
+  const map = { w: 200, h: 100 };
+
+  it("fits the world into the map, centred", () => {
+    const t = mapTransform(world, map);
+    expect(t.scale).toBe(0.2);
+    expect(worldToMap(t, world)).toEqual({ x: 0, y: 10, w: 200, h: 80 });
+    const tall = mapTransform({ x: 0, y: 0, w: 100, h: 1000 }, map);
+    expect(tall.scale).toBe(0.1);
+    expect(worldToMap(tall, { x: 0, y: 0, w: 100, h: 1000 })).toEqual({ x: 95, y: 0, w: 10, h: 100 });
+    expect(mapTransform({ x: 0, y: 0, w: 0, h: 0 }, map)).toEqual({ scale: 1, x: 0, y: 0 });
+  });
+
+  it("world → map → world round-trips, and handles an offset world", () => {
+    const t = mapTransform({ x: -50, y: 20, w: 500, h: 500 }, map);
+    const p = { x: 123, y: 321 };
+    const m = worldToMap(t, { ...p, w: 0, h: 0 });
+    expect(mapToWorld(t, m).x).toBeCloseTo(p.x);
+    expect(mapToWorld(t, m).y).toBeCloseTo(p.y);
+  });
+
+  it("the viewport rectangle is what the screen shows, and centreOn moves it there", () => {
+    const view = { x: -200, y: -100, k: 0.5 };
+    const size = { w: 400, h: 300 };
+    expect(visibleWorld(view, size)).toEqual({ x: 400, y: 200, w: 800, h: 600 });
+    const t = mapTransform(world, map);
+    // Clicking the map's middle centres the screen on the world's middle.
+    const at = mapToWorld(t, { x: 100, y: 50 });
+    const next = centreOn(view, at, size);
+    expect(next.k).toBe(0.5);
+    const shown = visibleWorld(next, size);
+    expect(shown.x + shown.w / 2).toBeCloseTo(500);
+    expect(shown.y + shown.h / 2).toBeCloseTo(200);
   });
 });
 

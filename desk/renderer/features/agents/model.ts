@@ -170,6 +170,20 @@ export function builderStatus(b: AgentBuilder): { label: string; tone: Tone } {
   return { label: b.session?.status ?? "Unknown", tone: "idle" };
 }
 
+/** A project band's tint: amber if anything waits on Matthew, accent if anything works, else quiet. */
+export type BandTone = "waiting" | "working" | "quiet";
+
+export function projectTone(p: AgentProject): BandTone {
+  const builders = [...p.orchestrators.flatMap((o) => o.builders), ...p.loose];
+  const tones = [
+    ...p.orchestrators.map((o) => orchestratorStatus(o)),
+    ...builders.map((b) => builderStatus(b).tone),
+  ];
+  if (tones.includes("waiting")) return "waiting";
+  if (tones.includes("working") || p.metrics.active > 0) return "working";
+  return "quiet";
+}
+
 export const KIND_LABEL: Record<AgentBuilder["kind"], string> = {
   cloud: "session",
   "sub-agent": "sub-agent",

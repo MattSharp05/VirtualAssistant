@@ -23,11 +23,25 @@ interface NodeCardProps {
   collapsed: boolean;
   onSelect(id: string): void;
   onToggle(id: string): void;
+  /** World px a project's label column moves right to stay pinned to the canvas's left edge. */
+  offset?: number;
 }
 
-/** One card of the tree, absolutely placed at its layout position (world px). */
-export function NodeCard({ placed, selected, flash, collapsed, onSelect, onToggle }: NodeCardProps) {
-  const { node, x, y, w, h, hidden } = placed;
+/**
+ * One card of the tree, absolutely placed at its layout position (world px). A project is its band's
+ * label column, moved right by `offset` while the view is panned past the world's left edge.
+ */
+export function NodeCard({
+  placed,
+  selected,
+  flash,
+  collapsed,
+  onSelect,
+  onToggle,
+  offset = 0,
+}: NodeCardProps) {
+  const { node, y, w, h, hidden } = placed;
+  const x = placed.x + (node.kind === "project" ? offset : 0);
   const label = cardLabel(placed);
   return (
     <div
@@ -96,11 +110,9 @@ function CardBody({ placed }: { placed: PlacedNode }) {
       <>
         <span className="agents-eyebrow">Project</span>
         <span className="agents-card-title">{p.name}</span>
-        <span className="agents-card-meta">
-          <span>
-            <b>{p.metrics.active}</b> active
-          </span>
-          <span>{cost ? `${cost} today` : "— today"}</span>
+        <span className="agents-label-meta">
+          <b>{p.metrics.active}</b> active ·{" "}
+          {cost ? `${cost} today` : p.metrics.active === 0 ? "quiet" : "— today"}
         </span>
       </>
     );
