@@ -24,9 +24,15 @@ export interface BrowserTasksView {
   /** Picks a finished task back up (JD-66): a question or instruction, about one of its results. */
   followUp(id: string, text: string, item?: number): Promise<boolean>;
   log(id: string): Promise<BrowserTask | undefined>;
+  /** Deletes a finished task for good (JD-67); false (with `error` set) when the server refused. */
+  remove(id: string): Promise<boolean>;
 }
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** POST /browser/tasks/:id/delete (JD-67): the stored log loses the task; the list left comes back. */
+export const deleteBrowserTask = (bridge: DeskBridge, id: string) =>
+  bridge.request<BrowserTasksResponse>(`/browser/tasks/${id}/delete`, {});
 
 export function useBrowserTasks(bridge: DeskBridge): BrowserTasksView {
   const [tasks, setTasks] = useState<BrowserTaskSummary[]>([]);
@@ -79,6 +85,17 @@ export function useBrowserTasks(bridge: DeskBridge): BrowserTasksView {
       followUp: async (id: string, text: string, item?: number) =>
         !!(await post(`/browser/tasks/${id}/followup`, { text, ...(item === undefined ? {} : { item }) })),
       log: (id: string) => bridge.request<BrowserTask>(`/browser/tasks/${id}`).catch(() => undefined),
+      remove: async (id: string) => {
+        try {
+          await deleteBrowserTask(bridge, id);
+          setError(undefined);
+          setTasks((list) => list.filter((t) => t.id !== id));
+          return true;
+        } catch (err) {
+          setError(message(err));
+          return false;
+        }
+      },
     }),
     [bridge, post],
   );

@@ -134,6 +134,8 @@ export class BrowserTaskRunner {
   private replyTo?: BrowserTaskOrigin;
   /** The newest loop: a follow-up asked while the last turn still winds down retires that turn's loop. */
   private runs = 0;
+  /** The task whose conversation the browser brain holds (unknown after a restart: the newest task's). */
+  private conversation?: string;
 
   constructor(private readonly deps: BrowserTaskDeps) {
     this.file = new JsonFile<TasksFile>(deps.dataDir, "browser-tasks", { tasks: [] });
@@ -175,6 +177,13 @@ export class BrowserTaskRunner {
     return t && summary(t);
   }
 
+  /** Deletes a finished task (done, stopped or failed) from the 30-day log for good (JD-67). */
+  forget(id: string): Promise<void> {
+    const t = this.mine(id);
+    if (ACTIVE.has(t.status)) throw new JarvisError(`The task is ${t.status}. Stop it first, then delete it.`);
+    return this.save((tasks) => tasks.filter((x) => x.id !== id));
+  }
+
   // ── Starting ──
 
   /** Starts a task (queued work isn't a thing: one browser, one task). Throws when one is going or no Desk. */
@@ -202,6 +211,7 @@ export class BrowserTaskRunner {
     this.inbox = undefined;
     this.lastUrl = "";
     this.replyTo = undefined;
+    this.conversation = task.id;
     this.publish(task);
     void this.status(`Starting: ${short(text, 80)}`);
     void this.loop(task.id, browserTaskText(text, modeRules(mode), at));
@@ -236,7 +246,9 @@ export class BrowserTaskRunner {
     const going = this.current();
     if (going) throw new JarvisError(`A browser task is already ${going.status}: “${short(going.text)}”. Stop it first, or wait for it.`);
     if (t.status !== "done") throw new JarvisError(`That task ${t.status === "stopped" ? "was stopped" : "didn't finish"}, so it can't be picked up again. Start a new one.`);
-    if (this.file.get().tasks[0]?.id !== id) throw new JarvisError("Another browser task has started since, so this one can't be picked up again. Start a new one.");
+    // The brain's conversation is the newest task's; a deleted newer task (JD-67) took it with it.
+    if (this.file.get().tasks[0]?.id !== id || (this.conversation !== undefined && this.conversation !== id))
+      throw new JarvisError("Another browser task has started since, so this one can't be picked up again. Start a new one.");
     return t;
   }
 

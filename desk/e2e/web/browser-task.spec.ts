@@ -71,6 +71,42 @@ test("browser-task-normal: History lists the tasks and a log with its approvals"
   await expect(page.getByRole("region", { name: "Page" })).toBeVisible();
 });
 
+test("browser-task-history: History deletes a finished task for good after the trash and a confirm", async ({
+  page,
+}) => {
+  await openWindow(page, "browser", "browser-task-history");
+  await waitForBridgeIdle(page);
+  await page.getByRole("button", { name: "History" }).click();
+  const history = page.getByRole("region", { name: "Browser task history" });
+  const items = history.getByRole("list", { name: "Tasks" }).getByRole("button");
+  await expect(items).toHaveCount(3);
+  await history.getByRole("button", { name: /Renew the parking permit/ }).click();
+  await expect(history.getByLabel("Task log")).toContainText("Renewed until 19 Oct 2027");
+
+  await history.getByRole("button", { name: "Delete task" }).click();
+  const confirm = history.getByRole("group", { name: "Confirm delete" });
+  await expect(confirm).toContainText("Delete this task and its log for good?");
+  await expectWindowSnapshot(page, "browser-task-history-delete");
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(items).toHaveCount(3);
+
+  await history.getByRole("button", { name: "Delete task" }).click();
+  await confirm.getByRole("button", { name: "Delete for good" }).click();
+  await expect(items).toHaveCount(2);
+  await expect(history.getByRole("button", { name: /Renew the parking permit/ })).toHaveCount(0);
+  expect((await posts(page)).map((r) => r.path)).toEqual(["/browser/tasks/task-permit/delete"]);
+});
+
+test("browser-task-normal: History won't delete the task going on; stop it first", async ({ page }) => {
+  await openWindow(page, "browser", "browser-task-normal");
+  await waitForBridgeIdle(page);
+  await page.getByRole("button", { name: "History" }).click();
+  const history = page.getByRole("region", { name: "Browser task history" });
+  await expect(history.getByRole("button", { name: "Delete task" })).toBeDisabled();
+  await expect(history).toContainText("Stop the task first to delete it.");
+});
+
 test("browser-task-full: Full autonomy works on its own; Pause, Resume and Stop", async ({ page }) => {
   await openWindow(page, "browser", "browser-task-full");
   await waitForBridgeIdle(page);

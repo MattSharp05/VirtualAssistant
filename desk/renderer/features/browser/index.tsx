@@ -161,6 +161,7 @@ export default function BrowserWindow() {
               tasks={tasks.tasks}
               now={now}
               log={tasks.log}
+              remove={tasks.remove}
               onClose={() => setHistoryOpen(false)}
             />
           ) : hero ? (
