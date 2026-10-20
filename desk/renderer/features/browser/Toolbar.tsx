@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import type { BrowserCommand, BrowserState } from "@jarvis/shared";
 import { Icon } from "../../app/icons";
 import { displayAddress, statusLine } from "./model";
@@ -6,10 +6,12 @@ import { displayAddress, statusLine } from "./model";
 interface ToolbarProps {
   state: BrowserState;
   onCommand(command: BrowserCommand): void;
+  /** On the status line's right: the task panel's reopen pill and History (JD-65). */
+  children?: ReactNode;
 }
 
 /** Back, forward, reload, the address bar and Take over / Hand back; under them, the status line. */
-export function Toolbar({ state, onCommand }: ToolbarProps) {
+export function Toolbar({ state, onCommand, children }: ToolbarProps) {
   // What Matthew is typing, for the page it was typed on: a new page puts its own address back.
   const [typed, setTyped] = useState<{ url: string; text: string }>();
   const draft = typed?.url === state.url ? typed.text : undefined;
@@ -88,10 +90,13 @@ export function Toolbar({ state, onCommand }: ToolbarProps) {
           {matthew ? "Hand back" : "Take over"}
         </button>
       </div>
-      <p className="browser-status" role="status" aria-label="Status">
-        <span className="browser-status-who">{status.who}</span>
-        <span className="browser-status-text">{status.text}</span>
-      </p>
+      <div className="browser-status-line">
+        <p className="browser-status" role="status" aria-label="Status">
+          <span className="browser-status-who">{status.who}</span>
+          <span className="browser-status-text">{status.text}</span>
+        </p>
+        {children}
+      </div>
     </div>
   );
 }
