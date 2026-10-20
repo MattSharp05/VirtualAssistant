@@ -11,6 +11,7 @@ import type { DeskContext } from "../src/desk/routes/index.js";
 import { EventBus } from "../src/events.js";
 import { ideaChatText, ideaProjects, ideaSessionTask, IdeasStore, ideaSuggestion, ideaTitle } from "../src/ideas.js";
 import { Jarvis } from "../src/jarvis.js";
+import ideasTools from "../src/tools/ideas.js";
 import { NotionApi, notionIdsFile } from "../src/notionWrite.js";
 import { planSession } from "../src/sessionStart.js";
 import { setupNotion } from "../src/setupNotion.js";
@@ -180,4 +181,33 @@ test("ideas Desk routes: CRUD, Add to to-dos (once), Chat with JARVIS, Start a s
   assert.equal(((await call("GET", "/ideas")) as IdeasResponse).ideas.length, 0);
   await assert.rejects(call("DELETE", "/ideas/:id", { params: { id: created.id } }), (e: Error & { status?: number }) => e.status === 404);
   assert.ok(events.filter((e) => e.type === "ideas.changed").length >= 6);
+});
+
+test("add_idea (JARVIS tool): lands in the same store the Ideas window reads, project by slug or name", async () => {
+  const dir = tmp();
+  const bus = new EventBus();
+  const events: DeskEvent[] = [];
+  bus.subscribe((e) => events.push(e));
+  const jarvis = new Jarvis({ dataDir: dir, projects: PROJECTS } as unknown as Config, new Store(dir));
+  const desk = { jarvis, bus } as unknown as DeskContext;
+  const ctx = { jarvis, config: jarvis.config, desk };
+  const addIdea = ideasTools.tools.find((t) => t.name === "add_idea")!;
+
+  assert.match(await addIdea.handler({ text: "Orb pulses amber when a session needs me", project: "JARVIS Desk" }, ctx), /^Added to Ideas \(JARVIS Desk\): Orb pulses amber/);
+  assert.match(await addIdea.handler({ text: "Hold flights when Sam confirms", project: "trip" }, ctx), /\(Trip planner\)/);
+  assert.match(await addIdea.handler({ text: "Read-later queue", project: "unsorted" }, ctx), /\(Unsorted\)/);
+  assert.match(await addIdea.handler({ text: "Slides with camera hands" }, ctx), /\(Unsorted\)/);
+  await assert.rejects(addIdea.handler({ text: "  " }, ctx), /needs some text/);
+
+  const listed = (await ideaRoutes.find((r) => r.method === "GET" && r.path === "/ideas")!.handler({ ctx: desk, params: {}, body: {} } as never)) as IdeasResponse;
+  assert.deepEqual(
+    listed.ideas.map((i) => [i.text, i.project]).sort(),
+    [
+      ["Hold flights when Sam confirms", "trip"],
+      ["Orb pulses amber when a session needs me", "jarvis"],
+      ["Read-later queue", undefined],
+      ["Slides with camera hands", undefined],
+    ],
+  );
+  assert.equal(events.filter((e) => e.type === "ideas.changed").length, 4);
 });
