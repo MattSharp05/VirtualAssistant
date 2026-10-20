@@ -42,12 +42,16 @@ export type SnapshotRow = Omit<UsageSnapshot, "at">;
 
 export const OTHER = "Other";
 
-/** `project:<name>` tag, else the repository's name ("owner/name" → "name"), else "Other". */
-export function projectOf(m: Pick<SessionMetrics, "tags" | "repo">): string {
+/** `project:<name>` tag, else the repository's name ("owner/name" → "name"), else undefined. */
+export function projectName(m: Pick<SessionMetrics, "tags" | "repo">): string | undefined {
   const tag = m.tags?.find((t) => /^project:\s*\S/i.test(t));
   if (tag) return tag.slice("project:".length).trim();
-  const repo = m.repo?.split("/").pop()?.trim();
-  return repo || OTHER;
+  return m.repo?.split("/").pop()?.trim() || undefined;
+}
+
+/** projectName, else "Other". */
+export function projectOf(m: Pick<SessionMetrics, "tags" | "repo">): string {
+  return projectName(m) ?? OTHER;
 }
 
 /** A snapshot row from a session's metrics (undefined when nothing about its use is known). */

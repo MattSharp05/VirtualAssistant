@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { DeskSession, SessionDetail, SessionSendResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
+import { Icon } from "../../app/icons";
 import { SessionFullView } from "./FullView";
 import { MetricsBlock } from "./MetricsView";
 import { ago, clock, labelOf, pillOf, toneOf, whoOf } from "./sessionGroups";
@@ -21,10 +22,12 @@ interface QuickViewProps {
   /** Quick view (activity, reports, message box) or Full view (claude.ai itself, JD-39). */
   view: SessionView;
   onView(view: SessionView): void;
+  /** Opens this session in its own window (JD-72); absent in that window itself. */
+  onPopOut?(): void;
 }
 
 /** The right pane: header with status pill and tabs; Quick view (activity + reports + message box) or Full view. */
-export function QuickView({ session, version, view, onView }: QuickViewProps) {
+export function QuickView({ session, version, view, onView, onPopOut }: QuickViewProps) {
   const bridge = useBridge();
   const label = labelOf(session);
   const [detail, setDetail] = useState<SessionDetail>();
@@ -115,6 +118,17 @@ export function QuickView({ session, version, view, onView }: QuickViewProps) {
             Full view (claude.ai)
           </button>
         </div>
+        {onPopOut && (
+          <button
+            type="button"
+            className="sessions-popout"
+            aria-label={`Pop out ${label} into its own window`}
+            onClick={onPopOut}
+          >
+            <Icon name="popout" size={15} />
+            Pop out
+          </button>
+        )}
       </header>
 
       {view === "full" ? (
