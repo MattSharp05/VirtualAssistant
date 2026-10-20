@@ -233,10 +233,12 @@ test("agents-live: an agents.changed keeps the pan, zoom and selection, and flas
   const canvas = page.getByRole("group", { name: "Agent tree" });
   await expect(canvas).toBeVisible();
   await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(page.getByRole("button", { name: /^Builder JD-55/ })).toBeVisible();
   const box = (await canvas.boundingBox())!;
-  await page.mouse.move(box.x + box.width - 20, box.y + box.height - 20);
+  // Drag from the top right: the bottom right is the overview minimap (JD-75), which a press re-centres.
+  await page.mouse.move(box.x + box.width - 240, box.y + 20);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width - 120, box.y + box.height - 60, { steps: 4 });
+  await page.mouse.move(box.x + box.width - 340, box.y + 60, { steps: 4 });
   await page.mouse.up();
   await page.getByRole("button", { name: /^Builder JD-55/ }).click();
   const panel = page.getByRole("complementary", { name: "Details" });
