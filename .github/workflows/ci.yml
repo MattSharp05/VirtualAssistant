@@ -43,6 +43,8 @@ jobs:
               - "desk/preload/**"
               - "desk/package.json"
               - "desk/electron-builder.yml"
+              - "desk/e2e/electron/**"
+              - "desk/scripts/**"
               - "desk/build/**"
               - "package-lock.json"
               - ".github/workflows/ci.yml"

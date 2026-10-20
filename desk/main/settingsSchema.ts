@@ -40,6 +40,8 @@ export interface DeskSettings {
   /** Saved window layouts by name (JD-37 decides their shape). */
   layouts: Record<string, unknown>;
   checkForUpdates: boolean;
+  /** Install a downloaded update when the app quits (JD-74); Restart now works either way. */
+  autoInstallUpdates: boolean;
   /** A Dock icon (JD-62): right-click → Quit, ⌘Tab. Off = menu bar only, applied without a restart. */
   showInDock: boolean;
   /** Where each window was last left, by feature id (JD-20). */
@@ -76,6 +78,7 @@ export const DEFAULT_SETTINGS: DeskSettings = {
   statusFiles: {},
   layouts: {},
   checkForUpdates: true,
+  autoInstallUpdates: true,
   showInDock: true,
   windowBounds: {},
   voiceModel: "",
@@ -191,6 +194,7 @@ const validators: { [K in SettingKey]: (v: unknown) => DeskSettings[K] } = {
     return v;
   },
   checkForUpdates: (v) => bool("checkForUpdates", v),
+  autoInstallUpdates: (v) => bool("autoInstallUpdates", v),
   showInDock: (v) => bool("showInDock", v),
   windowBounds: (v) => {
     if (!isPlainObject(v)) throw new SettingError("Window bounds must be an object.");

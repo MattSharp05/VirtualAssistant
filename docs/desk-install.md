@@ -64,8 +64,25 @@ osascript -e 'quit app "JARVIS Desk"'
 ```
 
 ## Updating
-When a new version is out, JARVIS Desk offers it: click **Download & install**, then drag the new
-app over the old one in Applications. (Installing quits JARVIS Desk first.)
+JARVIS Desk updates itself, from the first release after the one that brought automatic updates
+(JD-74; that one still installs the old way).
+While **Settings → Updates → Check for updates** is on, it looks for a new version when it starts
+and once a day. When there is one, it downloads it in the background, checks it, and shows
+**"JARVIS Desk <version> is ready" → Restart now / Later** beside the orb (and **Restart to update**
+in the menu-bar icon's menu and the Dock icon's menu).
+- **Restart now:** JARVIS quits, the new version replaces the old one in Applications, and it opens
+  again a few seconds later. A card says **Updated to <version>**, with a link to the release notes.
+- **Later:** with **Install updates automatically** on (the default), the update installs by itself
+  the next time JARVIS Desk quits (⌘Q, Dock → Quit, or logging out); it opens on the new version
+  next time. Switched off, the update waits for **Restart now**.
+
+If the new version doesn't start within a minute, JARVIS puts the old one back and opens it, and
+tells you. Every step goes in `desk.log` (below). The previous version is kept as
+`updates/previous.app` in JARVIS Desk's folder in `~/Library/Application Support` until the next update.
+
+It only updates itself when it runs from a folder it can write to (normally Applications). Running it
+from the disk image, or from a folder it can't write to, it offers the old way instead: **Update**
+downloads the `.dmg` and opens it, JARVIS quits, and you drag the new app over the old one.
 
 Updating by hand: quit JARVIS Desk (above), drag the new app from the `.dmg` into Applications and
 choose **Replace**, then open it again. Finder refuses to replace the app while it's still running.

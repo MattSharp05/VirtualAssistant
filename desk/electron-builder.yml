@@ -1,4 +1,5 @@
-# JARVIS Desk packaging (ADR 0010): an ad-hoc-signed arm64 .dmg, no Apple developer account.
+# JARVIS Desk packaging (ADR 0010): an ad-hoc-signed arm64 .dmg, no Apple developer account, and a .zip
+# of the same app for automatic updates (JD-74; release.yml adds latest-mac.json beside them).
 appId: ai.jarvis.desk
 productName: JARVIS Desk
 directories:
@@ -39,6 +40,8 @@ mac:
   target:
     - target: dmg
       arch: arm64
+    - target: zip
+      arch: arm64
   category: public.app-category.productivity
   # "-" = ad-hoc signature: required for arm64 apps to launch; Gatekeeper still asks once (right-click → Open).
   identity: "-"
@@ -49,3 +52,5 @@ mac:
     NSCameraUsageDescription: JARVIS uses the camera only when Camera hands is on, to track your hands.
 dmg:
   artifactName: JARVIS-Desk-${version}-${arch}.${ext}
+zip:
+  artifactName: JARVIS-Desk-${version}-${arch}-mac.${ext}

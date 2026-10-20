@@ -25,7 +25,7 @@ export interface TrayState {
   connection: DeskConnection;
   usage?: UsageResponse;
   /** The updater (JD-46): a newer version to offer, and its download's progress (0–1). */
-  update?: { version?: string; downloading?: number; checking?: boolean };
+  update?: { version?: string; downloading?: number; checking?: boolean; ready?: string };
   /** The wake word (JD-43): a status line when it can't listen, and when it last heard "Jarvis". */
   wake?: { line?: string; lastTrigger?: number };
 }
@@ -73,10 +73,14 @@ export function planLine(usage: UsageResponse | undefined): string | undefined {
   return parts.length ? `Plan: ${parts.join(" · ")}` : undefined;
 }
 
-/** "Update to v1.2.10…" when there's one (or its download's progress), then "Check for updates". */
+/**
+ * "Restart to update" once an update is downloaded (JD-74), else "Update to v1.2.10…" when there's one
+ * (or its download's progress), then "Check for updates".
+ */
 export function updateItems(update: TrayState["update"], act: TrayActions): TrayItem[] {
-  const offer: TrayItem[] =
-    update?.downloading !== undefined
+  const offer: TrayItem[] = update?.ready
+    ? [{ label: `Restart to update (v${update.ready})`, click: act.installUpdate }]
+    : update?.downloading !== undefined
       ? [{ label: `Downloading update… ${Math.floor(update.downloading * 100)}%`, enabled: false }]
       : update?.version
         ? [{ label: `Update to v${update.version}…`, click: act.installUpdate }]
