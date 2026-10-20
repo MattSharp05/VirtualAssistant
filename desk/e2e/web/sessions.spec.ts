@@ -13,22 +13,32 @@ const requests = (page: import("@playwright/test").Page) =>
       (globalThis as { __deskMock?: { requests: { path: string; body?: unknown }[] } }).__deskMock?.requests,
   );
 
-test("sessions: three groups; selecting mk shows its activity and reports; sending says Sent to mk", async ({
+test("sessions: by project; selecting mk shows its activity and reports; sending says Sent to mk", async ({
   page,
 }) => {
   await openWindow(page, "sessions", "sessions");
   await waitForBridgeIdle(page);
   const list = page.getByRole("navigation", { name: "Sessions" });
-  for (const group of ["Needs you", "Working", "Idle"])
-    await expect(list.getByRole("heading", { name: group })).toBeVisible();
-  await expect(list.locator("[data-group=needs-you] [data-session-id]")).toHaveCount(2);
+  await expect(list.getByLabel("Group")).toHaveValue("project");
+  const projects = list.locator("[data-project]");
+  await expect(projects).toHaveCount(5);
+  expect(await projects.evaluateAll((g) => g.map((x) => x.getAttribute("data-project")))).toEqual([
+    "MarioKart",
+    "Trip planner",
+    "ShapeMint",
+    "JARVIS Desk",
+    "No project",
+  ]);
+  const marioKart = list.locator('[data-project="MarioKart"]');
+  await expect(marioKart.locator(".sessions-project-summary")).toHaveText("1 needs you · 1 working");
+  await expect(marioKart.locator("[data-session-id]")).toHaveCount(2);
 
   await list.getByRole("button", { name: /^trip/ }).click();
-  await expect(page.getByRole("heading", { level: 2, name: "trip" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "trip", exact: true })).toBeVisible();
   await expect(page.locator(".sessions-pill")).toHaveText("Ready for QA");
 
   await list.getByRole("button", { name: /^mk\b/ }).first().click();
-  await expect(page.getByRole("heading", { level: 2, name: "mk" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "mk", exact: true })).toBeVisible();
   await expect(page.locator(".sessions-pill")).toHaveText("Blocked · needs you");
   await expect(page.getByText("Blocking MK-81 and asking Matthew.")).toBeVisible();
   await expect(page.getByText(/MK-79 merged · CI green/)).toBeVisible();
@@ -60,7 +70,9 @@ test("sessions: the list is keyboard reachable and filters as you type", async (
   const rows = page.locator("[data-session-id]");
   await expect(rows).toHaveCount(1);
   await page.keyboard.press("Tab"); // refresh
-  await page.keyboard.press("Tab"); // sort
+  await page.keyboard.press("Tab"); // group
+  await page.keyboard.press("Tab"); // the ShapeMint project's header
+  await expect(page.getByRole("button", { name: "ShapeMint", exact: true })).toBeFocused();
   await page.keyboard.press("Tab"); // the one row left
   await expect(rows.first()).toBeFocused();
   await page.keyboard.press("Enter");
@@ -96,7 +108,7 @@ test("sessions: Most expensive and Context fullest sort the list", async ({ page
   await waitForBridgeIdle(page);
   const ids = () =>
     page.locator("[data-session-id]").evaluateAll((rows) => rows.map((r) => r.dataset.sessionId));
-  await page.getByLabel("Sort").selectOption({ label: "Most expensive" });
+  await page.getByLabel("Group").selectOption({ label: "Most expensive" });
   await expect(page.getByRole("heading", { level: 2, name: "Most expensive" })).toBeVisible();
   expect(await ids()).toEqual([
     "mk",
@@ -106,7 +118,7 @@ test("sessions: Most expensive and Context fullest sort the list", async ({ page
     "mk-80-builder",
     "notes-cleanup",
   ]);
-  await page.getByLabel("Sort").selectOption({ label: "Context fullest" });
+  await page.getByLabel("Group").selectOption({ label: "Context fullest" });
   expect((await ids())[0]).toBe("virtual-assistant");
   expect((await ids()).at(-1)).toBe("notes-cleanup");
 });
@@ -126,4 +138,50 @@ test("sessions-metrics-heavy: mk's context is red, the builder's amber, and the 
     "amber",
   );
   await expectWindowSnapshot(page, "sessions-metrics-heavy");
+});
+
+test("sessions: Needs you first groups by status; a project folds from its header", async ({ page }) => {
+  await openWindow(page, "sessions", "sessions");
+  await waitForBridgeIdle(page);
+  const list = page.getByRole("navigation", { name: "Sessions" });
+  const toggle = list.getByRole("button", { name: "MarioKart", exact: true });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(list.locator('[data-session-id="mk-80-builder"]')).toBeHidden();
+  await toggle.click();
+  await expect(list.locator('[data-session-id="mk-80-builder"]')).toBeVisible();
+
+  await list.getByLabel("Group").selectOption({ label: "Needs you first" });
+  for (const group of ["Needs you", "Working", "Idle"])
+    await expect(list.getByRole("heading", { name: group })).toBeVisible();
+  await expect(list.locator("[data-group=needs-you] [data-session-id]")).toHaveCount(2);
+});
+
+test("sessions: Pop out opens the session in its own window", async ({ page }) => {
+  await openWindow(page, "sessions", "sessions");
+  await waitForBridgeIdle(page);
+  const popup = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Pop out mk into its own window" }).click();
+  const solo = await popup;
+  await expect(solo).toHaveURL(/window=sessions&solo=mk/);
+  await expect(solo.getByRole("heading", { level: 1, name: "mk" })).toBeVisible();
+  await solo.close();
+  expect(
+    await page.evaluate(() => (globalThis as { __deskMock?: { opened: string[] } }).__deskMock?.opened),
+  ).toEqual(["sessions?solo=mk"]);
+});
+
+test("sessions-solo: just the session, titled with its name, and Send still works", async ({ page }) => {
+  await openWindow(page, "sessions", "sessions-solo");
+  await waitForBridgeIdle(page);
+  await expect(page.getByRole("heading", { level: 1, name: "mk" })).toBeVisible();
+  await expect(page).toHaveTitle("mk · JARVIS");
+  await expect(page.getByRole("navigation", { name: "Sessions" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Pop out/ })).toHaveCount(0);
+  await expect(page.getByText("Blocking MK-81 and asking Matthew.")).toBeVisible();
+  await expectWindowSnapshot(page, "sessions-solo");
+
+  await page.getByLabel("Message mk").fill("Cap it at 1.2×");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("status")).toHaveText("Sent to mk");
 });

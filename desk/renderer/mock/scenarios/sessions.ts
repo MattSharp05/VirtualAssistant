@@ -1,4 +1,5 @@
-// The Sessions window's states (JD-32): the grouped list with a session per group, and a fresh install.
+// The Sessions window's states (JD-32): the list by project (JD-72) with every status, a fresh install,
+// and one session popped out into its own window (sessions-solo).
 // sessions-metrics-heavy (JD-54): mk has burned through its context (93%, red) and $1.3k, served
 // by another model than the configured one; mk-80-builder is getting full (74%, amber).
 import type { DeskSession, SessionDetail, SessionMetrics } from "@jarvis/shared";
@@ -43,9 +44,18 @@ for (const id of Object.keys(heavyMetrics)) {
 const scenarios: Scenario[] = [
   {
     name: "sessions",
-    description: "Sessions window: mk blocked and trip ready for QA (needs you), two working, two idle.",
+    description:
+      "Sessions window by project: mk blocked and trip ready for QA (needs you), two working, two idle; notes-cleanup has no project.",
     data: base,
     events: [],
+  },
+  {
+    name: "sessions-solo",
+    description:
+      "Sessions window popped out on mk (JD-72): just its header, Quick/Full view and Send, titled mk.",
+    data: base,
+    events: [],
+    ui: { sessionsSolo: "mk" },
   },
   {
     name: "sessions-empty",

@@ -120,20 +120,26 @@ const rowMetrics: Record<string, SessionMetrics> = {
   mk: usage(26 * 60, 98_498, 2_654_189, 820_538_750, 8_315_652, 269.76, 270_674, {
     statusBucket: "blocked",
     tags: ["orchestrator", "mario-kart"],
+    repo: "MattSharp05/MarioKart",
     updatedAt: ago(12),
   }),
   trip: usage(9 * 60, 41_220, 812_400, 214_880_100, 2_904_330, 71.12, 148_900, {
     statusBucket: "review_ready",
-    tags: ["orchestrator"],
+    tags: ["orchestrator", "project:Trip planner"],
     updatedAt: ago(40),
   }),
   "mk-80-builder": usage(47, 6_812, 96_455, 18_402_300, 512_090, 6.38, 512_400, {
     model: "claude-sonnet-5-5",
     parentId: "session_01MK",
     tags: ["builder"],
+    repo: "MattSharp05/MarioKart",
   }),
-  session_01SM: usage(95, 12_030, 140_210, 31_550_000, 880_400, 11.04, 61_200),
+  session_01SM: usage(95, 12_030, 140_210, 31_550_000, 880_400, 11.04, 61_200, {
+    repo: "MattSharp05/ShapeMint",
+  }),
   "virtual-assistant": usage(5 * 60, 30_100, 402_900, 96_310_000, 1_204_000, 33.9, 880_100, {
+    tags: ["project:JARVIS Desk"],
+    repo: "MattSharp05/VirtualAssistant",
     statusBucket: "completed",
     updatedAt: ago(130),
     wallMs: (5 * 60 - 130) * min,
@@ -176,7 +182,20 @@ const activityMetrics: Record<string, Partial<SessionMetrics>> = {
   "notes-cleanup": {},
 };
 
-for (const s of sessions) s.metrics = rowMetrics[s.id];
+// The project each row names (JD-72), as the server derives it: the project:<name> tag, else the
+// repo's name. notes-cleanup has neither, so it lands in "No project".
+const projects: Record<string, string> = {
+  mk: "MarioKart",
+  trip: "Trip planner",
+  "mk-80-builder": "MarioKart",
+  session_01SM: "ShapeMint",
+  "virtual-assistant": "JARVIS Desk",
+};
+
+for (const s of sessions) {
+  s.metrics = rowMetrics[s.id];
+  if (projects[s.id]) s.project = projects[s.id];
+}
 
 const activity = (items: [number, SessionDetail["activity"]["items"][number]["role"], string][]) => ({
   available: true,

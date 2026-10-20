@@ -16,7 +16,8 @@ export interface WindowTarget {
 export function parseWindowId(id: string): WindowTarget | undefined {
   const [feature, query = "", ...rest] = id.split("?");
   if (rest.length || !/^[a-z0-9-]+$/.test(feature)) return undefined;
-  if (query && !/^[a-z0-9-]+=[a-z0-9-]*(&[a-z0-9-]+=[a-z0-9-]*)*$/i.test(query)) return undefined;
+  // Values may hold a cloud session id ("sessions?solo=session_01SM", JD-72).
+  if (query && !/^[a-z0-9-]+=[\w-]*(&[a-z0-9-]+=[\w-]*)*$/i.test(query)) return undefined;
   return { feature, query };
 }
 
