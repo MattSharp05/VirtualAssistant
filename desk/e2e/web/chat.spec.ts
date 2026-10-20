@@ -51,6 +51,48 @@ test("chat: sending shows the message at once and streams the mock reply", async
   await expect(page.getByTestId("chat-today")).toContainText("Today: 15 replies");
 });
 
+test("chat: Shift+Enter adds lines, the box grows to about six lines then scrolls, and shrinks after sending", async ({
+  page,
+}) => {
+  await openWindow(page, "chat", "chat-empty");
+  await waitForBridgeIdle(page);
+  const input = page.getByRole("textbox", { name: "Message JARVIS" });
+  const height = () => input.evaluate((el) => el.getBoundingClientRect().height);
+  const send = page.getByRole("button", { name: "Send" });
+  const bottom = (l: typeof input) => l.evaluate((el) => Math.round(el.getBoundingClientRect().bottom));
+  await expect(page.getByText("↵ send · ⇧↵ new line")).toBeVisible();
+  const oneLine = await height();
+  expect(oneLine).toBeLessThanOrEqual(46);
+
+  await input.click();
+  await page.keyboard.type("first line");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("second line");
+  await expect(input).toHaveValue("first line\nsecond line");
+  expect(await height()).toBeGreaterThan(oneLine + 10);
+  // Mic and Send stay on the bottom edge as the box grows.
+  expect(await bottom(send)).toBe(await bottom(input));
+  expect(await bottom(page.getByRole("button", { name: "Push to talk" }))).toBe(await bottom(input));
+
+  for (let i = 3; i <= 12; i++) {
+    await page.keyboard.press("Shift+Enter");
+    await page.keyboard.type(`line ${i}`);
+  }
+  const capped = await height();
+  expect(capped).toBeLessThan(170);
+  expect(await input.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+
+  await page.keyboard.press("Enter");
+  await expect(input).toHaveValue("");
+  expect(await height()).toBe(oneLine);
+  const bubble = page.getByRole("log").locator(".chat-msg-mine .chat-bubble").last();
+  await expect(bubble).toContainText("first line\nsecond line");
+  const lines = await bubble.evaluate((el) =>
+    Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)),
+  );
+  expect(lines).toBeGreaterThanOrEqual(12);
+});
+
 test("chat: Undo on a calendar change asks JARVIS to undo it", async ({ page }) => {
   await openWindow(page, "chat", "chat");
   await waitForBridgeIdle(page);
