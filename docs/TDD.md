@@ -100,6 +100,7 @@ Every window is a folder under `desk/renderer/features/` with its own CSS, a `fe
 - `shared/protocol.ts` is the only place Desk/server types live; changing it requires updating both sides in the same PR.
 - Renderer features are self-contained folders; no feature imports another feature's internals (use `app/` or `shared/`).
 - Never log tokens, device keys, transcripts of other people's messages beyond what's shown to Matthew.
+- Every window/feature ships with the JARVIS tool(s) it needs (read/add/update, as sensible) plus a test for them, or the ticket has an explicit "N/A because…" — see CLAUDE.md Conventions.
 
 ## Risks & open questions
 - **Unsigned app:** macOS asks once (right-click → Open); permissions (Microphone, Camera, Input Monitoring for ⌥⌥, Screen Recording for screen awareness) are granted per app path, so the app must live in /Applications. Updates replace it in place.

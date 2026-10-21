@@ -42,6 +42,7 @@ Full design: `docs/TDD.md` + ADRs in `docs/decisions/`.
 - Renderer features are self-contained folders (`feature.ts` + `index.tsx`), discovered by glob in `features/registry.ts` (never edit it to add one); windows render in `app/WindowFrame.tsx`; no cross-feature imports.
 - Changing `shared/protocol.ts` updates both server and desk in the same PR.
 - Never print or open `.env` or tokens; secrets go in `.env` (server) or the Keychain (Mac). Notion writes only to the JARVIS Memory page and JARVIS Tasks database.
+- **JARVIS tool access:** every window/feature ships with the JARVIS tool(s) it needs (read/add/update, as sensible) plus a test for them, or the ticket has an explicit "N/A because…". JARVIS (Telegram/Desk chat) must be able to do by voice or text whatever its window does — e.g. the Ideas window shipped with `add_idea` (`src/tools/ideas.ts`).
 
 ## Testing
 - Server: `node:test` with fakes (claude stream-json binary, fetch, Telegram, clock).
