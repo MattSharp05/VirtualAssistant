@@ -309,6 +309,22 @@ export class Notion {
   }
 }
 
+/** The `to_do` items under an "Acceptance criteria" heading (any level), flattened. Empty if none. */
+export function acceptanceChecklist(blocks: NotionBlock[]): { text: string; checked: boolean }[] {
+  const isHeading = (b: NotionBlock) => b.type === "heading_1" || b.type === "heading_2" || b.type === "heading_3";
+  const start = blocks.findIndex((b) => isHeading(b) && /acceptance criteria/i.test(b.text ?? ""));
+  if (start === -1) return [];
+  const out: { text: string; checked: boolean }[] = [];
+  const collect = (list: NotionBlock[]) => {
+    for (const b of list) {
+      if (b.type === "todo") out.push({ text: b.text ?? "", checked: Boolean(b.checked) });
+      if (b.children) collect(b.children);
+    }
+  };
+  for (let i = start + 1; i < blocks.length && !isHeading(blocks[i]!); i++) collect([blocks[i]!]);
+  return out;
+}
+
 export interface NotionStatus {
   /** off: no NOTION_TOKEN · ok: token accepted · rejected: Notion refused the token · error: couldn't reach Notion. */
   state: "off" | "ok" | "rejected" | "error";

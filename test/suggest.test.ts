@@ -92,7 +92,7 @@ test("dismissing a suggestion, then re-running every source, never recreates it"
   await assert.rejects(s.svc.dismiss("TR-14"), /No suggestion matches/);
 });
 
-test("Notion QA: a suggestion per project with QA Pending tickets; Dismissed automatically when none remain", async () => {
+test("Notion QA: a suggestion per QA Pending ticket, linked to its own page; Dismissed automatically when it clears", async () => {
   const PROJECT = "a1".padEnd(32, "0");
   const OTHER_PROJECT = "b2".padEnd(32, "0");
   const TICKETS = "c3".padEnd(32, "0");
@@ -121,7 +121,12 @@ test("Notion QA: a suggestion per project with QA Pending tickets; Dismissed aut
       const want = (((body.filter as Json).select as Json).equals as string) ?? "";
       const results = tickets
         .filter((t) => t.status === want)
-        .map((t) => ({ object: "page", id: `t${t.n}`, properties: { Title: title(`Ticket ${t.n}`), "Ticket ID": { type: "unique_id", unique_id: { prefix: "JD", number: t.n } } } }));
+        .map((t) => ({
+          object: "page",
+          id: `t${t.n}`,
+          url: `https://www.notion.so/t${t.n}`,
+          properties: { Title: title(`Ticket ${t.n}`), "Ticket ID": { type: "unique_id", unique_id: { prefix: "JD", number: t.n } } },
+        }));
       return ok({ results, has_more: false });
     }
     if (path === `/databases/${OTHER_TICKETS}/query`) {
@@ -132,29 +137,30 @@ test("Notion QA: a suggestion per project with QA Pending tickets; Dismissed aut
   }) as typeof fetch);
 
   const first = await s.suggester.notionQa();
-  assert.deepEqual(first.added.map((t) => t.name), ["QA JARVIS Desk batch (2 tickets)"], "Trip has none waiting, Epics isn't a Tickets database");
+  assert.deepEqual(first.added.map((t) => t.name).sort(), ["QA JD-22: Ticket 22", "QA JD-9: Ticket 9"], "one per ticket, Trip has none waiting, Epics isn't a Tickets database");
   assert.deepEqual(queries, [{ property: "Status", select: { equals: "QA Pending" } }, { property: "Status", status: { equals: "QA Pending" } }], "filters by each database's Status type");
-  const [qa] = await s.svc.list("suggested");
-  assert.equal(qa.source, "Notion QA");
-  assert.equal(qa.project, "JARVIS Desk");
-  assert.equal(qa.sourceLink, `https://www.notion.so/${PROJECT}`);
-  assert.equal(qa.why, "JD-9, JD-22 are waiting for your QA in JARVIS Desk.");
-  assert.deepEqual((await s.suggester.notionQa()).added, [], "same batch: no duplicate");
+  const [jd22, jd9] = (await s.svc.list("suggested")).sort((a, b) => a.name.localeCompare(b.name));
+  assert.equal(jd22!.source, "Notion QA");
+  assert.equal(jd22!.project, "JARVIS Desk");
+  assert.equal(jd22!.sourceLink, "https://www.notion.so/t22", "links to the ticket's own page, not the project");
+  assert.equal(jd22!.why, "JD-22 is waiting for your QA in JARVIS Desk.");
+  assert.equal(jd9!.sourceLink, "https://www.notion.so/t9");
+  assert.deepEqual((await s.suggester.notionQa()).added, [], "same tickets: no duplicates");
 
-  // Matthew finishes QA: nothing pending → the suggestion goes away by itself.
-  for (const t of tickets) t.status = "Done";
+  // Matthew finishes JD-22's QA: its suggestion goes away by itself; JD-9's stays.
+  tickets[0]!.status = "Done";
   const after = await s.suggester.notionQa();
-  assert.deepEqual(after.dismissed.map((t) => [t.name, t.status]), [["QA JARVIS Desk batch (2 tickets)", "Dismissed"]]);
-  assert.deepEqual(await s.svc.list("suggested"), []);
+  assert.deepEqual(after.dismissed.map((t) => [t.name, t.status]), [["QA JD-22: Ticket 22", "Dismissed"]]);
+  assert.deepEqual((await s.svc.list("suggested")).map((t) => t.name), ["QA JD-9: Ticket 9"]);
 
-  // A new batch is a new suggestion; an accepted one is left alone when its batch ends.
+  // A new ticket entering QA is a new suggestion; an accepted one is left alone when it clears.
   tickets.push({ n: 31, status: "QA Pending" });
   const next = await s.suggester.notionQa();
-  assert.deepEqual(next.added.map((t) => t.name), ["QA JARVIS Desk batch (1 ticket)"]);
-  await s.svc.accept("QA JARVIS Desk");
-  tickets[3].status = "Done";
-  assert.deepEqual((await s.suggester.notionQa()).dismissed, []);
-  assert.deepEqual((await s.svc.list("project")).map((t) => t.name), ["QA JARVIS Desk batch (1 ticket)"]);
+  assert.deepEqual(next.added.map((t) => t.name), ["QA JD-31: Ticket 31"]);
+  await s.svc.accept("JD-9");
+  tickets[3]!.status = "Done";
+  assert.deepEqual((await s.suggester.notionQa()).dismissed.map((t) => t.name), ["QA JD-31: Ticket 31"]);
+  assert.deepEqual((await s.svc.list("project")).map((t) => t.name), ["QA JD-9: Ticket 9"]);
 });
 
 test("Slack/email (fake worker): at most 5 per run, each with a link and a reason; deduped by link", async () => {

@@ -9,11 +9,12 @@ const at = (day: number, time = "08:00:00") => `${mockDay(day)}T${time}Z`;
 export const openTasks: TaskItem[] = [
   {
     id: "t1",
-    name: "QA trip batch 3 (6 tickets)",
+    name: "QA TR-91: Confirm hotel cancellation policy",
     status: "Open",
     due: mockDay(-1),
     project: "Trip",
     source: "Notion QA",
+    sourceLink: "https://www.notion.so/Confirm-hotel-cancellation-policy-TR-91",
     createdAt: at(-3),
   },
   {

@@ -1,6 +1,8 @@
 // Suggestions from Notion QA (no LLM): every project's Tickets database shared with the integration;
-// tickets with Status = QA Pending become one "QA <project> batch (<n> tickets)" per project. The key
-// is the project plus its sorted ticket ids, so a new batch is a new suggestion.
+// each ticket with Status = QA Pending becomes its own suggestion (JD-83), linked straight to that
+// ticket's own Notion page so the To-do window can show and pull in its Acceptance Criteria checklist.
+// The key is the project plus the ticket id, so a ticket leaving QA Pending drops its suggestion
+// (Suggester.notionQa()'s reconciliation already works per dedupe key, not per batch).
 import { titleOf } from "../notion.js";
 import type { Json, NotionApi } from "../notionWrite.js";
 import type { NewSuggestion } from "../tasks.js";
@@ -72,16 +74,17 @@ export async function notionQaSuggestions(api: NotionApi): Promise<QaScan> {
       continue;
     }
     scan.projects.add(project.name);
-    if (!rows.length) continue;
-    const ids = rows.map(ticketId).sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
-    scan.suggestions.push({
-      name: `QA ${project.name} batch (${ids.length} ticket${ids.length === 1 ? "" : "s"})`,
-      source: "Notion QA",
-      ...(project.url ? { link: project.url } : {}),
-      dedupeKey: `notionqa:${project.name}:${ids.join(",")}`,
-      why: `${ids.join(", ")} ${ids.length === 1 ? "is" : "are"} waiting for your QA in ${project.name}.`,
-      project: project.name,
-    });
+    for (const row of rows) {
+      const id = ticketId(row);
+      scan.suggestions.push({
+        name: `QA ${id}: ${titleOf(row)}`,
+        source: "Notion QA",
+        ...(row.url ? { link: String(row.url) } : project.url ? { link: project.url } : {}),
+        dedupeKey: `notionqa:${project.name}:${id}`,
+        why: `${id} is waiting for your QA in ${project.name}.`,
+        project: project.name,
+      });
+    }
   }
   return scan;
 }

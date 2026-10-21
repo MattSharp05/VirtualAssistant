@@ -1,6 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { TaskItem } from "@jarvis/shared";
-import { dueLabel, groupByProject, hasDate, isOverdue, suggestions, summary, tabTasks } from "./model";
+import type { TaskHistoryEntry, TaskItem } from "@jarvis/shared";
+import {
+  ACTIONS,
+  CLOSED,
+  dueLabel,
+  groupByProject,
+  hasDate,
+  hasQa,
+  historyParts,
+  isOverdue,
+  popup,
+  popupFoot,
+  suggestions,
+  summary,
+  tabTasks,
+} from "./model";
 
 const task = (id: string, extra: Partial<TaskItem> = {}): TaskItem => ({
   id,
@@ -90,4 +104,65 @@ describe("hasDate", () => {
     "Ask if we may march on",
     "Fix 3 failing tests",
   ])("“%s” is added directly", (text) => expect(hasDate(text)).toBe(false));
+});
+
+describe("hasQa (JD-83)", () => {
+  it("is true only for a Notion QA to-do that links to its ticket", () => {
+    expect(hasQa(task("qa", { source: "Notion QA", sourceLink: "https://www.notion.so/t1" }))).toBe(true);
+    expect(hasQa(task("no-link", { source: "Notion QA" }))).toBe(false);
+    expect(hasQa(task("other", { source: "Slack", sourceLink: "https://slack.com/x" }))).toBe(false);
+  });
+});
+
+describe("the row action pop-ups (JD-83, same state machine as Ideas)", () => {
+  it("has Chat and Session, not todo (the item already is one)", () => {
+    expect(ACTIONS.map((a) => a.id)).toEqual(["chat", "session"]);
+  });
+
+  it("opens on hover unless another holds a draft; clicking opens unpinned, typing pins, clearing unpins", () => {
+    let s = popup.enter(CLOSED, "chat");
+    expect(popup.isOpen(s, "chat")).toBe(true);
+    s = popup.leave(s, "chat");
+    expect(popup.isOpen(s, "chat")).toBe(false);
+
+    s = popup.type(CLOSED, "chat", "context");
+    expect(popup.isPinned(s, "chat")).toBe(true);
+    expect(popup.hasDraft(s, "chat")).toBe(true);
+    expect(popup.enter(s, "session")).toEqual(s); // pinned elsewhere: hovering another opens nothing
+
+    s = popup.click(s, "session");
+    expect(popup.isOpen(s, "session")).toBe(true);
+    expect(popup.isPinned(s, "session")).toBe(false);
+    expect(popup.isPinned(s, "chat")).toBe(false); // switched away; chat's draft is kept, just unpinned
+    expect(popup.hasDraft(s, "chat")).toBe(true);
+
+    s = popup.type(s, "session", "spike it");
+    expect(popup.isPinned(s, "session")).toBe(true);
+    s = popup.type(s, "session", "");
+    expect(popup.isPinned(s, "session")).toBe(false);
+
+    s = popup.sent(s, "session");
+    expect(popup.isOpen(s, "session")).toBe(false);
+    expect(s.drafts.session).toBe("");
+  });
+
+  it("popupFoot reads differently once a draft exists", () => {
+    expect(popupFoot(false)).toMatch(/optional/);
+    expect(popupFoot(true)).toMatch(/stays open/);
+  });
+});
+
+describe("historyParts (JD-83)", () => {
+  it("one line per action, today's shows a time, older shows the day; chat has no link, session does", () => {
+    const now = new Date("2026-10-21T09:30:00");
+    const history: TaskHistoryEntry[] = [
+      { kind: "chat", at: "2026-10-21T08:14:00" },
+      { kind: "session", at: "2026-10-16T12:00:00", link: "https://claude.ai/code/session_01X", label: "j7" },
+    ];
+    expect(historyParts(history, now)).toEqual([
+      { text: "Opened in Chat 08:14" },
+      { text: "Session started Oct 16", link: "https://claude.ai/code/session_01X", title: "j7" },
+    ]);
+    expect(historyParts(undefined, now)).toEqual([]);
+  });
 });
