@@ -36,6 +36,17 @@ export interface Config {
   projects?: ProjectSetting[];
   /** Read-only GitHub token for PR check runs (GITHUB_TOKEN; public repos work without it, rate-limited). Never logged. */
   githubToken?: string;
+  /** First-party Google Calendar (JD-77): OAuth client + refresh token. Unset = the calendar tools fail with a clear error. */
+  googleCalendar?: GoogleCalendarConfig;
+}
+
+/** GOOGLE_CALENDAR_CLIENT_ID/SECRET/REFRESH_TOKEN (from `npm run setup:calendar`), GOOGLE_CALENDAR_ID (default "primary"), GOOGLE_CALENDAR_TIMEZONE (default TZ). */
+export interface GoogleCalendarConfig {
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  calendarId: string;
+  timeZone: string;
 }
 
 /** One project in PROJECTS: its tag slug, name, Tickets data source and repo. */
@@ -100,8 +111,24 @@ export function loadConfig(): Config {
   // Node reads TZ for local dates; setting it here makes "today" and reminder times Matthew's.
   const timeZone = optional("TZ") ?? "Europe/London";
   process.env.TZ = timeZone;
+  // "Google Calendar" stays in the default for the worker's background calendar-range job (JD-21),
+  // which still reads through the connector; the interactive brain's own tools (JD-77) cover calendar
+  // for chat, and connectors.ts's own `cli` always excludes "Google Calendar" from what it allows.
   const connectors = optional("BRAIN_CONNECTORS") ?? "Google Calendar,Gmail,Slack";
   const brainConnectors = /^none$/i.test(connectors) ? [] : connectors.split(",").map((c) => c.trim()).filter(Boolean);
+  const googleClientId = optional("GOOGLE_CALENDAR_CLIENT_ID");
+  const googleClientSecret = optional("GOOGLE_CALENDAR_CLIENT_SECRET");
+  const googleRefreshToken = optional("GOOGLE_CALENDAR_REFRESH_TOKEN");
+  const googleCalendar: GoogleCalendarConfig | undefined =
+    googleClientId && googleClientSecret && googleRefreshToken
+      ? {
+          clientId: googleClientId,
+          clientSecret: googleClientSecret,
+          refreshToken: googleRefreshToken,
+          calendarId: optional("GOOGLE_CALENDAR_ID") ?? "primary",
+          timeZone: optional("GOOGLE_CALENDAR_TIMEZONE") ?? timeZone,
+        }
+      : undefined;
   return {
     brainConnectors,
     projects: parseProjects(optional("PROJECTS")),
@@ -124,5 +151,6 @@ export function loadConfig(): Config {
     dashboardPassword: optional("DASHBOARD_PASSWORD"),
     reportSecret,
     reportsPort,
+    googleCalendar,
   };
 }

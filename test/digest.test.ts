@@ -107,8 +107,7 @@ test("the worker submits a digest through the real tool path; it's stored, enric
   const allowed = flag("--allowedTools").split(",");
   assert.ok(allowed.includes("mcp__jarvis__submit_digest") && allowed.includes("mcp__jarvis__list_tasks"));
   assert.ok(!allowed.includes("mcp__jarvis"), "not every JARVIS tool");
-  assert.ok(!allowed.some((a) => /add_task|set_timer|remember|send_to_session|start_session|create_event|update_event|delete_event/.test(a)));
-  assert.match(flag("--disallowedTools"), /Google_Calendar__create_event/);
+  assert.ok(!allowed.some((a) => /add_task|set_timer|remember|send_to_session|start_session|create_event|update_event|delete_event/.test(a)), "no calendar writes: the connector no longer offers any (JD-77), and the worker never gets JARVIS's own calendar tools either");
 
   // The Desk route.
   const ctx = { jarvis: s.jarvis } as unknown as DeskContext;

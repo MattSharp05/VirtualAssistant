@@ -2,13 +2,14 @@
 // suggestions…), so they never clutter Matthew's chat. Same Brain class, but:
 //   - its own folder, conversation and usage totals (DATA_DIR/worker.json), and no Desk events;
 //   - a strict prompt: no chit-chat, gather with read-only tools, call the job's submit tool once;
-//   - only read tools: claude.ai connectors read-only (calendar writes are blocked here) and a short
-//     list of JARVIS read tools plus the jobs' submit_* tools.
+//   - only read tools: claude.ai connectors read-only (the Calendar connector only has read tools to
+//     begin with since JD-77 — calendar writes are JARVIS's own tools, not given to the worker at all)
+//     and a short list of JARVIS read tools plus the jobs' submit_* tools.
 //   - one process per job (a fresh conversation each run), WORKER_MODEL (default haiku).
 
 import type { BrainMessage, BrainState } from "../store.js";
 import { JsonFile } from "../storage.js";
-import { CALENDAR_WRITES, connectorTools } from "../tools/connectors.js";
+import { connectorTools } from "../tools/connectors.js";
 import type { BrainSetup, ToolContext } from "../tools/index.js";
 import { Brain, type BrainConfig, type BrainStateStore } from "./index.js";
 
@@ -52,14 +53,14 @@ export class WorkerState implements BrainStateStore {
   }
 }
 
-/** Read-only connectors + the JARVIS read tools + the submit tools; nothing that writes. */
+/** Read-only connectors (including Google Calendar, JD-21's calendarRange job) + the JARVIS read tools + the submit tools; nothing that writes. */
 export function workerSetup(ctx: ToolContext, submitTools: string[]): BrainSetup {
   const { allowed, blocked } = connectorTools(ctx.config.brainConnectors ?? []);
   return {
     hints: [],
     parts: [],
-    allowedTools: allowed.filter((t) => !CALENDAR_WRITES.includes(t)),
-    disallowedTools: [...blocked, ...CALENDAR_WRITES],
+    allowedTools: allowed,
+    disallowedTools: blocked,
     extraArgs: [],
     jarvisTools: [...WORKER_READ_TOOLS, ...submitTools],
   };

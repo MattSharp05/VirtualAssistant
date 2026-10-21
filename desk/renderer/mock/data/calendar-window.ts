@@ -1,4 +1,4 @@
-// The Calendar window's "Changed by JARVIS" log (JD-35) as GET /calendar/log returns it (JD-14).
+// The Calendar window's "Changed by JARVIS" log (JD-35) as GET /calendar/log returns it (JD-14, JD-77).
 import type { CalendarChange } from "@jarvis/shared";
 import type { ScenarioPart } from "../types";
 
@@ -15,10 +15,10 @@ export const changes: CalendarChange[] = [
   {
     id: "c1",
     at: "2026-10-12T17:20:00Z",
-    tool: "respond_to_event",
-    input: { eventId: "w10", responseStatus: "accepted" },
+    tool: "respond",
+    input: { eventId: "w10", response: "accepted" },
     result: "Accepted",
-    summary: "respond_to_event: Standup → accepted",
+    summary: "respond: Standup → accepted",
   },
 ];
 

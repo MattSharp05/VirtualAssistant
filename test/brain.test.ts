@@ -184,16 +184,16 @@ test("the Notion chip's check: off, ok with a page count, rejected token, cached
   assert.equal((await new NotionStatusCache("secret", many).get()).shared, "100+");
 });
 
-test("claude.ai connectors: calendar writes allowed, Gmail/Slack writes blocked, strict MCP only without them", async () => {
+test("claude.ai connectors: Google Calendar read-only (worker only, JD-77), Gmail/Slack writes blocked, strict MCP only without them", async () => {
   const { allowed, blocked } = connectorTools(["google calendar", "Gmail", "Nope"]);
   assert.ok(allowed.includes("mcp__claude_ai_Google_Calendar__list_events"));
   assert.ok(allowed.includes("mcp__claude_ai_Gmail__search_threads"));
   for (const t of ["create_event", "update_event", "delete_event", "respond_to_event"]) {
-    assert.ok(allowed.includes(`mcp__claude_ai_Google_Calendar__${t}`), `calendar ${t} allowed (no confirm tap, ADR 0008)`);
+    assert.ok(!allowed.includes(`mcp__claude_ai_Google_Calendar__${t}`), `calendar ${t} isn't a connector tool any more (JD-77: it's JARVIS's own)`);
   }
   assert.ok(allowed.filter((t) => t.includes("Gmail")).every((t) => /__(search|get|list)_/.test(t)), "only Gmail reads are allowed");
   assert.ok(blocked.includes("mcp__claude_ai_Gmail__send_message"));
-  assert.ok(!blocked.some((t) => t.includes("Google_Calendar")), "nothing on the calendar is blocked");
+  assert.ok(!blocked.some((t) => t.includes("Google_Calendar")), "nothing on the calendar is blocked (it just isn't offered as a write tool)");
   const slack = connectorTools(["Slack"]);
   assert.ok(slack.allowed.includes("mcp__claude_ai_Slack__slack_read_channel"));
   assert.ok(!slack.allowed.some((t) => /send|schedule|add_|create|update|upload/.test(t)), "nothing that posts is allowed");
@@ -215,6 +215,7 @@ echo '{"type":"result","result":"ok","usage":{}}'
   await new Brain({ ...base, setup: () => registry.brainSetup(toolContext) }, store).chat("what's on today?", "telegram");
   const call = readFileSync(log, "utf8").trim();
   assert.doesNotMatch(call, /--strict-mcp-config/, "claude.ai connectors need the non-strict MCP mode");
-  assert.match(call, /--allowedTools mcp__jarvis,mcp__claude_ai_Google_Calendar__list_calendars,/);
+  assert.doesNotMatch(call, /Google_Calendar/, "the interactive brain never gets the Calendar connector (JD-77: it has its own calendar tools)");
+  assert.match(call, /--allowedTools mcp__jarvis,mcp__claude_ai_Gmail__search_threads,/);
   assert.match(call, /--disallowedTools \S*mcp__claude_ai_Gmail__send_message/);
 });

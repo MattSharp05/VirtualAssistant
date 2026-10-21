@@ -1,33 +1,33 @@
-// "Changed by JARVIS": every calendar write the brain makes (no confirm tap, ADR 0008) is logged
-// with what the event looked like before, so it can be undone. Watches brain.onTool: a get_event
-// earlier in the same turn is the `before` of a later update/delete of that event.
+// "Changed by JARVIS" (JD-14, JD-77): every calendar write JARVIS's own tools make is logged with
+// what the event looked like before, so it can be undone. The calendar tools (src/tools/calendar.ts)
+// call record() themselves right after a successful write — this no longer sniffs the brain's tool
+// stream for a claude.ai connector's tool names (that connector kept dropping its write tools; JD-77
+// replaced it with a first-party client the tools call directly, so logging can be direct too).
 
 import { randomUUID } from "node:crypto";
 import type { CalendarChange } from "@jarvis/shared";
-import type { Brain, BrainToolEvent } from "./brain/index.js";
 import type { EventBus } from "./events.js";
 import { JarvisError } from "./jarvis.js";
 import { JsonFile } from "./storage.js";
-import { CALENDAR_WRITES, serverName } from "./tools/connectors.js";
 
 const MAX_ENTRIES = 200;
-const GET_EVENT = `${serverName("Google Calendar")}__get_event`;
 
-const shortName = (tool: string) => tool.split("__").pop() ?? tool;
-const eventIdOf = (input: unknown) => String((input as { eventId?: unknown } | undefined)?.eventId ?? "");
+export type CalendarWriteTool = "create_event" | "update_event" | "delete_event" | "respond";
 
-function describe(tool: string, input: Record<string, unknown>): string {
-  const what = String(input.summary ?? input.eventId ?? "event");
-  const when = input.startTime ? ` → ${String(input.startTime)}` : "";
-  const rsvp = input.responseStatus ? ` → ${String(input.responseStatus)}` : "";
-  return `${shortName(tool)}: ${what}${when}${rsvp}`;
+export interface NewCalendarChange {
+  tool: CalendarWriteTool;
+  input: Record<string, unknown>;
+  /** The tool's answer (the event after the change, or a confirmation), as text (often JSON). */
+  result: string;
+  /** A snapshot of the event before the change (update/delete/respond only), as text (often JSON). */
+  before?: string;
+  /** One line for the log, e.g. "update_event: Booking call → 2026-10-17T14:00:00". */
+  summary: string;
 }
 
 export class CalendarLog {
   private readonly file: JsonFile<{ entries: CalendarChange[] }>;
-  /** get_event results per turn (messageId → eventId → text). */
-  private readonly seen = new Map<string, Map<string, string>>();
-  /** An undo was handed to the brain; its next calendar write completes it. */
+  /** Set by undo_calendar_change just before it performs the reversal, so the next record() tags it. */
   private pendingUndo?: string;
 
   constructor(
@@ -37,64 +37,35 @@ export class CalendarLog {
     this.file = new JsonFile(dataDir, "calendarLog", { entries: [] as CalendarChange[] });
   }
 
-  attach(brain: Pick<Brain, "onTool">): () => void {
-    return brain.onTool((e) => this.onTool(e));
-  }
-
   /** Newest first. */
   recent(limit = 20): CalendarChange[] {
     return [...this.file.get().entries].reverse().slice(0, limit);
   }
 
-  onTool(e: BrainToolEvent): void {
-    if (e.phase !== "result" || e.isError) return;
-    if (e.name === GET_EVENT) {
-      const turn = this.seen.get(e.messageId) ?? new Map<string, string>();
-      turn.set(eventIdOf(e.input), e.result ?? e.summary ?? "");
-      this.seen.set(e.messageId, turn);
-      // Keep only recent turns.
-      if (this.seen.size > 20) this.seen.delete(this.seen.keys().next().value!);
-      return;
-    }
-    if (!CALENDAR_WRITES.includes(e.name)) return;
-    const input = (e.input ?? {}) as Record<string, unknown>;
-    const entry: CalendarChange = {
-      id: randomUUID().slice(0, 8),
-      at: new Date().toISOString(),
-      tool: shortName(e.name),
-      input,
-      result: e.result ?? e.summary ?? "",
-      summary: describe(e.name, input),
-    };
-    const before = this.seen.get(e.messageId)?.get(eventIdOf(input));
-    if (before !== undefined && entry.tool !== "create_event") entry.before = before;
+  /** Called by a calendar tool right after a successful write. */
+  async record(change: NewCalendarChange): Promise<CalendarChange> {
+    const entry: CalendarChange = { id: randomUUID().slice(0, 8), at: new Date().toISOString(), ...change };
     const undoOf = this.pendingUndo;
-    if (undoOf) {
-      entry.undoOf = undoOf;
-      this.pendingUndo = undefined;
-    }
-    void this.file.update((s) => ({
+    this.pendingUndo = undefined;
+    if (undoOf) entry.undoOf = undoOf;
+    await this.file.update((s) => ({
       entries: [...s.entries.map((x) => (x.id === undoOf ? { ...x, undoneAt: entry.at } : x)), entry].slice(-MAX_ENTRIES),
     }));
     this.bus?.publish({ type: "calendar.changed", entry });
+    return entry;
   }
 
-  /** The change to undo (latest not yet undone, or by id) and how; its next calendar write marks it undone. */
-  undo(id?: string): { entry: CalendarChange; instructions: string } {
+  /** The change to undo (latest not yet undone and not itself an undo, or by id); throws if there's none. */
+  pick(id?: string): CalendarChange {
     const entries = this.recent(MAX_ENTRIES).filter((x) => !x.undoneAt && !x.undoOf);
     const entry = id ? entries.find((x) => x.id === id) : entries[0];
     if (!entry) throw new JarvisError(id ? `No calendar change ${id} to undo.` : "There's no calendar change of mine to undo.");
-    this.pendingUndo = entry.id;
-    const input = JSON.stringify(entry.input);
-    const instructions =
-      entry.tool === "create_event"
-        ? `Delete the event it created (its id is in the result): ${entry.result.slice(0, 500)}`
-        : entry.tool === "delete_event"
-          ? `Re-create the deleted event with create_event from how it was before:\n${entry.before ?? "(no copy was saved; tell Matthew you can't restore its details)"}`
-          : entry.tool === "update_event"
-            ? `Call update_event on eventId ${String((entry.input as { eventId?: unknown }).eventId)} to restore the fields it changed (${input}) to their values before:\n${entry.before ?? "(no copy was saved; ask Matthew what to restore)"}`
-            : `RSVP again with the response from before:\n${entry.before ?? "(unknown; ask Matthew)"}`;
-    return { entry, instructions };
+    return entry;
+  }
+
+  /** Marks `id` as about to be undone; the next record() call tags itself as the reversal and marks `id` undone. */
+  markPending(id: string): void {
+    this.pendingUndo = id;
   }
 }
 

@@ -20,7 +20,8 @@ Two halves that ship together:
 | Speech out (Mac) | macOS `say -v <voice> -o <file>` per sentence, played in the renderer with WebAudio | Free built-in voices; WebAudio gives the waveform for the orb |
 | Voice notes (container) | whisper.cpp (CPU) in, Piper TTS + ffmpeg (OGG/Opus) out | Telegram voice notes both ways without paid APIs (ADR 0005) |
 | Memory + tasks | Notion API with the existing internal integration (write scoped in code) | Matthew can read and edit both (ADR 0006) |
-| Calendar/Gmail/Slack | claude.ai connectors through the CLI (as today); calendar writes now allowed | No OAuth app of our own (ADR 0008) |
+| Calendar | First-party Google Calendar API, our own OAuth client (JARVIS's own tools, not a connector) | The claude.ai connector's write tools kept dropping out (ADR 0008, 0013) |
+| Gmail/Slack | claude.ai connectors through the CLI, read-only | No OAuth app of our own for these |
 | Hand tracking | MediaPipe Tasks Vision HandLandmarker (WASM) in the overlay renderer | Same building block as barehands; our own gestures (ADR 0012) |
 | Packaging | electron-builder → unsigned arm64 `.dmg` on GitHub Releases; own updater that replaces the app from a release .zip (JD-74) | No Apple developer account; Squirrel auto-update needs signing (ADR 0010) |
 | QA preview | Vite web build of the renderer with a mock bridge + scenarios, deployed to Vercel per PR | Clickable links in the Notion QA block (ADR 0011) |
@@ -33,8 +34,10 @@ Two halves that ship together:
    · windows: overlay, app windows, ambient        │  REST  │  · DeskApi: auth, SSE /events, REST  │
    · tray menu, shortcuts, uiohook (⌥⌥)           │◄──────►│ Brain (warm claude -p, streaming)    │
    · audio: pvrecorder → Porcupine / VAD / whisper │  SSE   │  · MCP tool server (mcp.ts)          │
-   · `say` TTS, uploads, folder RPC, screenshots   │        │  · claude.ai connectors (Cal/Gmail/   │
-  renderer (React, one bundle, route per window)   │        │    Slack), Notion API (memory/tasks)  │
+   · `say` TTS, uploads, folder RPC, screenshots   │        │  · claude.ai connectors (Gmail/Slack,  │
+  renderer (React, one bundle, route per window)   │        │    Calendar reads for the worker),    │
+                                                    │        │    Google Calendar API (writes),     │
+                                                    │        │    Notion API (memory/tasks)         │
    · orb, cards, launcher, command bar, windows    │        │ Worker brain (digest, suggestions)   │
    · MediaPipe hands (overlay only)                │        │ Scheduler (timers, reminders, jobs)  │
  └─────────────────────────────────────────────────┘        │ Telegram bot (+ voice notes)         │
@@ -104,7 +107,7 @@ Every window is a folder under `desk/renderer/features/` with its own CSS, a `fe
 ## Risks & open questions
 - **Unsigned app:** macOS asks once (right-click → Open); permissions (Microphone, Camera, Input Monitoring for ⌥⌥, Screen Recording for screen awareness) are granted per app path, so the app must live in /Applications. Updates replace it in place.
 - **Warm CLI process:** undocumented stream-json input details may change; fallback is today's one-process-per-message path behind a flag.
-- **Connector-driven windows** (Today, Calendar) cost plan usage per refresh and are only as fresh as the last job (30 min, or on open).
-- **Calendar undo** relies on the brain fetching the event before changing it; the change log records what it saw. Deletes stay recoverable from Google's Bin for 30 days.
+- **Connector-driven windows** (Today; the Calendar window's own read, JD-21) cost plan usage per refresh and are only as fresh as the last job (30 min, or on open). Calendar *writes* (JARVIS's own tools, ADR 0013) don't: they call the Google API directly.
+- **Calendar undo** is performed deterministically by `undo_calendar_change` itself, from a snapshot each write tool takes before changing anything. Deletes also stay recoverable from Google's Bin for 30 days.
 - **Embedded claude.ai / notion.so** may block sign-in methods inside an app (Google SSO); email sign-in works.
 - **Picovoice free tier** requires an online key check periodically and is limited to personal use.
