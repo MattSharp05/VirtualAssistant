@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeskEvent } from "@jarvis/shared";
 import {
   CHECK_EVERY_MS,
+  WAKE_CHECK_AFTER_MS,
   compareVersions,
   deskTagVersion,
   INSTALL_HASH,
@@ -158,7 +159,8 @@ describe("checking for updates", () => {
     });
   });
 
-  it("checks after launch and every 24 h, only while Check for updates is on", async () => {
+  it("checks after launch and every hour, only while Check for updates is on (JD-76)", async () => {
+    expect(CHECK_EVERY_MS).toBe(60 * 60_000);
     vi.useFakeTimers();
     try {
       const on = setup();
@@ -177,6 +179,38 @@ describe("checking for updates", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("update checks are visible and timely (JD-76)", () => {
+  it("logs every check: a newer version, up to date, and a failed check", async () => {
+    const lines: string[] = [];
+    const log = (level: string, text: string) => void lines.push(`${level} ${text}`);
+    const found = setup();
+    await new Updater({ ...found.opts, log }).check();
+    const latest = setup({ current: "1.2.10" });
+    await new Updater({ ...latest.opts, log }).check();
+    const broken = setup({
+      fetch: vi.fn(async () => new Response("", { status: 503 })) as unknown as typeof fetch,
+    });
+    await new Updater({ ...broken.opts, log }).check();
+    expect(lines[0]).toMatch(/^info Checked GitHub: 1\.2\.10 is newer than 1\.2\.9/);
+    expect(lines).toContain("info Checked GitHub: 1.2.10 is the latest");
+    expect(lines).toContain("warn Couldn't check for updates: GitHub answered 503");
+  });
+
+  it("checks again when the Mac wakes, unless a check just ran or checking is off", async () => {
+    const on = setup();
+    const t0 = Date.now();
+    await on.updater.check();
+    on.updater.woke(t0 + 60_000);
+    expect(on.opts.fetch).toHaveBeenCalledTimes(1);
+    on.updater.woke(t0 + WAKE_CHECK_AFTER_MS + 60_000);
+    await on.updater.settled();
+    expect(on.opts.fetch).toHaveBeenCalledTimes(2);
+    const off = setup({ enabled: false });
+    off.updater.woke();
+    expect(off.opts.fetch).not.toHaveBeenCalled();
   });
 });
 

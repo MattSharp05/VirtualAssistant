@@ -85,6 +85,20 @@ describe("app menus (JD-62)", () => {
     expect(restartToUpdate).toHaveBeenCalledOnce();
   });
 
+  it("the Dock menu offers Check for updates when the updater is wired (JD-76)", () => {
+    const checkForUpdates = vi.fn();
+    const menu = dockMenu(false, { ...actions(), checkForUpdates });
+    expect(names(menu)).toEqual([
+      "Command bar",
+      "Open Settings…",
+      "Check for updates",
+      "—",
+      "Do Not Disturb",
+    ]);
+    find(menu, "Check for updates").click!();
+    expect(checkForUpdates).toHaveBeenCalledOnce();
+  });
+
   it("the orb's menu is Settings… and Quit JARVIS Desk", () => {
     const act = actions();
     const menu = orbMenu(act);
