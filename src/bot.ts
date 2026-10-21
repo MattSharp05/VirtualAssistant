@@ -7,7 +7,7 @@ import { LiveReply } from "./liveReply.js";
 import { MAX_UPLOAD_BYTES, UploadStore, type Upload } from "./uploads.js";
 import { transcribe as whisperTranscribe, type Transcript } from "./voice/stt.js";
 import { synthesize } from "./voice/tts.js";
-import type { Jarvis } from "./jarvis.js";
+import { describeStart, type Jarvis } from "./jarvis.js";
 import type { Job, VoiceReplies } from "./store.js";
 
 const HELP = [
@@ -105,6 +105,7 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
         ...(s.auth.warning ? [`⚠️ ${s.auth.warning}`] : []),
         ...usage,
         `New sessions: sessions API; routine fallback ${s.routineConfigured ? s.routineId : "not configured (ROUTINE_ID / ROUTINE_TOKEN)"}`,
+        ...(s.lastStartError ? [`⚠️ Sessions API last failed at ${s.lastStartError.at.slice(11, 16)} UTC: ${s.lastStartError.reason}`] : []),
         `Routine fires this hour: ${s.firesThisHour}/${s.firesPerHour}`,
         `Notion: ${s.notion.state === "ok" ? `connected, ${s.notion.shared} pages shared` : s.notion.state === "off" ? "off (NOTION_TOKEN unset)" : s.notion.detail}`,
         `Current job: ${store.currentJob()?.id ?? "none"}`,
@@ -116,9 +117,7 @@ export function createBot(token: string, allowedChatId: number | undefined, jarv
     const task = ctx.match.trim();
     if (!task) return ctx.reply("Usage: /new <task>");
     try {
-      const { job, ms, fireNumber } = await jarvis.startJob(task);
-      const how = fireNumber ? ` via the routine (fire ${fireNumber}/30 this hour)` : job.title ? `: "${job.title}"` : "";
-      await ctx.reply(`Started ${job.id} in ${seconds(ms)}${how}. It'll report here when it has something.\n${job.url}`);
+      await ctx.reply(`${describeStart(await jarvis.startJob(task), jarvis.config)}\nIt'll report here when it has something.`);
     } catch (err) {
       await ctx.reply(`Couldn't start the job: ${(err as Error).message}`);
     }

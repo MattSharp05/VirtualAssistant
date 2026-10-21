@@ -7,7 +7,7 @@ import { followUpText, newJobText } from "./prompts.js";
 import { fireRoutine } from "./routines.js";
 import { JOB_NAME, parseSessionId, sessionUrl, type Job, type Store } from "./store.js";
 import { SessionMetricsSource } from "./sessionMetrics.js";
-import { describeProjects, findProject, SessionStarter, type StartPath } from "./sessionStart.js";
+import { describeProjects, describeSetup, environmentLabel, findProject, modelId, SessionStarter, type DirectSession, type SessionPlan, type StartPath } from "./sessionStart.js";
 import { SessionListCache, type SessionList } from "./sessions.js";
 import { UsageCache, type PlanUsage } from "./usage.js";
 
@@ -15,6 +15,29 @@ import { UsageCache, type PlanUsage } from "./usage.js";
 export const FIRES_PER_HOUR = 30;
 
 export class JarvisError extends Error {}
+
+/** What startJob did: the job, how it started and, for a direct start, where the session really runs. */
+export interface StartResult {
+  job: Job;
+  ms: number;
+  via: StartPath;
+  plan: SessionPlan;
+  direct?: DirectSession;
+  /** The routine's fire number this hour, when the routine started it. */
+  fireNumber?: number;
+  /** Why the sessions API didn't start it, when the routine did. */
+  fallbackReason?: string;
+}
+
+/** The start confirmation (JD-86): the link, then the environment and model it really runs in, or why it's the routine. */
+export function describeStart(r: StartResult, config: Pick<Config, "projects" | "sessionEnvironmentId">): string {
+  const head = `Started ${r.job.id} in ${(r.ms / 1000).toFixed(1)}s${r.job.title ? `, titled "${r.job.title}"` : ""}: ${r.job.url}`;
+  if (r.direct) return `${head}\n${describeSetup(r.direct, config)}`;
+  return (
+    `${head}\n⚠️ Started via the routine fallback (fire ${r.fireNumber ?? "?"}/${FIRES_PER_HOUR} this hour) because the sessions API failed: ${r.fallbackReason ?? "unknown"}. ` +
+    `It runs in the routine's own environment and model (set on the routine), not ${environmentLabel(r.plan.environmentId, config)} / ${r.plan.model}.`
+  );
+}
 
 export interface Status {
   auth: AuthStatus;
@@ -27,6 +50,8 @@ export interface Status {
   nextFireFreesAt?: string;
   telegram: boolean;
   reportsEndpoint: boolean;
+  /** The last time the sessions API couldn't start a session (JD-86), until one starts again. */
+  lastStartError?: { at: string; reason: string };
   notion: NotionStatus;
 }
 
@@ -37,6 +62,7 @@ export class Jarvis {
   /** Per-session tokens, cost, context and activity (JD-53); tests swap in one with a fake fetch. */
   metrics = new SessionMetricsSource();
   private auth?: { value: AuthStatus; at: number };
+  private lastStartError?: { at: string; reason: string };
   /** Makes new sessions with the sessions API (JD-69); tests swap in one with fakes. */
   starter: SessionStarter;
   /** The sessions API's fetch and login folder (tests point them at fakes). */
@@ -81,7 +107,7 @@ export class Jarvis {
    * `project` (a slug, name or alias from PROJECTS) picks the project over what the task says (JD-85);
    * the routine runs only on the default repo, so another project's failure is an error, not a fire.
    */
-  async startJob(task: string, opts: { project?: string } = {}): Promise<{ job: Job; ms: number; via: StartPath; fireNumber?: number }> {
+  async startJob(task: string, opts: { project?: string; model?: string } = {}): Promise<StartResult> {
     task = task.trim();
     if (!task) throw new JarvisError("The task is empty.");
     let chosen: ProjectSetting | undefined;
@@ -92,7 +118,12 @@ export class Jarvis {
         throw new JarvisError(`Unknown project "${opts.project.trim()}". ${known ? `Known projects: ${known}.` : "No projects are configured (PROJECTS in .env)."}`);
       }
     }
-    const plan = this.starter.plan(task, chosen);
+    let model: string | undefined;
+    if (opts.model?.trim()) {
+      model = modelId(opts.model);
+      if (!model) throw new JarvisError(`Unknown model "${opts.model.trim()}". Use opus, sonnet, haiku or a full id such as claude-opus-5-5.`);
+    }
+    const plan = this.starter.plan(task, chosen, model);
 
     const jobId = this.store.newJobId();
     const sentAt = new Date();
@@ -102,14 +133,30 @@ export class Jarvis {
       direct = await this.starter.start(jobId, task, sentAt, plan);
     } catch (err) {
       reason = (err as Error).message;
+      this.lastStartError = { at: new Date().toISOString(), reason: reason.slice(0, 300) };
       if (!plan.routineFallback) throw new JarvisError(`Couldn't start a ${plan.projectName ?? plan.project ?? "project"} session: ${reason}`);
       console.warn(`sessions API couldn't start ${jobId} (${reason.slice(0, 200)}); trying the routine`);
     }
     if (direct) {
+      this.lastStartError = undefined;
       const { sessionId, url, title, tags, via } = direct;
-      const job: Job = { id: jobId, sessionId, url, task, createdAt: sentAt.toISOString(), kind: "started", via, title, tags };
+      const environmentId = direct.actual?.environmentId ?? direct.environmentId;
+      const job: Job = {
+        id: jobId,
+        sessionId,
+        url,
+        task,
+        createdAt: sentAt.toISOString(),
+        kind: "started",
+        via,
+        title,
+        tags,
+        ...(environmentId ? { environmentId } : {}),
+        model: direct.actual?.model ?? direct.model,
+        setupConfirmed: Boolean(direct.actual),
+      };
       this.store.addJob(job);
-      return { job, ms: Date.now() - sentAt.getTime(), via };
+      return { job, ms: Date.now() - sentAt.getTime(), via, plan, direct };
     }
 
     const { routineId, routineToken } = this.config;
@@ -128,7 +175,7 @@ export class Jarvis {
     console.log(`started ${jobId} via the routine: ${session.sessionId}`);
     const job: Job = { id: jobId, ...session, task, createdAt: sentAt.toISOString(), kind: "started", via: "routine" };
     this.store.addJob(job);
-    return { job, ms: Date.now() - sentAt.getTime(), via: "routine", fireNumber: recent.length + 1 };
+    return { job, ms: Date.now() - sentAt.getTime(), via: "routine", plan, fireNumber: recent.length + 1, fallbackReason: reason };
   }
 
   /**
@@ -217,6 +264,7 @@ export class Jarvis {
       nextFireFreesAt: fires[0] ? new Date(fires[0].getTime() + 60 * 60 * 1000).toISOString() : undefined,
       telegram: Boolean(this.config.telegramBotToken),
       reportsEndpoint: Boolean(this.config.reportSecret),
+      ...(this.lastStartError ? { lastStartError: this.lastStartError } : {}),
       notion,
     };
   }

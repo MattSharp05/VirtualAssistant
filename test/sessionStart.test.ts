@@ -3,12 +3,12 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { createSessionBody } from "../src/cloud.js";
+import { createSessionBody, sessionSetupOf } from "../src/cloud.js";
 import { parseProjects, type Config } from "../src/config.js";
 import { mergeSessions } from "../src/desk/routes/sessions.js";
-import { Jarvis } from "../src/jarvis.js";
+import { describeStart, Jarvis } from "../src/jarvis.js";
 import { loadWorkerInstructions, sessionPromptText } from "../src/prompts.js";
-import { describeProjects, findProject, planSession, repoUrlOf, sessionTags, SessionStarter, type StarterDeps } from "../src/sessionStart.js";
+import { describeProjects, findProject, modelId, planSession, repoUrlOf, sessionTags, SessionStarter, type StarterDeps } from "../src/sessionStart.js";
 import sessionsGroup from "../src/tools/sessions.js";
 import type { ToolContext } from "../src/tools/types.js";
 import { fallbackTitle, finishTitle, MAX_TITLE, ticketIdIn, titleFor, writeTitle } from "../src/sessionTitle.js";
@@ -70,6 +70,7 @@ test("planSession: the default repo and its project, role:task for a plain task"
     projectName: "JARVIS Desk",
     role: "task",
     environmentId: "env_01TEST",
+    model: "claude-opus-5-5",
     routineFallback: true,
   });
   assert.deepEqual(sessionTags(plan, "j11"), ["project:jarvis", "role:task", "jarvis:j11"]);
@@ -93,6 +94,7 @@ test("planSession: a ticket ID makes a builder and picks its project by prefix",
     ticket: "TP-12",
     role: "builder",
     environmentId: "env_01TEST",
+    model: "claude-opus-5-5",
     routineFallback: false,
   });
   assert.deepEqual(sessionTags(plan, "j3"), ["project:trip", "role:builder", "jarvis:j3", "ticket:TP-12"]);
@@ -100,9 +102,9 @@ test("planSession: a ticket ID makes a builder and picks its project by prefix",
 
 test("planSession: a GitHub URL in the task wins; without PROJECTS the repo name is the project", () => {
   const plan = planSession("Fix the build in https://github.com/acme/widgets please", config(tmp(), { projects: [] }));
-  assert.deepEqual(plan, { repoUrl: "https://github.com/acme/widgets", project: "widgets", role: "task", environmentId: "env_01TEST", routineFallback: false });
+  assert.deepEqual(plan, { repoUrl: "https://github.com/acme/widgets", project: "widgets", role: "task", environmentId: "env_01TEST", model: "claude-opus-5-5", routineFallback: false });
   assert.equal(planSession("Fix AB-7", config(tmp(), { projects: [] })).ticket, "AB-7", "any upper-case ID counts without prefixes");
-  assert.deepEqual(planSession("Do a thing", config(tmp(), { projects: [], defaultRepo: undefined, sessionEnvironmentId: undefined })), { role: "task", routineFallback: true });
+  assert.deepEqual(planSession("Do a thing", config(tmp(), { projects: [], defaultRepo: undefined, sessionEnvironmentId: undefined })), { role: "task", model: "claude-opus-5-5", routineFallback: true });
   assert.equal(repoUrlOf("MattSharp05/trip"), "https://github.com/MattSharp05/trip");
   assert.equal(repoUrlOf("https://github.com/MattSharp05/trip.git/"), "https://github.com/MattSharp05/trip");
 });
@@ -195,13 +197,19 @@ test("start: one POST to the sessions API makes a titled, tagged session on the 
     tags: ["project:jarvis", "role:builder", "jarvis:j7", "ticket:JD-60"],
     via: "api",
     repoUrl: "https://github.com/MattSharp05/VirtualAssistant",
+    environmentId: "env_01TEST",
+    model: "claude-opus-5-5",
+    checkError: "HTTP 500: {}",
   });
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2, "the create, then the read-back");
+  assert.equal(calls[1].method, "GET");
+  assert.equal(calls[1].url, "https://api.anthropic.com/v1/code/sessions/session_01NEW");
   assert.equal(calls[0].url, "https://api.anthropic.com/v1/code/sessions");
   assert.equal(calls[0].method, "POST");
   assert.equal(calls[0].headers.Authorization, "Bearer tok-test");
   assert.equal(calls[0].body.title, "JD-60: Fix the Today clock");
   assert.equal(calls[0].body.environment_id, "env_01TEST");
+  assert.equal((calls[0].body.session_context as { model?: string }).model, "claude-opus-5-5");
   const content = (calls[0].body.events as { data: { message: { content: string } } }[])[0].data.message.content;
   assert.match(content, /^WORKER RULES\n\n---\n\nJARVIS job: j7\n/);
   assert.match(content, /Task from Matthew:\nJD-60 fix the clock$/);
@@ -213,7 +221,7 @@ test("start: when the API refuses the first message, the session is created bare
   const s = await starter(tmp(), { fetchImpl, configDir: loginDir(), send: async (_bin, id, message) => (sent.push({ id, message }), { ok: true }) }).start("j8", "fix the clock", new Date());
   assert.equal(s.via, "api+cli");
   assert.equal(s.sessionId, "session_01BARE");
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3, "create, bare create, read-back");
   assert.equal("events" in calls[1].body, false);
   assert.equal(calls[1].body.title, "Fix the Today clock");
   assert.equal(sent[0].id, "session_01BARE");
@@ -349,7 +357,7 @@ test("start: a Drift session goes to driftship in Drift's environment, tagged pr
   assert.equal(s.title, "Fix the Today clock");
   assert.deepEqual(s.tags, ["project:drift", "role:task", "jarvis:j9"]);
   assert.equal(calls[0].body.environment_id, DRIFT_ENV);
-  assert.deepEqual(calls[0].body.session_context, { sources: [{ git_repository: { url: "https://github.com/MattSharp05/driftship" } }] });
+  assert.deepEqual(calls[0].body.session_context, { sources: [{ git_repository: { url: "https://github.com/MattSharp05/driftship" } }], model: "claude-opus-5-5" });
   const content = (calls[0].body.events as { data: { message: { content: string } } }[])[0].data.message.content;
   assert.match(content, /^WORKER RULES\n\n---\n\n\*\*Project rules\*\* \(Drift, MattSharp05\/driftship\):\n/);
   assert.match(content, /- Open a PR, never merge\./);
@@ -372,7 +380,7 @@ test("startJob: project \"driftship\" wins over the task text", async () => {
   const { job } = await jarvis.startJob("fix the checkout copy in trip", { project: "driftship" });
   assert.deepEqual(job.tags, ["project:drift", "role:task", "jarvis:j1"]);
   assert.equal(calls[0].body.environment_id, DRIFT_ENV);
-  assert.deepEqual(calls[0].body.session_context, { sources: [{ git_repository: { url: "https://github.com/MattSharp05/driftship" } }] });
+  assert.deepEqual(calls[0].body.session_context, { sources: [{ git_repository: { url: "https://github.com/MattSharp05/driftship" } }], model: "claude-opus-5-5" });
 });
 
 test("startJob: an unknown project errors and lists the known ones, without calling the API", async () => {
@@ -397,10 +405,17 @@ test("start_session: the description lists the configured projects; the project 
   const description = typeof tool.description === "function" ? tool.description(ctx) : tool.description;
   assert.match(description, /Projects: jarvis \(JARVIS Desk\), drift \(Drift; also driftship, shelfzero\)\./);
   assert.ok("project" in (tool.inputSchema.properties as Record<string, unknown>));
+  assert.ok("model" in (tool.inputSchema.properties as Record<string, unknown>));
   const seen: unknown[] = [];
-  const jarvis = { startJob: async (task: string, opts: unknown) => (seen.push(task, opts), { job: { id: "j1", url: "u", title: "T" }, ms: 5 }) };
-  await tool.handler({ task: "fix it", project: "drift" }, { ...ctx, jarvis } as unknown as ToolContext);
-  assert.deepEqual(seen, ["fix it", { project: "drift" }]);
+  const jarvis = {
+    config: ctx.config,
+    startJob: async (task: string, opts: unknown) => (
+      seen.push(task, opts), { job: { id: "j1", url: "u", title: "T" }, ms: 5, plan: { model: "claude-sonnet-5-5" }, direct: { model: "claude-sonnet-5-5", environmentId: DRIFT_ENV, actual: { environmentId: DRIFT_ENV, model: "claude-sonnet-5-5" } } }
+    ),
+  };
+  const out = await tool.handler({ task: "fix it", project: "drift", model: "sonnet" }, { ...ctx, jarvis } as unknown as ToolContext);
+  assert.deepEqual(seen, ["fix it", { project: "drift", model: "sonnet" }]);
+  assert.match(String(out), /Environment: Drift \(env_01Mr\w*\) · Model: claude-sonnet-5-5 · Repo: no repo \(confirmed from the session record\)/);
 });
 
 test("the report instructions work in any repo: the curl form, and scripts/report.sh only where it exists", () => {
@@ -412,4 +427,73 @@ test("the report instructions work in any repo: the curl form, and scripts/repor
   const mentions = instructions.split("\n").filter((l) => l.includes("scripts/report.sh"));
   assert.ok(mentions.length > 0 && mentions.every((l) => /-x scripts\/report\.sh|exec scripts\/report\.sh/.test(l) || l.startsWith("#")), mentions.join("\n"));
   assert.match(loadWorkerInstructions(join(tmp(), "nope.md")), /\$JARVIS_REPORT_URL\/api\/reports with curl/, "the built-in copy too");
+});
+
+// ── Model and the start confirmation (JD-86) ──
+
+const record = (env: string, model: string, repo = "https://github.com/MattSharp05/driftship") =>
+  new Response(JSON.stringify({ id: "session_01D", environment_id: env, session_context: { model, sources: [{ git_repository: { url: repo } }] } }), { status: 200 });
+
+test("modelId: aliases and full ids; anything else is undefined", () => {
+  assert.equal(modelId("opus"), "claude-opus-5-5");
+  assert.equal(modelId("Sonnet 5.5"), "claude-sonnet-5-5");
+  assert.equal(modelId("claude haiku"), "claude-haiku-5-5");
+  assert.equal(modelId("claude-opus-5-5"), "claude-opus-5-5");
+  assert.equal(modelId("gpt-5"), undefined);
+});
+
+test("planSession: model = the argument, else the project's, else SESSION_MODEL, else Opus", () => {
+  const projects = [{ ...TWO_PROJECTS[1], model: "claude-sonnet-5-5" }, TWO_PROJECTS[0]];
+  assert.equal(planSession("fix it in drift", config(tmp(), { projects })).model, "claude-sonnet-5-5");
+  assert.equal(planSession("fix it in drift", config(tmp(), { projects }), undefined, "claude-haiku-5-5").model, "claude-haiku-5-5");
+  assert.equal(planSession("fix it", config(tmp(), { sessionModel: "claude-fable-5-1" })).model, "claude-fable-5-1");
+  assert.equal(planSession("fix it", config(tmp())).model, "claude-opus-5-5");
+  assert.equal(parseProjects(JSON.stringify([{ slug: "d", model: "claude-sonnet-5-5" }]))[0].model, "claude-sonnet-5-5");
+});
+
+test("sessionSetupOf: environment, model (session_context.model or configured_model) and repo", () => {
+  assert.deepEqual(sessionSetupOf({ environment_id: "env_1", configured_model: "m", session_context: { sources: [{ git_repository: { url: "u" } }] } }), { environmentId: "env_1", model: "m", repoUrl: "u" });
+  assert.deepEqual(sessionSetupOf({ session: { environment_id: "env_2" } }), { environmentId: "env_2" });
+  assert.deepEqual(sessionSetupOf(null), {});
+});
+
+test("startJob: a Drift start reads the session back and the confirmation names its environment and model", async () => {
+  const { fetchImpl, calls } = fakeFetch(created("session_01D"), record(DRIFT_ENV, "claude-opus-5-5"));
+  const jarvis = jarvisWith(fetchImpl, loginDir(), twoProjects);
+  const r = await jarvis.startJob("start a Drift session to fix the checkout copy");
+  assert.equal(calls[1].url, "https://api.anthropic.com/v1/code/sessions/session_01D");
+  assert.equal(r.job.environmentId, DRIFT_ENV);
+  assert.equal(r.job.model, "claude-opus-5-5");
+  assert.equal(r.job.setupConfirmed, true);
+  const text = describeStart(r, jarvis.config);
+  assert.match(text, /^Started j1 in [\d.]+s, titled "Fix the Today clock": https:\/\/claude\.ai\/code\/session_01D\n/);
+  assert.match(text, /\nEnvironment: Drift \(env_01Mr9vBBj7bB2BrjS1J1LNvB\) · Model: claude-opus-5-5 · Repo: MattSharp05\/driftship \(confirmed from the session record\)$/);
+});
+
+test("startJob: a session that landed somewhere else is flagged, and a model argument is sent", async () => {
+  const { fetchImpl, calls } = fakeFetch(created("session_01D"), record("env_01OTHER", "claude-sonnet-5-5"));
+  const jarvis = jarvisWith(fetchImpl, loginDir(), twoProjects);
+  const r = await jarvis.startJob("fix the checkout copy", { project: "drift", model: "haiku" });
+  assert.equal((calls[0].body.session_context as { model?: string }).model, "claude-haiku-5-5");
+  const text = describeStart(r, jarvis.config);
+  assert.match(text, /Environment: env_01OTHER · Model: claude-sonnet-5-5/);
+  assert.match(text, /⚠️ Not what was asked: asked for environment Drift \(env_01Mr9vBBj7bB2BrjS1J1LNvB\); asked for model claude-haiku-5-5\./);
+});
+
+test("startJob: an unknown model is refused before anything starts", async () => {
+  const { fetchImpl, calls } = fakeFetch();
+  const jarvis = jarvisWith(fetchImpl, loginDir(), twoProjects);
+  await assert.rejects(jarvis.startJob("x", { model: "gpt-5" }), /Unknown model "gpt-5"/);
+  assert.equal(calls.length, 0);
+});
+
+test("startJob: a routine start says why, and that it runs on the routine's environment and model", async () => {
+  const routine = new Response(JSON.stringify({ claude_code_session_id: "session_01R", claude_code_session_url: "https://claude.ai/code/session_01R" }), { status: 200 });
+  const { fetchImpl } = fakeFetch(new Response("nope", { status: 503 }), routine);
+  const jarvis = jarvisWith(fetchImpl, loginDir(), { routineId: "trig_1", routineToken: "t" });
+  const r = await jarvis.startJob("fix the clock");
+  assert.equal(r.via, "routine");
+  const text = describeStart(r, jarvis.config);
+  assert.match(text, /⚠️ Started via the routine fallback \(fire 1\/30 this hour\) because the sessions API failed: session create answered HTTP 503: nope\./);
+  assert.match(text, /not JARVIS default \(env_01TEST\) \/ claude-opus-5-5\.$/);
 });

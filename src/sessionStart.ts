@@ -7,11 +7,12 @@
 //                 that, under the 30-an-hour cap). Those sessions are routine runs, titled by the routine.
 // What the session is called, where it runs and how it is tagged is decided here too. Each project
 // in PROJECTS can bring its own environment, aliases and rules (JD-85); the routine runs only on the
-// default repo, so it is never a fallback for another project.
+// default repo, so it is never a fallback for another project. Every session gets a model (Opus by
+// default, JD-86), and is read back after it's made so the confirmation says where it really runs.
 
-import type { Config, ProjectSetting } from "./config.js";
+import { DEFAULT_SESSION_MODEL, type Config, type ProjectSetting } from "./config.js";
 import { claudeConfigDir, readAccessToken } from "./claudeApi.js";
-import { createCloudSession, CreateSessionError, sendToSession, type ApiDeps, type SendResult } from "./cloud.js";
+import { createCloudSession, CreateSessionError, readSessionSetup, sendToSession, type ApiDeps, type SendResult, type SessionSetup } from "./cloud.js";
 import { loadWorkerInstructions, projectRulesText, sessionPromptText } from "./prompts.js";
 import { ticketIdIn, titleFor, writeTitle } from "./sessionTitle.js";
 
@@ -30,6 +31,8 @@ export interface SessionPlan {
   role: "builder" | "task";
   /** env_…: the project's environment, else SESSION_ENVIRONMENT_ID. */
   environmentId?: string;
+  /** The model id: start_session's model, else the project's, else SESSION_MODEL (JD-86). */
+  model: string;
   /** The project's rules for the first message (base branch, merge policy, extra instructions). */
   rules?: string;
   /** The routine may start it when the API can't: only on the default repo, where the routine runs. */
@@ -43,6 +46,51 @@ export interface DirectSession {
   tags: string[];
   via: Exclude<StartPath, "routine">;
   repoUrl?: string;
+  /** What was asked for. */
+  environmentId?: string;
+  model: string;
+  /** What the session record says (JD-86); undefined when it couldn't be read, with `checkError` saying why. */
+  actual?: SessionSetup;
+  checkError?: string;
+}
+
+const MODEL_ALIASES: Record<string, string> = { opus: "claude-opus-5-5", sonnet: "claude-sonnet-5-5", haiku: "claude-haiku-5-5", fable: "claude-fable-5-1" };
+
+/** A model id from what Matthew says ("opus", "Sonnet 5.5", "claude-opus-5-5"); undefined when it isn't one. */
+export function modelId(name: string): string | undefined {
+  const n = name.trim().toLowerCase();
+  if (/^claude-[a-z0-9.-]+$/.test(n)) return n;
+  const word = n.replace(/^claude\s+/, "").match(/^(opus|sonnet|haiku|fable)(?:\s*5(?:\.\d)?)?$/)?.[1];
+  return word ? MODEL_ALIASES[word] : undefined;
+}
+
+/** "Drift (env_01Mr…)" / "the default environment" for an environment id, by the projects that use it. */
+export function environmentLabel(id: string | undefined, config: Pick<Config, "projects" | "sessionEnvironmentId">): string {
+  if (!id) return "the account's default environment";
+  const project = (config.projects ?? []).find((p) => p.environment === id);
+  if (project) return `${project.name} (${id})`;
+  return id === config.sessionEnvironmentId ? `JARVIS default (${id})` : id;
+}
+
+/** The confirmation lines for a direct start: environment, model and repo, as the session record says. */
+export function describeSetup(s: DirectSession, config: Pick<Config, "projects" | "sessionEnvironmentId">): string {
+  const repo = (url: string | undefined) => url?.replace(/^https:\/\/github\.com\//, "") ?? "no repo";
+  if (!s.actual) {
+    return `Environment: ${environmentLabel(s.environmentId, config)} · Model: ${s.model} · Repo: ${repo(s.repoUrl)} (as requested; couldn't read the session back to confirm: ${s.checkError ?? "unknown"})`;
+  }
+  const env = s.actual.environmentId ?? s.environmentId;
+  const model = s.actual.model ?? s.model;
+  const warn = [
+    ...(s.environmentId && s.actual.environmentId && s.actual.environmentId !== s.environmentId ? [`asked for environment ${environmentLabel(s.environmentId, config)}`] : []),
+    ...(s.actual.model && s.actual.model !== s.model ? [`asked for model ${s.model}`] : []),
+    ...(s.repoUrl && s.actual.repoUrl && s.actual.repoUrl.toLowerCase() !== s.repoUrl.toLowerCase() ? [`asked for repo ${repo(s.repoUrl)}`] : []),
+  ];
+  const unread = [...(s.actual.environmentId ? [] : ["environment"]), ...(s.actual.model ? [] : ["model"])];
+  return (
+    `Environment: ${environmentLabel(env, config)} · Model: ${model} · Repo: ${repo(s.actual.repoUrl ?? s.repoUrl)}` +
+    (unread.length ? ` (the session record doesn't show its ${unread.join(" or ")}; that one is as requested)` : " (confirmed from the session record)") +
+    (warn.length ? `\n⚠️ Not what was asked: ${warn.join("; ")}.` : "")
+  );
 }
 
 /** "owner/name" or a GitHub URL → https://github.com/owner/name. */
@@ -95,7 +143,12 @@ export function describeProjects(projects: ProjectSetting[] = []): string {
  * start_session's project argument) wins, then a GitHub URL in the task, then a project the task
  * names (PROJECTS), then DEFAULT_REPO (and the project whose repo it is).
  */
-export function planSession(task: string, config: Pick<Config, "projects" | "defaultRepo" | "sessionEnvironmentId">, chosen?: ProjectSetting): SessionPlan {
+export function planSession(
+  task: string,
+  config: Pick<Config, "projects" | "defaultRepo" | "sessionEnvironmentId" | "sessionModel">,
+  chosen?: ProjectSetting,
+  model?: string,
+): SessionPlan {
   const projects = config.projects ?? [];
   const prefixes = projects.map((p) => p.prefix).filter((p): p is string => Boolean(p));
   const ticket = ticketIdIn(task, prefixes) ?? (prefixes.length ? undefined : ticketIdIn(task));
@@ -116,6 +169,7 @@ export function planSession(task: string, config: Pick<Config, "projects" | "def
     ...(ticket ? { ticket } : {}),
     role: ticket ? "builder" : "task",
     ...(environmentId ? { environmentId } : {}),
+    model: model ?? project?.model ?? config.sessionModel ?? DEFAULT_SESSION_MODEL,
     ...(rules ? { rules } : {}),
     routineFallback: !repoUrl || ownerName(repoUrl) === ownerName(repoUrlOf(config.defaultRepo)),
   };
@@ -159,8 +213,8 @@ export class SessionStarter {
   }
 
   /** The plan for a task, on the project `chosen` when the caller picked one. */
-  plan(task: string, chosen?: ProjectSetting): SessionPlan {
-    return planSession(task, this.config, chosen);
+  plan(task: string, chosen?: ProjectSetting, model?: string): SessionPlan {
+    return planSession(task, this.config, chosen, model);
   }
 
   /**
@@ -173,22 +227,38 @@ export class SessionStarter {
     const tags = sessionTags(plan, jobId);
     const title = await this.title(task, plan.ticket);
     const prompt = sessionPromptText(this.instructions, jobId, task, sentAt, plan.rules);
-    const base = { title, tags, repoUrl: plan.repoUrl, environmentId: plan.environmentId };
+    const base = { title, tags, repoUrl: plan.repoUrl, environmentId: plan.environmentId, model: plan.model };
     const api = { fetchImpl: this.deps.fetchImpl, configDir: this.deps.configDir };
+    const done = async (s: { sessionId: string; url: string }, via: DirectSession["via"]): Promise<DirectSession> => {
+      const out: DirectSession = { ...s, title, tags, via, ...(plan.repoUrl ? { repoUrl: plan.repoUrl } : {}), ...(plan.environmentId ? { environmentId: plan.environmentId } : {}), model: plan.model };
+      try {
+        out.actual = await readSessionSetup(s.sessionId, api);
+      } catch (err) {
+        out.checkError = (err as Error).message.slice(0, 160);
+      }
+      const where = out.actual ? `${out.actual.environmentId ?? "env ?"} / ${out.actual.model ?? "model ?"}` : `unconfirmed: ${out.checkError}`;
+      this.log(`started ${jobId} via ${via === "api" ? "the sessions API" : "the sessions API + CLI message"}: ${s.sessionId} "${title}" (${where})`);
+      return out;
+    };
     try {
-      const s = await createCloudSession({ ...base, prompt }, api);
-      this.log(`started ${jobId} via the sessions API: ${s.sessionId} "${title}"`);
-      return { ...s, title, tags, via: "api", ...(plan.repoUrl ? { repoUrl: plan.repoUrl } : {}) };
+      return await done(await createCloudSession({ ...base, prompt }, api), "api");
     } catch (err) {
       if (!(err instanceof CreateSessionError && err.status !== undefined && BODY_REFUSED.has(err.status))) throw err;
       this.log(`sessions API refused the first message (${err.message.slice(0, 160)}); creating the session bare and sending it with the CLI`);
     }
-    const s = await createCloudSession(base, api);
+    let s: { sessionId: string; url: string };
+    try {
+      s = await createCloudSession(base, api);
+    } catch (err) {
+      if (!(err instanceof CreateSessionError && err.status !== undefined && BODY_REFUSED.has(err.status))) throw err;
+      // Last try without the model field; the confirmation then shows the model the session really got.
+      this.log(`sessions API refused the bare session too (${err.message.slice(0, 160)}); trying without the model`);
+      s = await createCloudSession({ ...base, model: undefined }, api);
+    }
     const sent = await (this.deps.send ?? sendToSession)(this.config.claudeBin, s.sessionId, prompt);
     if (!sent.ok) {
       throw new Error(`created ${s.url} but couldn't send it the task: ${sent.error ?? "unknown error"}`);
     }
-    this.log(`started ${jobId} via the sessions API + CLI message: ${s.sessionId} "${title}"`);
-    return { ...s, title, tags, via: "api+cli", ...(plan.repoUrl ? { repoUrl: plan.repoUrl } : {}) };
+    return done(s, "api+cli");
   }
 }

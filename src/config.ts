@@ -10,6 +10,8 @@ export interface Config {
   defaultRepo?: string;
   /** The cloud environment new sessions run in (SESSION_ENVIRONMENT_ID, env_…). Unset = the API's default. */
   sessionEnvironmentId?: string;
+  /** The model new sessions run on (SESSION_MODEL, default claude-opus-5-5; JD-86). A project's `model` overrides it. */
+  sessionModel?: string;
   /** The cheap model for background calls such as session titles (WORKER_MODEL; default: the haiku in BRAIN_MODELS). */
   workerModel?: string;
   dataDir: string;
@@ -38,6 +40,9 @@ export interface Config {
   githubToken?: string;
 }
 
+/** New sessions run on Opus unless SESSION_MODEL, a project or the start_session call says otherwise (JD-86). */
+export const DEFAULT_SESSION_MODEL = "claude-opus-5-5";
+
 /** One project in PROJECTS: its tag slug, name, Tickets data source, repo and how its sessions run (JD-85). */
 export interface ProjectSetting {
   /** The `project:` tag value (the project's CLAUDE.md `Project slug:`). */
@@ -52,6 +57,8 @@ export interface ProjectSetting {
   notionUrl?: string;
   /** The cloud environment (env_…) its sessions run in; overrides SESSION_ENVIRONMENT_ID. */
   environment?: string;
+  /** The model its sessions run on; overrides SESSION_MODEL (JD-86). */
+  model?: string;
   /** Other names for it ("driftship", "shelfzero"), matched like the slug, in any case. */
   aliases?: string[];
   /** The branch its PRs target (told to the session). */
@@ -77,7 +84,7 @@ export function parseProjects(text: string | undefined): ProjectSetting[] {
     const slug = str(r?.slug);
     if (!slug) throw new Error(`PROJECTS[${i}] needs a slug`);
     const out: ProjectSetting = { slug, name: str(r.name) ?? slug };
-    for (const key of ["tickets", "repo", "prefix", "notionUrl", "environment", "baseBranch", "extraInstructions"] as const) if (str(r[key])) out[key] = str(r[key]);
+    for (const key of ["tickets", "repo", "prefix", "notionUrl", "environment", "model", "baseBranch", "extraInstructions"] as const) if (str(r[key])) out[key] = str(r[key]);
     const aliases = Array.isArray(r.aliases) ? r.aliases.map(str).filter((a): a is string => Boolean(a)) : [];
     if (aliases.length) out.aliases = aliases;
     const policy = str(r.mergePolicy) as ProjectSetting["mergePolicy"] | undefined;
@@ -132,6 +139,7 @@ export function loadConfig(): Config {
     routineToken: optional("ROUTINE_TOKEN"),
     defaultRepo: optional("DEFAULT_REPO"),
     sessionEnvironmentId: optional("SESSION_ENVIRONMENT_ID"),
+    sessionModel: optional("SESSION_MODEL") ?? DEFAULT_SESSION_MODEL,
     workerModel: optional("WORKER_MODEL") ?? brainModels.find((m) => m.includes("haiku")),
     dataDir: optional("DATA_DIR") ?? "./data",
     claudeBin: optional("CLAUDE_BIN") ?? "claude",

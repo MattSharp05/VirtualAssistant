@@ -25,7 +25,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { timingSafeEqual } from "node:crypto";
-import { JarvisError, type Jarvis } from "./jarvis.js";
+import { describeStart, JarvisError, type Jarvis } from "./jarvis.js";
 import { RoutineError } from "./routines.js";
 import { parseSessionId, type Store } from "./store.js";
 import type { SystemMonitor } from "./system.js";
@@ -218,7 +218,7 @@ export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): S
       if (req.method === "POST" && url.pathname === "/api/jobs") {
         const body = await readJson(req);
         const result = await jarvis.startJob(String(body.task ?? ""));
-        return send(res, 201, result);
+        return send(res, 201, { ...result, message: describeStart(result, jarvis.config) });
       }
 
       if (url.pathname.startsWith("/api/brain")) {

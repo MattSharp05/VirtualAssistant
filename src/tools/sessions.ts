@@ -57,14 +57,20 @@ const group: ToolGroup = {
         const projects = describeProjects(ctx.config.projects);
         return (
           "Start a new cloud session on a task: a normal Claude Code session with a short title, on the default repo or the project the task names (\"in trip\", a ticket ID). Uses plan usage." +
-          (projects ? ` Set project (slug or alias) when Matthew names one; it wins over the task text. Projects: ${projects}.` : "")
+          (projects ? ` Set project (slug or alias) when Matthew names one; it wins over the task text. Projects: ${projects}.` : "") +
+          " Set model only when Matthew asks for one. Repeat the confirmation's Environment/Model line to Matthew as given."
         );
       },
       inputSchema: schema(
-        { task: str("The task, written as a complete instruction"), project: str("Optional: the project's slug or alias (see the description); default = from the task") },
+        {
+          task: str("The task, written as a complete instruction"),
+          project: str("Optional: the project's slug or alias (see the description); default = from the task"),
+          model: str("Optional: opus, sonnet, haiku or a full model id; default = the project's model, else SESSION_MODEL (Opus)"),
+        },
         ["task"],
       ),
-      handler: (a, ctx) => core(ctx).start(String(a.task ?? ""), typeof a.project === "string" ? a.project : undefined),
+      handler: (a, ctx) =>
+        core(ctx).start(String(a.task ?? ""), typeof a.project === "string" ? a.project : undefined, typeof a.model === "string" ? a.model : undefined),
     },
     {
       name: "rename_jarvis_sessions",

@@ -24,6 +24,10 @@ export interface Job {
   title?: string;
   /** The tags it was created with (project:, role:, jarvis:<job id>). */
   tags?: string[];
+  /** The environment and model it runs in (JD-86): read back from the session, or as requested when `setupConfirmed` is false. */
+  environmentId?: string;
+  model?: string;
+  setupConfirmed?: boolean;
   /** Set when a report moved this name to a newer session (a successor orchestrator took over). */
   sessionUpdatedAt?: string;
 }

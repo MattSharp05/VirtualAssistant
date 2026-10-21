@@ -112,6 +112,8 @@ export interface NewSession {
   repoUrl?: string;
   /** env_…; omitted = the account's default environment. */
   environmentId?: string;
+  /** The model id (session_context.model); omitted = the account's default (JD-86). */
+  model?: string;
   tags: string[];
 }
 
@@ -129,7 +131,7 @@ export function createSessionBody(s: NewSession): Record<string, unknown> {
   return {
     title: s.title,
     ...(s.environmentId ? { environment_id: s.environmentId } : {}),
-    session_context: { sources: s.repoUrl ? [{ git_repository: { url: s.repoUrl } }] : [] },
+    session_context: { sources: s.repoUrl ? [{ git_repository: { url: s.repoUrl } }] : [], ...(s.model ? { model: s.model } : {}) },
     tags: s.tags,
     // The first message as a transcript event (the shape the events endpoint returns). Unverified.
     ...(s.prompt
@@ -174,6 +176,40 @@ export async function createCloudSession(s: NewSession, deps: ApiDeps = {}): Pro
   }
   if (typeof id !== "string" || !/^(?:session|cse)_/.test(id)) throw new CreateSessionError(`session create returned no session id: ${text.slice(0, 200)}`);
   return { sessionId: id, url: `https://claude.ai/code/${id}` };
+}
+
+/** Where a session actually runs, as its record says (JD-86): environment, model and repo. */
+export interface SessionSetup {
+  environmentId?: string;
+  model?: string;
+  repoUrl?: string;
+}
+
+/** The setup fields of a session record (the shapes seen on GET /v1/code/sessions/{id}); missing = undefined. */
+export function sessionSetupOf(body: unknown): SessionSetup {
+  const b = (body && typeof body === "object" ? ((body as { session?: unknown }).session ?? body) : {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const ctx = (b.session_context && typeof b.session_context === "object" ? b.session_context : {}) as Record<string, unknown>;
+  const sources = Array.isArray(ctx.sources) ? (ctx.sources as { git_repository?: { url?: unknown } }[]) : [];
+  const repoUrl = sources.map((x) => str(x?.git_repository?.url)).find(Boolean);
+  const out: SessionSetup = {};
+  const environmentId = str(b.environment_id);
+  const model = str(ctx.model) ?? str(b.configured_model);
+  if (environmentId) out.environmentId = environmentId;
+  if (model) out.model = model;
+  if (repoUrl) out.repoUrl = repoUrl;
+  return out;
+}
+
+/** Reads a session back to confirm where it runs; throws with the reason when it can't. */
+export async function readSessionSetup(sessionId: string, deps: ApiDeps = {}): Promise<SessionSetup> {
+  const res = await (deps.fetchImpl ?? fetch)(`${API_BASE}/v1/code/sessions/${encodeURIComponent(sessionId)}`, {
+    headers: login(deps.configDir ?? claudeConfigDir()),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 160)}`);
+  return sessionSetupOf(JSON.parse(text));
 }
 
 /** Sets a session's title (the one-off rename of older routine sessions). Unverified endpoint: a refusal is reported, not thrown. */

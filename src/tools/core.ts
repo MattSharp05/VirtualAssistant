@@ -2,7 +2,7 @@
 // what each tool does, as text the model can read.
 
 import { sessionActivity } from "../activity.js";
-import { JarvisError, type Jarvis } from "../jarvis.js";
+import { describeStart, JarvisError, type Jarvis } from "../jarvis.js";
 import { Notion } from "../notion.js";
 import { parseSessionId, type Job } from "../store.js";
 
@@ -84,10 +84,8 @@ export class CoreTools {
     return `Sent to ${job.id} in ${(ms / 1000).toFixed(1)}s. Its answer will arrive as a report.`;
   }
 
-  async start(task: string, project?: string): Promise<string> {
-    const { job, ms, fireNumber } = await this.jarvis.startJob(task, { project });
-    const how = fireNumber ? ` via the routine fallback (fire ${fireNumber}/30 this hour)` : job.title ? `, titled "${job.title}"` : "";
-    return `Started ${job.id} in ${(ms / 1000).toFixed(1)}s${how}: ${job.url}`;
+  async start(task: string, project?: string, model?: string): Promise<string> {
+    return describeStart(await this.jarvis.startJob(task, { project, model }), this.jarvis.config);
   }
 
   async renameRoutineSessions(): Promise<string> {
