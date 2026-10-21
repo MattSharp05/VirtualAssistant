@@ -45,8 +45,12 @@ add an environment named `JARVIS`.
 **New sessions** are created directly with the container's claude.ai login (B4): each gets a short
 title from the task ("JD-65: Fix sign-in"), runs on `DEFAULT_REPO` (or the repo of a project the task
 names, e.g. "in trip", from `PROJECTS`) in `SESSION_ENVIRONMENT_ID` (the `env_…` id of the `JARVIS`
-environment; empty = your default), and is tagged `project:<slug>`, `role:builder|task` and
-`jarvis:<job>`. The worker instructions in [docs/routine-prompt.md](docs/routine-prompt.md) go at
+environment; empty = your default) on `SESSION_MODEL` (default `claude-opus-5-5`; a project's
+`model` or start_session's `model` argument overrides it), and is tagged `project:<slug>`,
+`role:builder|task` and `jarvis:<job>`. JARVIS then reads the new session back, and the start
+confirmation names the environment and model it really runs in (with a ⚠️ when they differ from
+what was asked). A start that fell back to the routine says why the API failed, and `/status`
+shows the last API failure. The worker instructions in [docs/routine-prompt.md](docs/routine-prompt.md) go at
 the top of its first message. The routine below is only the **fallback** for when that API is
 unavailable; its sessions are routine runs (titled "Jarvis Worker", hidden from the sidebar, 30
 fires an hour). To title the older ones, ask JARVIS to "rename my JARVIS sessions".

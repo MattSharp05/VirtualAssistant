@@ -116,7 +116,7 @@ test("ideas Desk routes: CRUD, Add to to-dos (once), Chat with JARVIS, Start a s
   jarvis.startJob = async (task: string) => {
     started.push(task);
     const job = { id: "j9", sessionId: "session_01IDEA", url: "https://claude.ai/code/session_01IDEA", task, createdAt: "", kind: "started" as const };
-    return { job, ms: 1, via: "api" as const };
+    return { job, ms: 1, via: "api" as const, plan: { role: "task" as const, model: "claude-opus-5-5", routineFallback: true } };
   };
   const chats: { text: string; channel: string }[] = [];
   const brain = {
