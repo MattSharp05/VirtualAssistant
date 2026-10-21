@@ -5,7 +5,9 @@
 //   GET  /api/system             container memory, CPU, claude processes, last hour of history
 //   POST /api/jobs               { task }            start a cloud session
 //   GET  /api/brain                                  the conversation, model, totals
-//   POST /api/brain/chat         { message, stream? } talk to JARVIS; stream: true → NDJSON {delta} lines, then {done}
+//   POST /api/uploads            multipart, field "file" (≤ 20 MB) → { id, path, name }, for the next chat message
+//   POST /api/brain/chat         { message, stream?, attachments? } talk to JARVIS; stream: true → NDJSON {delta} lines,
+//                                then {done}; attachments: upload ids from /api/uploads
 //   POST /api/brain/model        { model }           switch the brain's model
 //   POST /api/brain/reset        {}                  start a new conversation
 //   /internal/*                                      the brain's tools (loopback + internal token)
@@ -24,6 +26,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
+import { Readable } from "node:stream";
 import { timingSafeEqual } from "node:crypto";
 import { JarvisError, type Jarvis } from "./jarvis.js";
 import { RoutineError } from "./routines.js";
@@ -32,6 +35,7 @@ import type { SystemMonitor } from "./system.js";
 import type { Brain } from "./brain/index.js";
 import { UnknownToolError, type ToolContext, type ToolRegistry } from "./tools/index.js";
 import type { DeskContext, DeskRouter } from "./desk/routes/index.js";
+import { MAX_UPLOAD_BYTES, UploadStore, UploadTooLarge, type Upload } from "./uploads.js";
 
 export interface DashboardExtras {
   monitor?: SystemMonitor;
@@ -107,6 +111,47 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
   } catch {
     throw new JarvisError("Invalid JSON.");
   }
+}
+
+/** POST /api/uploads: one multipart file into the upload store (same rules as the Desk's /api/desk/files). */
+async function receiveUpload(req: IncomingMessage, res: ServerResponse, dataDir: string): Promise<void> {
+  // Multipart is a type any site can send in a plain form post, so (unlike readJson's JSON-only rule) a custom
+  // header proves the request came from the dashboard's own script: cross-site, it would need a preflight.
+  if (req.headers["x-jarvis-upload"] !== "1") return send(res, 400, { error: "Upload from the dashboard page." });
+  const length = Number(req.headers["content-length"] ?? 0);
+  if (length > MAX_UPLOAD_BYTES + 64 * 1024) return send(res, 413, { error: `Files can be up to ${MAX_UPLOAD_BYTES / 1024 / 1024} MB.` });
+  if (!String(req.headers["content-type"] ?? "").startsWith("multipart/form-data")) throw new JarvisError("Send multipart/form-data with a file field.");
+  let form: FormData;
+  try {
+    form = await new Request("http://dashboard/api/uploads", {
+      method: "POST",
+      headers: { "content-type": String(req.headers["content-type"]) },
+      body: Readable.toWeb(req) as ReadableStream,
+      duplex: "half",
+    } as RequestInit).formData();
+  } catch {
+    throw new JarvisError("Couldn't read the upload.");
+  }
+  const file = form.get("file");
+  if (!(file instanceof File)) throw new JarvisError("No file field in the upload.");
+  try {
+    return send(res, 200, new UploadStore(dataDir).save(file.name, new Uint8Array(await file.arrayBuffer())));
+  } catch (err) {
+    if (err instanceof UploadTooLarge) return send(res, 413, { error: err.message });
+    throw err; // a JarvisError (e.g. a type the brain can't read) → 400 with its message
+  }
+}
+
+/** Upload ids sent with a chat message → the files they name (a JarvisError, so a 400, for one that's gone). */
+function resolveAttachments(ids: unknown, dataDir: string): Upload[] {
+  const list = Array.isArray(ids) ? ids : [];
+  if (!list.length) return [];
+  const store = new UploadStore(dataDir);
+  return list.map((id) => {
+    const upload = store.get(String(id));
+    if (!upload) throw new JarvisError(`No upload ${String(id)} (they're kept for 7 days).`);
+    return upload;
+  });
 }
 
 function dashboardAllowed(req: IncomingMessage, password: string | undefined): boolean {
@@ -221,6 +266,8 @@ export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): S
         return send(res, 201, result);
       }
 
+      if (req.method === "POST" && url.pathname === "/api/uploads") return await receiveUpload(req, res, config.dataDir);
+
       if (url.pathname.startsWith("/api/brain")) {
         if (!brain) return send(res, 404, { error: "brain not running" });
         if (req.method === "GET" && url.pathname === "/api/brain") {
@@ -231,12 +278,13 @@ export function createDashboard(jarvis: Jarvis, extras: DashboardExtras = {}): S
           const body = await readJson(req);
           const message = String(body.message ?? "").trim();
           if (!message) throw new JarvisError("The message is empty.");
-          if (body.stream !== true) return send(res, 200, await brain.chat(message, "dashboard"));
+          const attachments = resolveAttachments(body.attachments, config.dataDir);
+          if (body.stream !== true) return send(res, 200, await brain.chat(message, "dashboard", { attachments }));
           // Streamed: one JSON object per line as the reply is written, so the bubble grows live.
           res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" });
           const line = (obj: unknown) => res.write(JSON.stringify(obj) + "\n");
           try {
-            const reply = await brain.chat(message, "dashboard", { onDelta: (delta) => line({ delta }) });
+            const reply = await brain.chat(message, "dashboard", { onDelta: (delta) => line({ delta }), attachments });
             line({ done: reply });
           } catch (err) {
             line({ error: (err as Error).message });
