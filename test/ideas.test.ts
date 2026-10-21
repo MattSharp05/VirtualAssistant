@@ -96,7 +96,13 @@ test("ideas: projects from PROJECTS + session tags; the to-do, chat and session 
   const task = ideaSessionTask(idea, "spike it", projects);
   assert.equal(task, "jarvis: Weekly cost digest in Today\nspend per project\n\nspike it");
   const config = { projects: PROJECTS, defaultRepo: "MattSharp05/other" };
-  assert.deepEqual(planSession(task, config), { repoUrl: "https://github.com/MattSharp05/VirtualAssistant", project: "jarvis", role: "task" });
+  assert.deepEqual(planSession(task, config), {
+    repoUrl: "https://github.com/MattSharp05/VirtualAssistant",
+    project: "jarvis",
+    projectName: "JARVIS Desk",
+    role: "task",
+    titleRole: "scoping",
+  });
   assert.equal(planSession(ideaSessionTask({ ...idea, project: "trip" }, "", projects), config).repoUrl, "https://github.com/MattSharp05/trip");
   assert.equal(planSession(ideaSessionTask({ ...idea, project: undefined }, "", projects), config).repoUrl, "https://github.com/MattSharp05/other");
 });
