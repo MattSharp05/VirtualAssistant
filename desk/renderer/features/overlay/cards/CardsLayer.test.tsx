@@ -6,7 +6,7 @@ import { HAND_FLICK } from "../../../app/handTargets";
 import { createMockBridge, type MockBridge } from "../../../mock/bridge";
 import type { Scenario } from "../../../mock/types";
 import { Overlay } from "../Overlay";
-import { Markdown } from "./markdown";
+import { Markdown } from "../../../app/markdown";
 import { AUTO_DISMISS_MS } from "./model";
 import { DND_RECHECK_MS } from "./useCards";
 import { CAPTION_HOLD_MS } from "./useVoiceReply";

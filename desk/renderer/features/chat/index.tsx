@@ -11,6 +11,7 @@ import {
 import type { ChatHistoryResponse, ChatModelResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { Icon } from "../../app/icons";
+import { Markdown } from "../../app/markdown";
 import { AttachmentChips, useAttachments } from "./Attachments";
 import {
   channelLabel,
@@ -291,7 +292,11 @@ function Message({ item }: { item: MessageItem }) {
   return (
     <div className="chat-msg chat-msg-jarvis" data-streaming={item.streaming ? "" : undefined}>
       <div className="chat-bubble">
-        {item.text || (item.streaming ? <span className="chat-thinking" aria-label="Thinking" /> : null)}
+        {item.text ? (
+          <Markdown text={item.text} className="chat-md" keepLineBreaks />
+        ) : item.streaming ? (
+          <span className="chat-thinking" aria-label="Thinking" />
+        ) : null}
         {item.streaming && item.text && <span className="chat-caret" aria-hidden="true" />}
       </div>
       {item.steps.length > 0 && (

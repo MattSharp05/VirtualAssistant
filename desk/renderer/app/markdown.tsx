@@ -1,5 +1,6 @@
-// The little markdown a card body uses (show_on_screen: "short markdown"): paragraphs, "- " bullets,
-// **bold**, *italic*, `code` and [links](https://…). Built as React elements, never as HTML.
+// The little markdown JARVIS writes, for overlay card bodies (show_on_screen: "short markdown") and chat
+// replies (JD-79): paragraphs, "- " bullets, **bold**, *italic*, `code` and [links](https://…). Built as
+// React elements, never as HTML. Unclosed markers (a reply still streaming in) stay plain text.
 import type { ReactNode } from "react";
 
 const INLINE = /(\*\*[^*]+\*\*|\*[^*\s][^*]*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/g;
@@ -28,13 +29,25 @@ function inline(text: string, keyBase: string): ReactNode[] {
   });
 }
 
-export function Markdown({ text }: { text: string }) {
+export interface MarkdownProps {
+  text: string;
+  /** Class on the wrapper; cards style `card-md`. */
+  className?: string;
+  /** Keep single line breaks inside a paragraph (for a `white-space: pre-wrap` parent) instead of joining with spaces. */
+  keepLineBreaks?: boolean;
+}
+
+export function Markdown({ text, className = "card-md", keepLineBreaks = false }: MarkdownProps) {
   const blocks: ReactNode[] = [];
   let bullets: string[] = [];
   let para: string[] = [];
   const flush = () => {
     if (para.length)
-      blocks.push(<p key={`p${blocks.length}`}>{inline(para.join(" "), `p${blocks.length}`)}</p>);
+      blocks.push(
+        <p key={`p${blocks.length}`}>
+          {inline(para.join(keepLineBreaks ? "\n" : " "), `p${blocks.length}`)}
+        </p>,
+      );
     if (bullets.length)
       blocks.push(
         <ul key={`u${blocks.length}`}>
@@ -59,5 +72,5 @@ export function Markdown({ text }: { text: string }) {
     }
   }
   flush();
-  return <div className="card-md">{blocks}</div>;
+  return <div className={className}>{blocks}</div>;
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { DeskBridge, NoticeAction, ScreenCard } from "@jarvis/shared";
 import { HAND_FLICK } from "../../../app/handTargets";
 import type { HitRegions } from "../hitRegions";
-import { Markdown } from "./markdown";
+import { Markdown } from "../../../app/markdown";
 import { AUTO_DISMISS_MS, countdown, popOutWindow, visibleCards, type OverlayCard } from "./model";
 import { useCards } from "./useCards";
 import { useVoiceReply } from "./useVoiceReply";

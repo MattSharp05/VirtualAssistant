@@ -173,6 +173,39 @@
   color: var(--red);
 }
 
+/* JARVIS's replies in markdown (JD-79); the bubble's pre-wrap keeps single line breaks. */
+.chat-md p,
+.chat-md ul {
+  margin: 0 0 8px;
+}
+
+.chat-md > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-md ul {
+  padding-left: 20px;
+  white-space: normal;
+}
+
+.chat-md code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chat-md a {
+  color: var(--accent-ink);
+}
+
+/* While streaming, the caret follows the last paragraph's text. */
+.chat-msg-jarvis[data-streaming] .chat-md,
+.chat-msg-jarvis[data-streaming] .chat-md > p:last-child {
+  display: inline;
+}
+
 .chat-caret {
   display: inline-block;
   width: 7px;
