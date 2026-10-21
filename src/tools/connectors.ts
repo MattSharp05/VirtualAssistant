@@ -1,18 +1,26 @@
-// claude.ai connectors (Google Calendar, Gmail, Slack). They aren't JARVIS's own tools: the CLI loads
-// them from Matthew's claude.ai account. This group only decides which of their tools the brain may
-// call and tells the brain how to use them. Calendar writes are allowed without a confirm tap (ADR
-// 0008; logged with undo in src/calendarLog.ts); Gmail and Slack writes stay blocked.
+// claude.ai connectors (Gmail, Slack, and — for the background worker only — Google Calendar). They
+// aren't JARVIS's own tools: the CLI loads them from Matthew's claude.ai account. This group decides
+// which of their tools the *interactive* brain may call and tells it how to use them; Gmail and Slack
+// stay read-only.
+//
+// Google Calendar is deliberately left out of the interactive brain's allowed tools (JD-77): its
+// write tools kept dropping out, so calendar access for chat now goes through JARVIS's own first-party
+// tools (src/tools/calendar.ts, src/googleCalendar.ts), logged with undo in src/calendarLog.ts. The
+// connector entry stays here only so the background worker's calendar-range job (src/jobs/
+// calendarRange.ts, behind the Calendar window and Today digest, JD-21) keeps reading through it —
+// that job builds its own allowed tools directly from BRAIN_CONNECTORS (src/brain/worker.ts),
+// bypassing this group's `cli`.
 import type { ToolGroup } from "./types.js";
 
 /**
- * claude.ai connectors the brain can use, by the name claude.ai shows: the read tools it may call,
- * the write tools it may call (calendar only), and the write tools that stay blocked. In the CLI,
- * "Google Calendar" becomes the server claude_ai_Google_Calendar.
+ * claude.ai connectors by the name claude.ai shows: the read tools, and (Gmail/Slack) the write
+ * tools that stay blocked. In the CLI, "Google Calendar" becomes the server claude_ai_Google_Calendar.
  */
-export const CONNECTORS: Record<string, { read: string[]; write?: string[]; blocked: string[] }> = {
+export const CONNECTORS: Record<string, { read: string[]; blocked: string[] }> = {
   "Google Calendar": {
+    // Read-only, and only for the worker (see the file comment above); the interactive brain never
+    // gets these tools at all (CLI_EXCLUDED below).
     read: ["list_calendars", "list_events", "get_event", "search_events", "suggest_time"],
-    write: ["create_event", "update_event", "delete_event", "respond_to_event"],
     blocked: [],
   },
   Gmail: {
@@ -43,9 +51,6 @@ export const CONNECTORS: Record<string, { read: string[]; write?: string[]; bloc
 
 export const serverName = (connector: string) => `mcp__claude_ai_${connector.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 
-/** The calendar write tools as the CLI names them (calendarLog.ts watches these). */
-export const CALENDAR_WRITES = (CONNECTORS["Google Calendar"].write ?? []).map((t) => `${serverName("Google Calendar")}__${t}`);
-
 /** --allowedTools / --disallowedTools entries for the chosen connectors (unknown names are skipped). */
 export function connectorTools(names: string[]): { allowed: string[]; blocked: string[] } {
   const allowed: string[] = [];
@@ -53,22 +58,25 @@ export function connectorTools(names: string[]): { allowed: string[]; blocked: s
   for (const name of names) {
     const key = Object.keys(CONNECTORS).find((k) => k.toLowerCase() === name.toLowerCase());
     if (!key) continue;
-    allowed.push(...[...CONNECTORS[key].read, ...(CONNECTORS[key].write ?? [])].map((t) => `${serverName(key)}__${t}`));
+    allowed.push(...CONNECTORS[key].read.map((t) => `${serverName(key)}__${t}`));
     blocked.push(...CONNECTORS[key].blocked.map((t) => `${serverName(key)}__${t}`));
   }
   return { allowed, blocked };
 }
 
+/** Never given to the interactive brain, whatever BRAIN_CONNECTORS says (JD-77: worker-only, see the file comment). */
+const INTERACTIVE_EXCLUDED = ["Google Calendar"];
+
 const group: ToolGroup = {
   name: "connectors",
   tools: [],
   promptHint: [
-    "- Calendar: \"What's on today/this week\" → list_events for that range. You may create, move, edit, delete and RSVP to events without asking first: before update_event or delete_event, call get_event for that event (so it can be undone); only add guests Matthew names; leave time zones to the calendar (no UTC offset unless he gives one). After a change, say it in one line (\"Moved Booking call to Fri 14:00\"). \"Undo that\" → undo_calendar_change, then do what it says.",
     "- Gmail is read-only. Email → search_threads with Gmail search syntax (e.g. \"is:unread newer_than:1d\", \"from:alex\"), then get_thread for the ones that matter. Summarise; don't paste whole emails.",
     "- If you have Slack tools, they are read-only too. \"What did I miss / anything on Slack\" → slack_search_public_and_private (e.g. \"to:me after:yesterday\", \"in:#channel\") or slack_read_channel, then slack_read_thread for threads that matter. Say who said what, briefly.",
   ].join("\n"),
   cli: (ctx) => {
-    const { allowed, blocked } = connectorTools(ctx.config.brainConnectors ?? []);
+    const names = (ctx.config.brainConnectors ?? []).filter((n) => !INTERACTIVE_EXCLUDED.some((x) => x.toLowerCase() === n.toLowerCase()));
+    const { allowed, blocked } = connectorTools(names);
     return { allowedTools: allowed, disallowedTools: blocked };
   },
 };

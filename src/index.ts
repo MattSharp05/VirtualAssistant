@@ -57,16 +57,16 @@ const brain = new Brain(
   },
   jarvis.store,
 );
-// Every calendar write the brain makes is logged with its "before", for the change log and undo.
+// The change log and undo for calendar writes (src/tools/calendar.ts records directly; JD-77).
 const calendarLog = new CalendarLog(config.dataDir, bus);
-calendarLog.attach(brain);
 useCalendarLog(jarvis, calendarLog);
 const deskCtx: DeskContext = { jarvis, bus, devices: new DeviceStore(config.dataDir), hub: new SseHub(bus), rpc: new DeskRpc(bus), brain };
 const deskRouter = await DeskRouter.discover();
 const toolContext: ToolContext = { jarvis, config, desk: deskCtx };
 console.log(
   `brain: ${brain.model} (${brain.warm ? "warm, streaming" : "one process per message"}), tools: ${registry.list().length} in ${registry.groups.length} groups${config.notionToken ? ", Notion connected" : ", no Notion (NOTION_TOKEN unset)"}` +
-    `, claude.ai connectors: ${config.brainConnectors.join(", ") || "none"}`,
+    `, claude.ai connectors: ${config.brainConnectors.join(", ") || "none"}` +
+    `, Google Calendar: ${config.googleCalendar ? "connected (first-party)" : "not connected (run npm run setup:calendar)"}`,
 );
 
 const dashboard = createDashboard(jarvis, { monitor, brain, registry, toolContext, internalToken, desk: { router: deskRouter, ctx: deskCtx } });

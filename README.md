@@ -283,15 +283,24 @@ Nothing to set up for the chat itself: it uses the same Claude login as follow-u
    It adds **JARVIS Tasks** (a database) and **JARVIS Memory** (a page) under it, once; running it
    again changes nothing. Then try "remind me to renew my passport on Friday".
 
-**Google Calendar, Gmail and Slack, through your claude.ai connectors** (Gmail and Slack are read-only; the calendar JARVIS can change):
+**Gmail and Slack, through your claude.ai connectors** (read-only):
 1. On claude.ai: click your name (bottom left) → **Settings** → **Connectors**. Click **Connect**
-   on **Google Calendar**, **Gmail** and **Slack**, then sign in and click **Allow**.
+   on **Gmail** and **Slack**, then sign in and click **Allow**.
 2. Check the container sees them: `docker compose exec jarvis claude mcp list` should show them
    as `✔ Connected`.
-3. That's it. Ask "what's on today?", "anything important in my inbox?" or "what did I miss on Slack?".
-   JARVIS can only use the reading tools: sending, replying, trashing, labelling, creating or
-   changing events, and posting or reacting on Slack are blocked (`CONNECTORS` in `src/brain.ts`). `BRAIN_CONNECTORS` in `.env` picks which
-   connectors it uses (default `Google Calendar,Gmail,Slack`; `none` turns them off).
+3. That's it. Ask "anything important in my inbox?" or "what did I miss on Slack?". JARVIS can
+   only use the reading tools: sending, replying, trashing, labelling, posting and reacting are
+   blocked (`CONNECTORS` in `src/tools/connectors.ts`). `BRAIN_CONNECTORS` in `.env` picks which it
+   uses (default `Google Calendar,Gmail,Slack` — the `Google Calendar` connector there only feeds
+   the background Today digest / Calendar window job, not the calendar JARVIS can change; `none`
+   turns everything in `BRAIN_CONNECTORS` off).
+
+**Calendar (first-party, no connector)**: JARVIS changes your Google Calendar directly through its
+own OAuth client, not a claude.ai connector — see "Calendar" under `.env.example` and run
+`npm run setup:calendar` **on your Mac** (it needs a browser), not in the container. Once
+`GOOGLE_CALENDAR_CLIENT_ID`/`CLIENT_SECRET`/`REFRESH_TOKEN` are in `.env` and the container's
+restarted, ask "what's on today?" or "add a dentist appointment Friday at 3". Creates, edits,
+deletes and RSVPs happen without a confirm tap and are logged with undo ("undo that").
 
 ## Metrics
 

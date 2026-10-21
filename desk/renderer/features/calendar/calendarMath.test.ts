@@ -188,8 +188,11 @@ describe("changed by JARVIS", () => {
     expect(describeChange(change("c", at, { summary: "create_event: Dentist → 2026-10-20T09:00:00" }))).toBe(
       "Created “Dentist” → Tue 20 Oct 09:00",
     );
-    expect(describeChange(change("r", at, { summary: "respond_to_event: 1:1 with Jo → accepted" }))).toBe(
+    expect(describeChange(change("r", at, { summary: "respond: 1:1 with Jo → accepted" }))).toBe(
       "Answered “1:1 with Jo” → accepted",
+    );
+    expect(describeChange(change("r2", at, { summary: "respond_to_event: Standup → accepted" }))).toBe(
+      "Answered “Standup” → accepted",
     );
     expect(describeChange(change("d", at, { summary: "delete_event: Gym", undoOf: "x" }))).toBe(
       "Undo: Deleted “Gym”",

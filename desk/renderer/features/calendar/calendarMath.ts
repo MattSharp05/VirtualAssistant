@@ -274,6 +274,8 @@ const VERBS: Record<string, string> = {
   create_event: "Created",
   update_event: "Changed",
   delete_event: "Deleted",
+  // "respond" (JD-77, JARVIS's own tool); "respond_to_event" kept for log entries written before it.
+  respond: "Answered",
   respond_to_event: "Answered",
 };
 

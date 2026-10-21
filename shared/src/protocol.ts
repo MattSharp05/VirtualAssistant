@@ -109,12 +109,12 @@ export interface ScreenCard {
 export interface CalendarChange {
   id: string;
   at: string;
-  /** create_event, update_event, delete_event or respond_to_event. */
+  /** create_event, update_event, delete_event or respond. */
   tool: string;
   input: unknown;
   /** The tool's answer (the event after the change, or a confirmation). */
   result: string;
-  /** get_event's answer for the same event earlier in that turn (update/delete). */
+  /** A snapshot of the event before the change (update/delete/respond only). */
   before?: string;
   /** One line for the log, e.g. "update_event: Booking call → 2026-10-17T14:00:00". */
   summary: string;
