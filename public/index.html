@@ -80,6 +80,11 @@
   .bubble.you .meta { color: color-mix(in srgb, var(--accent-ink) 75%, transparent); }
   .chat-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .chat-head select { font: inherit; font-size: 13px; color: var(--ink); background: var(--page); border: 1px solid var(--hairline); border-radius: 6px; padding: 3px 6px; }
+  .file-button { font-weight: 600; border: 1px solid var(--hairline); border-radius: 8px; padding: 9px 12px; color: var(--ink-2); cursor: pointer; white-space: nowrap; }
+  .file-button:focus-within { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .file-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .chat-files:not(:empty) { margin-top: 8px; }
+  .chat-files .link-button { font-size: 13px; text-decoration: none; }
   .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 16px; }
   details.attach summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
   details.attach .row input:first-child { flex: 2; }
@@ -130,8 +135,10 @@
     <div class="chat-log" id="chat-log"><p class="empty">Ask about your projects, sessions or Notion, e.g. “what's mk up to?”</p></div>
     <form id="chat-form" class="row">
       <input id="chat-input" placeholder="Message JARVIS…" autocomplete="off">
+      <label class="file-button" title="Attach a PDF, text file or image (up to 20 MB)">Attach<input type="file" id="chat-file" accept=".pdf,.txt,.md,.markdown,.csv,.json,.log,.png,.jpg,.jpeg,.gif,.webp"></label>
       <button id="chat-send">Send</button>
     </form>
+    <div class="chips chat-files" id="chat-files"></div>
     <div class="notice" id="chat-notice" role="status"></div>
   </section>
 
@@ -466,12 +473,40 @@
     if (b.messages.length) log.replaceChildren(...b.messages.map(bubble));
     log.scrollTop = log.scrollHeight;
   }
+  // Files picked for the next message: uploaded at once (POST /api/uploads), sent as ids with it, then cleared.
+  let pendingFiles = [];
+  function renderFiles() {
+    $("chat-files").replaceChildren(...pendingFiles.map((f) => el("span", { class: "chip" }, f.name,
+      el("button", { class: "link-button", type: "button", "aria-label": "Remove " + f.name,
+        onclick: () => { pendingFiles = pendingFiles.filter((p) => p !== f); renderFiles(); } }, "×"))));
+  }
+  $("chat-file").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    notice("chat-notice", "Uploading " + file.name + "…");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      // The custom header shows the upload comes from this page (a cross-site form can't send one).
+      const res = await fetch("/api/uploads", { method: "POST", headers: { "x-jarvis-upload": "1" }, body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "HTTP " + res.status);
+      pendingFiles.push(data);
+      renderFiles();
+      notice("chat-notice", "");
+      $("chat-input").focus();
+    } catch (err) { notice("chat-notice", err.message, true); }
+  });
   $("chat-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const input = $("chat-input");
     const text = input.value.trim();
-    if (!text) return;
+    if (!text) { if (pendingFiles.length) notice("chat-notice", "Add a message to go with the file.", true); return; }
     input.value = "";
+    const attachments = pendingFiles.map((f) => f.id);
+    pendingFiles = [];
+    renderFiles();
     const log = $("chat-log");
     if (log.querySelector(".empty")) log.replaceChildren();
     log.append(bubble({ from: "you", text, at: new Date().toISOString() }));
@@ -483,7 +518,7 @@
     $("chat-send").disabled = true;
     try {
       // The reply streams in as NDJSON lines ({delta} … {done} or {error}) and grows in the bubble.
-      const res = await fetch("/api/brain/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text, stream: true }) });
+      const res = await fetch("/api/brain/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ message: text, stream: true, attachments }) });
       if (!res.ok || !res.body) { const data = await res.json().catch(() => ({})); throw new Error(data.error || "HTTP " + res.status); }
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
       let buffered = "", written = "";

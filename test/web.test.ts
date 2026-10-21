@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { request } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,6 +11,8 @@ import { SessionStarter } from "../src/sessionStart.js";
 import { Store } from "../src/store.js";
 import { parseUsageResponse } from "../src/usage.js";
 import { createDashboard, createReportsServer } from "../src/web.js";
+import { MAX_UPLOAD_BYTES, uploadsDir } from "../src/uploads.js";
+import type { Brain } from "../src/brain/index.js";
 
 const config: Config = {
   telegramBotToken: undefined,
@@ -96,6 +99,96 @@ test("parseUsageResponse reads both windows and both spellings", () => {
   assert.equal(parsed.windows[1].percent, 100);
   assert.equal(parsed.windows[1].resetsAt, new Date(1792000000 * 1000).toISOString());
   assert.equal(parseUsageResponse({ rate_limits_available: false, rate_limits: null }).available, false);
+});
+
+test("POST /api/uploads saves a multipart file; over 20 MB is 413, other types 400", async () => {
+  const url = `${base}/api/uploads`;
+  const headers = { ...auth, "x-jarvis-upload": "1" };
+  const form = new FormData();
+  form.append("file", new Blob(["# Notes\nhello"], { type: "text/markdown" }), "../notes.md");
+  const res = await fetch(url, { method: "POST", headers, body: form });
+  assert.equal(res.status, 200);
+  const up = (await res.json()) as { id: string; path: string; name: string };
+  assert.equal(up.name, "notes.md");
+  assert.match(up.id, /^[0-9a-f]{12}$/);
+  assert.ok(up.path.startsWith(uploadsDir(config.dataDir)));
+  assert.equal(readFileSync(up.path, "utf8"), "# Notes\nhello");
+
+  // Over 20 MB: refused from the Content-Length header, before the body is read.
+  const bigStatus = await new Promise<number>((resolve, reject) => {
+    const req = request(url, { method: "POST", headers: { ...headers, "content-type": "multipart/form-data; boundary=x", "content-length": String(MAX_UPLOAD_BYTES + 100_000) } }, (r) => {
+      r.resume();
+      resolve(r.statusCode ?? 0);
+    });
+    req.on("error", reject);
+    req.write("x");
+  });
+  assert.equal(bigStatus, 413);
+
+  const wrong = await fetch(url, { method: "POST", headers: { ...headers, "content-type": "application/json" }, body: "{}" });
+  assert.equal(wrong.status, 400);
+  assert.match(((await wrong.json()) as { error: string }).error, /multipart\/form-data/);
+
+  const exe = new FormData();
+  exe.append("file", new Blob(["echo hi"]), "run.sh");
+  const badType = await fetch(url, { method: "POST", headers, body: exe });
+  assert.equal(badType.status, 400);
+  assert.match(((await badType.json()) as { error: string }).error, /not \.sh/);
+
+  // Without the dashboard's own header (what a cross-site form post would look like): refused.
+  const crossSite = await fetch(url, { method: "POST", headers: auth, body: form });
+  assert.equal(crossSite.status, 400);
+  assert.equal((await fetch(url, { method: "POST", headers: { "x-jarvis-upload": "1" }, body: form })).status, 401, "needs the password");
+});
+
+test("POST /api/brain/chat passes uploads to the brain as attachments", async (t) => {
+  const calls: { message: string; channel: string; attachments?: { id?: string; path: string; name: string }[] }[] = [];
+  const brain = {
+    model: "m",
+    models: ["m"],
+    chat: async (message: string, channel: string, opts: { onDelta?: (d: string) => void; attachments?: { path: string; name: string }[] } = {}) => {
+      calls.push({ message, channel, attachments: opts.attachments });
+      opts.onDelta?.("ok");
+      return { reply: "ok" };
+    },
+  } as unknown as Brain;
+  const dash = createDashboard(jarvis, { brain });
+  await new Promise<void>((resolve) => dash.listen(0, "127.0.0.1", resolve));
+  t.after(() => {
+    dash.closeAllConnections();
+    dash.close();
+  });
+  const url = `http://127.0.0.1:${(dash.address() as AddressInfo).port}`;
+  const chat = (body: unknown) =>
+    fetch(`${url}/api/brain/chat`, { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  const form = new FormData();
+  form.append("file", new Blob(["a,b\n1,2"]), "data.csv");
+  const up = (await (await fetch(`${url}/api/uploads`, { method: "POST", headers: { ...auth, "x-jarvis-upload": "1" }, body: form })).json()) as {
+    id: string;
+    path: string;
+    name: string;
+  };
+
+  // No attachments: exactly as before.
+  assert.equal((await chat({ message: "hi" })).status, 200);
+  assert.deepEqual(calls[0], { message: "hi", channel: "dashboard", attachments: [] });
+
+  assert.equal((await chat({ message: "what's in this?", attachments: [up.id] })).status, 200);
+  assert.deepEqual(calls[1], { message: "what's in this?", channel: "dashboard", attachments: [up] });
+
+  // Streamed, too.
+  const streamed = await chat({ message: "and now?", stream: true, attachments: [up.id] });
+  assert.equal(streamed.status, 200);
+  assert.match(await streamed.text(), /"done"/);
+  assert.deepEqual(calls[2].attachments, [up]);
+
+  for (const stream of [false, true]) {
+    const missing = await chat({ message: "this one?", stream, attachments: ["0123456789ab"] });
+    assert.equal(missing.status, 400);
+    assert.equal(((await missing.json()) as { error: string }).error, "No upload 0123456789ab (they're kept for 7 days).");
+  }
+  assert.equal(calls.length, 3, "an unknown upload never reaches the brain");
 });
 
 test("the public reports server accepts reports and exposes nothing else", async () => {
