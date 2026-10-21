@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { PROTOCOL_VERSION } from "@jarvis/shared";
 import { agentGraphFor, AGENTS_POLL_MS } from "./agents/index.js";
 import { Brain } from "./brain/index.js";
-import { createBot } from "./bot.js";
+import { createBot, sendTelegramFile } from "./bot.js";
 import { BriefService, useBrief } from "./brief.js";
 import { notifier, notify } from "./notify.js";
 import { Scheduler, useScheduler } from "./scheduler.js";
@@ -87,6 +87,10 @@ const chatId = config.allowedChatId;
 if (bot && chatId !== undefined) {
   notifier.attachTelegram(async (text) => {
     await bot.api.sendMessage(chatId, text);
+  });
+  // The send_file tool: uploads (screenshots, clipboard images, files) out to the phone (JD-78).
+  notifier.attachTelegramFile(async (upload, caption) => {
+    await sendTelegramFile(bot, chatId, upload, caption);
   });
 }
 // Fires anything that came due while JARVIS was down (marked late), then ticks every second.

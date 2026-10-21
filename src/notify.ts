@@ -3,6 +3,7 @@
 
 import type { DndState, NoticeAction, NoticeLevel } from "@jarvis/shared";
 import { bus as defaultBus, type EventBus } from "./events.js";
+import type { Upload } from "./uploads.js";
 
 export interface Notice {
   title: string;
@@ -17,15 +18,27 @@ export interface Notice {
 }
 
 export type TelegramSend = (text: string) => Promise<void>;
+/** Sends an upload to Matthew's Telegram chat as a photo or a document (JD-78). */
+export type TelegramSendFile = (upload: Upload, caption?: string) => Promise<void>;
 
 export class Notifier {
   private telegram?: TelegramSend;
+  private telegramFile?: TelegramSendFile;
   private dndState: DndState = { on: false };
 
   constructor(private readonly bus: EventBus = defaultBus) {}
 
   attachTelegram(send: TelegramSend | undefined): void {
     this.telegram = send;
+  }
+
+  attachTelegramFile(send: TelegramSendFile | undefined): void {
+    this.telegramFile = send;
+  }
+
+  /** Whether files can go to Telegram (the bot exists and knows Matthew's chat). */
+  get canSendFiles(): boolean {
+    return !!this.telegramFile;
   }
 
   /** Do Not Disturb: notices are still published (the Desk records them) but not sent to Telegram. */
@@ -43,6 +56,16 @@ export class Notifier {
   async sendTelegram(text: string): Promise<void> {
     if (!this.telegram) return;
     await this.telegram(text).catch((err) => console.error("telegram send:", err));
+  }
+
+  /**
+   * A photo or document to Telegram that Matthew asked for (the send_file tool), so DND doesn't
+   * apply. Returns false when Telegram isn't attached; a failed send throws, for the caller to report.
+   */
+  async sendTelegramFile(upload: Upload, caption?: string): Promise<boolean> {
+    if (!this.telegramFile) return false;
+    await this.telegramFile(upload, caption);
+    return true;
   }
 
   async notify(n: Notice): Promise<void> {

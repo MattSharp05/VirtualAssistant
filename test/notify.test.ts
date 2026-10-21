@@ -107,3 +107,24 @@ test("Do Not Disturb keeps notices off Telegram but still publishes them; GET /m
   assert.equal(s.telegram.length, 1);
   await assert.rejects(Promise.resolve().then(() => route("/dnd").handler({ body: { on: true, until: "soon" }, ctx } as never)), /until must be/);
 });
+
+test("Telegram files: canSendFiles and sendTelegramFile follow attachTelegramFile; failures reach the caller", async () => {
+  const notifier = new Notifier(new EventBus());
+  const upload = { id: "0123456789ab", path: "/data/uploads/0123456789ab/shot.png", name: "shot.png" };
+  assert.equal(notifier.canSendFiles, false);
+  assert.equal(await notifier.sendTelegramFile(upload, "hi"), false, "not attached: nothing sent");
+
+  const sent: [string, string | undefined][] = [];
+  notifier.attachTelegramFile(async (u, caption) => void sent.push([u.name, caption]));
+  assert.equal(notifier.canSendFiles, true);
+  notifier.setDnd(true);
+  assert.equal(await notifier.sendTelegramFile(upload, "your screen"), true, "asked-for files ignore DND");
+  assert.deepEqual(sent, [["shot.png", "your screen"]]);
+
+  notifier.attachTelegramFile(async () => {
+    throw new Error("Bad Request: file is too big");
+  });
+  await assert.rejects(notifier.sendTelegramFile(upload), /file is too big/);
+  notifier.attachTelegramFile(undefined);
+  assert.equal(notifier.canSendFiles, false);
+});

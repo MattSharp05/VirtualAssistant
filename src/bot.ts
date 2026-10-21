@@ -1,5 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { statSync } from "node:fs";
+import { extname, join } from "node:path";
 import { Bot, InputFile, InlineKeyboard, type Context } from "grammy";
 import { formatMetrics, type Brain, type BrainReply } from "./brain/index.js";
 import { briefFor } from "./brief.js";
@@ -56,6 +57,24 @@ const VOICE_MODES: Record<VoiceReplies, string> = {
   on: "on: every reply from me comes with a voice note",
   off: "off: text replies only",
 };
+
+/** Upload extensions Telegram shows as a photo; everything else goes as a document. */
+export const PHOTO_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+/** Telegram's limits: photos up to 10 MB (bigger images go as documents), captions up to 1024 characters. */
+const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+const MAX_CAPTION = 1024;
+
+/** Sends an upload to a chat: images as a photo, anything else (PDF, text, CSV…) as a document (JD-78). */
+export async function sendTelegramFile(bot: Bot, chatId: number, upload: Upload, caption?: string): Promise<"photo" | "document"> {
+  const extra = caption?.trim() ? { caption: caption.trim().slice(0, MAX_CAPTION) } : {};
+  const file = new InputFile(upload.path, upload.name);
+  if (PHOTO_EXTENSIONS.has(extname(upload.name).toLowerCase()) && statSync(upload.path).size <= MAX_PHOTO_BYTES) {
+    await bot.api.sendPhoto(chatId, file, extra);
+    return "photo";
+  }
+  await bot.api.sendDocument(chatId, file, extra);
+  return "document";
+}
 
 /** What tests replace: downloading a Telegram file, speech-to-text and text-to-speech. */
 export interface BotDeps {
