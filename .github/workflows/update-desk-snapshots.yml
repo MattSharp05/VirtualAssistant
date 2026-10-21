@@ -28,12 +28,13 @@ jobs:
         run: npx playwright test --project=web-desktop todo.spec.ts --update-snapshots
       - name: Commit and push updated snapshots
         run: |
-          git config user.name "jarvis-snapshot-bot"
-          git config user.email "jarvis-snapshot-bot@users.noreply.github.com"
-          git add desk/e2e/__snapshots__
-          if git diff --cached --quiet; then
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git -C "$GITHUB_WORKSPACE" config user.name "jarvis-snapshot-bot"
+          git -C "$GITHUB_WORKSPACE" config user.email "jarvis-snapshot-bot@users.noreply.github.com"
+          git -C "$GITHUB_WORKSPACE" add desk/e2e/__snapshots__
+          if git -C "$GITHUB_WORKSPACE" diff --cached --quiet; then
             echo "No snapshot changes."
           else
-            git commit -m "chore: update desk visual snapshots"
-            git push
+            git -C "$GITHUB_WORKSPACE" commit -m "chore: update desk visual snapshots"
+            git -C "$GITHUB_WORKSPACE" push
           fi
