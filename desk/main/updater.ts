@@ -29,7 +29,13 @@ import {
 
 /** Every Desk release is tagged desk-vX.Y.Z (release.yml); the repo is public, so no token. */
 export const RELEASES_URL = "https://api.github.com/repos/MattSharp05/VirtualAssistant/releases?per_page=30";
-export const CHECK_EVERY_MS = 24 * 60 * 60_000;
+/**
+ * Hourly (JD-76): JD-46/74 checked daily, so a release out soon after launch waited up to a day to show
+ * up. GitHub allows 60 unauthenticated API calls an hour per address; this uses one.
+ */
+export const CHECK_EVERY_MS = 60 * 60_000;
+/** A wake from sleep checks again if the last check is at least this old (JD-76). */
+export const WAKE_CHECK_AFTER_MS = 10 * 60_000;
 /** The launch check waits for the overlay to load, so its notice has somewhere to show. */
 export const FIRST_CHECK_DELAY_MS = 15_000;
 export const UPDATE_CARD_ID = "desk-update";
@@ -175,6 +181,8 @@ export class Updater {
   private available?: AvailableUpdate;
   private downloading?: number;
   private checking = false;
+  /** When the last check started (ms), for the wake check. */
+  private lastChecked: number | undefined;
   /** Background checks tell Matthew about a version once; a forced check always answers. */
   private notified?: string;
   private first?: ReturnType<typeof setTimeout>;
@@ -259,7 +267,7 @@ export class Updater {
     }
   }
 
-  /** Checks shortly after launch and then every 24 h; each check skips itself while the setting is off. */
+  /** Checks shortly after launch and then hourly; each check skips itself while the setting is off. */
   start(firstDelayMs = FIRST_CHECK_DELAY_MS): void {
     const tick = () => {
       if (this.opts.enabled()) void this.check();
@@ -277,6 +285,13 @@ export class Updater {
     await this.preparing;
   }
 
+  /** The Mac woke from sleep (powerMonitor resume): check again unless a check just ran (JD-76). */
+  woke(now = Date.now()): void {
+    if (!this.opts.enabled()) return;
+    if (this.lastChecked !== undefined && now - this.lastChecked < WAKE_CHECK_AFTER_MS) return;
+    void this.check();
+  }
+
   stop(): void {
     clearTimeout(this.first);
     clearInterval(this.timer);
@@ -290,6 +305,7 @@ export class Updater {
     const forced = opts.forced ?? false;
     if (this.checking) return this.available;
     this.checking = true;
+    this.lastChecked = Date.now();
     this.opts.onChange?.();
     try {
       const res = await this.fetch(RELEASES_URL, {
@@ -299,6 +315,13 @@ export class Updater {
       const releases = (await res.json()) as GithubRelease[];
       if (!Array.isArray(releases)) throw new Error("GitHub sent something other than a release list");
       this.available = newerRelease(releases, this.opts.currentVersion);
+      // Every check leaves a line in desk.log (JD-76), so "did it even look?" has an answer.
+      this.log(
+        "info",
+        this.available
+          ? `Checked GitHub${forced ? " (asked)" : ""}: ${this.available.version} is newer than ${this.opts.currentVersion}${this.available.manifestUrl ? "" : " (no automatic update in that release)"}`
+          : `Checked GitHub${forced ? " (asked)" : ""}: ${this.opts.currentVersion} is the latest`,
+      );
       if (this.available && (forced || this.notified !== this.available.version)) {
         this.notified = this.available.version;
         this.offer(this.available);
@@ -311,8 +334,8 @@ export class Updater {
       }
       return this.available;
     } catch (err) {
+      this.log("warn", `Couldn't check for updates: ${message(err)}`);
       if (forced) this.notice("warn", "Couldn't check for updates", message(err));
-      else console.warn("update check:", message(err));
       return undefined;
     } finally {
       this.checking = false;

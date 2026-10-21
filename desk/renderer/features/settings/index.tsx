@@ -73,8 +73,8 @@ export default function SettingsWindow() {
         <FacesSection bridge={bridge} values={values} update={update} errors={errors} />
         <Section id="updates" title="Updates">
           <Switch
-            label="Check for updates on launch"
-            hint="Looks for a newer JARVIS Desk on GitHub when the app starts."
+            label="Check for updates"
+            hint="Looks for a newer JARVIS Desk on GitHub when the app starts, every hour, and when your Mac wakes."
             checked={values.checkForUpdates}
             onChange={(on) => void update("checkForUpdates", on)}
           />

@@ -13,6 +13,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  powerMonitor,
   safeStorage,
   screen,
   shell,
@@ -352,6 +353,7 @@ app.whenReady().then(() => {
     // ⌥⌘I (JD-63): DevTools for the JARVIS window in front, else the overlay (packaged builds too).
     devTools: () => (BrowserWindow.getFocusedWindow() ?? overlay).webContents.toggleDevTools(),
     restartToUpdate: () => updater.restartNow(),
+    checkForUpdates: () => void updater.check({ forced: true }),
   };
   // The menu bar while a JARVIS window is in front: ⌘Q, ⌘, and Edit (copy/paste in every window).
   Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenu(menuActions)));
@@ -513,7 +515,11 @@ app.whenReady().then(() => {
   // The update notices' buttons (Update, Restart now) go to the updater, not a browser.
   const overlay = createOverlay(rendererIndex, scenario, (url) => updater.handleLink(url));
   // Not on a scenario (e.g. the smoke test): no network checks there.
-  if (!scenario && !testUserData) updater.start();
+  if (!scenario && !testUserData) {
+    updater.start();
+    // A Mac that slept through the hourly check looks again when it wakes (JD-76).
+    powerMonitor.on("resume", () => updater.woke());
+  }
   app.on("will-quit", () => {
     updater.stop();
     // Install updates automatically (JD-74): a downloaded update goes in as the app quits.

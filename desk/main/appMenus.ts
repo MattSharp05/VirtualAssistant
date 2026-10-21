@@ -36,6 +36,8 @@ export interface AppMenuActions {
   devTools(): void;
   /** Restart now on a downloaded update (JD-74). */
   restartToUpdate?(): void;
+  /** Check for updates now (JD-76): the menu bar icon can be hidden, so the Dock offers it too. */
+  checkForUpdates?(): void;
 }
 
 export const APP_NAME = "JARVIS Desk";
@@ -79,6 +81,7 @@ export function dockMenu(dnd: boolean, act: AppMenuActions, updateReady?: string
       : []),
     { label: "Command bar", click: act.commandBar },
     { label: "Open Settings…", click: act.openSettings },
+    ...(act.checkForUpdates ? [{ label: "Check for updates", click: act.checkForUpdates }] : []),
     separator,
     { label: "Do Not Disturb", type: "checkbox", checked: dnd, click: () => act.setDnd(!dnd) },
   ];
