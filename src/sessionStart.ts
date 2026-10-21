@@ -11,7 +11,7 @@ import type { Config, ProjectSetting } from "./config.js";
 import { claudeConfigDir, readAccessToken } from "./claudeApi.js";
 import { createCloudSession, CreateSessionError, sendToSession, type ApiDeps, type SendResult } from "./cloud.js";
 import { loadWorkerInstructions, sessionPromptText } from "./prompts.js";
-import { ticketIdIn, titleFor, writeTitle } from "./sessionTitle.js";
+import { deriveTitleRole, sessionDisplayTitle, summaryFor, ticketIdIn, writeTitle, type TitleRole } from "./sessionTitle.js";
 
 export type StartPath = "api" | "api+cli" | "routine";
 
@@ -21,9 +21,14 @@ export interface SessionPlan {
   repoUrl?: string;
   /** The `project:` tag value. */
   project?: string;
+  /** The project's display name (PROJECTS[].name), for the session's title. */
+  projectName?: string;
   /** The ticket the task names ("JD-65"). */
   ticket?: string;
+  /** The `role:` tag the Agents graph (JD-57) reads; unrelated to the title's role word below. */
   role: "builder" | "task";
+  /** The role word shown in the session's title (JD-81): orchestrator/builder/design/scoping. */
+  titleRole: TitleRole;
 }
 
 export interface DirectSession {
@@ -72,7 +77,14 @@ export function planSession(task: string, config: Pick<Config, "projects" | "def
     : (namedProject(task, projects, ticket) ?? projects.find((p) => p.repo && ownerName(repoUrlOf(p.repo)) === ownerName(repoUrlOf(config.defaultRepo))));
   const repoUrl = inTask ?? repoUrlOf(project?.repo) ?? repoUrlOf(config.defaultRepo);
   const slug = project?.slug ?? ownerName(repoUrl)?.split("/")[1];
-  return { ...(repoUrl ? { repoUrl } : {}), ...(slug ? { project: slug } : {}), ...(ticket ? { ticket } : {}), role: ticket ? "builder" : "task" };
+  return {
+    ...(repoUrl ? { repoUrl } : {}),
+    ...(slug ? { project: slug } : {}),
+    ...(project?.name ? { projectName: project.name } : {}),
+    ...(ticket ? { ticket } : {}),
+    role: ticket ? "builder" : "task",
+    titleRole: deriveTitleRole(task, ticket),
+  };
 }
 
 /** project:<slug>, role:builder|task, jarvis:<job> (and ticket:<ID>), so the Agents tree and JARVIS find it. */
@@ -83,8 +95,8 @@ export function sessionTags(plan: SessionPlan, jobId: string): string[] {
 export interface StarterDeps extends ApiDeps {
   /** The worker instructions (docs/routine-prompt.md, read once at startup). */
   instructions?: string;
-  /** Writes a title for a task (one cheap worker-model call); undefined = use the first words. */
-  writeTitle?: (task: string) => Promise<string | undefined>;
+  /** Writes the title's summary clause for a task (one cheap worker-model call); undefined = use the first words. */
+  writeSummary?: (task: string) => Promise<string | undefined>;
   send?: (claudeBin: string, sessionId: string, message: string) => Promise<SendResult>;
   log?: (line: string) => void;
 }
@@ -106,10 +118,11 @@ export class SessionStarter {
     (this.deps.log ?? console.log)(line);
   }
 
-  /** A title for a task (the rename action uses it too). */
-  title(task: string, ticket = planSession(task, this.config).ticket): Promise<string> {
-    const write = this.deps.writeTitle ?? ((t: string) => writeTitle(this.config.claudeBin, this.config.workerModel, t, this.config.dataDir));
-    return titleFor(task, ticket, write);
+  /** The full display title for a task ("J17 · JARVIS Desk - adding session naming rule (orchestrator)"); the rename action uses it too. */
+  async title(jobId: string, task: string, plan: SessionPlan = planSession(task, this.config)): Promise<string> {
+    const write = this.deps.writeSummary ?? ((t: string) => writeTitle(this.config.claudeBin, this.config.workerModel, t, this.config.dataDir));
+    const summary = await summaryFor(task, plan.ticket, write);
+    return sessionDisplayTitle(jobId, plan.projectName, summary, plan.titleRole);
   }
 
   /** Paths 1 and 2; throws (CreateSessionError or Error) when neither works, so the caller can fire the routine. */
@@ -118,7 +131,7 @@ export class SessionStarter {
     if (!readAccessToken(this.deps.configDir ?? claudeConfigDir())) throw new CreateSessionError("no claude.ai login found (run: docker compose run --rm jarvis claude auth login)");
     const plan = planSession(task, this.config);
     const tags = sessionTags(plan, jobId);
-    const title = await this.title(task, plan.ticket);
+    const title = await this.title(jobId, task, plan);
     const prompt = sessionPromptText(this.instructions, jobId, task, sentAt);
     const base = { title, tags, repoUrl: plan.repoUrl, environmentId: this.config.sessionEnvironmentId };
     const api = { fetchImpl: this.deps.fetchImpl, configDir: this.deps.configDir };

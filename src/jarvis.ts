@@ -113,16 +113,29 @@ export class Jarvis {
     }
     const session = await fireRoutine(routineId, routineToken, newJobText(jobId, task, sentAt), this.api.fetchImpl);
     this.store.recordFire(sentAt);
-    console.log(`started ${jobId} via the routine: ${session.sessionId}`);
-    const job: Job = { id: jobId, ...session, task, createdAt: sentAt.toISOString(), kind: "started", via: "routine" };
+    // The routines-fire API has no title field (JD-81), so the session starts out called "Jarvis
+    // Worker"; rename it to the real title right away instead of waiting for the one-off below. Only
+    // keep the title once the rename actually lands, so a failed one still gets picked up there.
+    let title: string | undefined;
+    try {
+      const computed = await this.starter.title(jobId, task);
+      const renamed = await renameCloudSession(session.sessionId, computed, this.api);
+      if (renamed.ok) title = computed;
+      else console.warn(`couldn't rename ${jobId} (${session.sessionId}) to "${computed}": ${renamed.error}`);
+    } catch (err) {
+      console.warn(`couldn't title/rename ${jobId}: ${(err as Error).message}`);
+    }
+    console.log(`started ${jobId} via the routine: ${session.sessionId}${title ? ` "${title}"` : ""}`);
+    const job: Job = { id: jobId, ...session, task, createdAt: sentAt.toISOString(), kind: "started", via: "routine", ...(title ? { title } : {}) };
     this.store.addJob(job);
     return { job, ms: Date.now() - sentAt.getTime(), via: "routine", fireNumber: recent.length + 1 };
   }
 
   /**
-   * The one-off rename (JD-69): gives the sessions JARVIS started through the routine (all called
-   * "Jarvis Worker") a title made from their task, where the API lets it. They stay routine runs, so
-   * the Claude Code sidebar still won't list them.
+   * The one-off rename (JD-69, JD-81): gives any session JARVIS started through the routine that
+   * still has no title (the rename above failed, or it predates it — all called "Jarvis Worker") a
+   * title made from its task, where the API lets it. They stay routine runs, so the Claude Code
+   * sidebar still won't list them.
    */
   async renameRoutineSessions(): Promise<{ renamed: Job[]; failed: { job: Job; error: string }[] }> {
     const todo = this.store.recentJobs(1000).filter((j) => j.kind === "started" && (j.via === undefined || j.via === "routine") && !j.title);
@@ -132,7 +145,7 @@ export class Jarvis {
     for (let i = 0; i < todo.length; i += 4) {
       await Promise.all(
         todo.slice(i, i + 4).map(async (job) => {
-          const title = await this.starter.title(job.task);
+          const title = await this.starter.title(job.id, job.task);
           const result = await renameCloudSession(job.sessionId, title, this.api);
           if (result.ok) renamed.push(this.store.updateJob(job.id, { title }) ?? job);
           else failed.push({ job, error: result.error ?? "refused" });

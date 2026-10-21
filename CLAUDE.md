@@ -43,6 +43,7 @@ Full design: `docs/TDD.md` + ADRs in `docs/decisions/`.
 - Changing `shared/protocol.ts` updates both server and desk in the same PR.
 - Never print or open `.env` or tokens; secrets go in `.env` (server) or the Keychain (Mac). Notion writes only to the JARVIS Memory page and JARVIS Tasks database.
 - **JARVIS tool access:** every window/feature ships with the JARVIS tool(s) it needs (read/add/update, as sensible) plus a test for them, or the ticket has an explicit "N/A because…". JARVIS (Telegram/Desk chat) must be able to do by voice or text whatever its window does — e.g. the Ideas window shipped with `add_idea` (`src/tools/ideas.ts`).
+- **Session naming:** every session JARVIS starts (`start_session` or the routine) is titled `J<job number> · <Project> - <summary> (<role>)`, e.g. `J17 · JARVIS Desk - adding session naming rule (orchestrator)` — role is `orchestrator`/`builder`/`design`/`scoping` (`src/sessionTitle.ts` `deriveTitleRole`). This is the session's real title in Claude, not just JARVIS's own record of it: set at creation when the sessions API allows it, or right after for routine-fallback sessions (the routines-fire API can't set one); `rename_jarvis_sessions` retries any that didn't take and re-titles old "Jarvis Worker" sessions the same way.
 
 ## Testing
 - Server: `node:test` with fakes (claude stream-json binary, fetch, Telegram, clock).
