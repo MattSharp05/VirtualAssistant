@@ -5,12 +5,14 @@
 //                 message with `claude -p --cloud <id>` (the follow-up path, known to work).
 //   3. "routine": no login / the API is down: fire the JARVIS Worker routine (Jarvis.startJob does
 //                 that, under the 30-an-hour cap). Those sessions are routine runs, titled by the routine.
-// What the session is called, where it runs and how it is tagged is decided here too.
+// What the session is called, where it runs and how it is tagged is decided here too. Each project
+// in PROJECTS can bring its own environment, aliases and rules (JD-85); the routine runs only on the
+// default repo, so it is never a fallback for another project.
 
 import type { Config, ProjectSetting } from "./config.js";
 import { claudeConfigDir, readAccessToken } from "./claudeApi.js";
 import { createCloudSession, CreateSessionError, sendToSession, type ApiDeps, type SendResult } from "./cloud.js";
-import { loadWorkerInstructions, sessionPromptText } from "./prompts.js";
+import { loadWorkerInstructions, projectRulesText, sessionPromptText } from "./prompts.js";
 import { ticketIdIn, titleFor, writeTitle } from "./sessionTitle.js";
 
 export type StartPath = "api" | "api+cli" | "routine";
@@ -21,9 +23,17 @@ export interface SessionPlan {
   repoUrl?: string;
   /** The `project:` tag value. */
   project?: string;
+  /** The project's display name ("Drift"), for titles (JD-82) and errors. */
+  projectName?: string;
   /** The ticket the task names ("JD-65"). */
   ticket?: string;
   role: "builder" | "task";
+  /** env_…: the project's environment, else SESSION_ENVIRONMENT_ID. */
+  environmentId?: string;
+  /** The project's rules for the first message (base branch, merge policy, extra instructions). */
+  rules?: string;
+  /** The routine may start it when the API can't: only on the default repo, where the routine runs. */
+  routineFallback: boolean;
 }
 
 export interface DirectSession {
@@ -47,32 +57,68 @@ export function repoUrlOf(repo: string | undefined): string | undefined {
 const ownerName = (url: string | undefined) => url?.match(/github\.com\/([\w.-]+\/[\w.-]+)/i)?.[1].toLowerCase();
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** The project the task names: by ticket prefix, "in trip" / "for JARVIS Desk", or "trip: …". */
+/** A project's names: slug, name and aliases. */
+const namesOf = (p: ProjectSetting) => [p.slug, p.name, ...(p.aliases ?? [])];
+
+/** The project the task names: by ticket prefix, "in trip" / "for JARVIS Desk", "a Drift session", or "trip: …". */
 function namedProject(task: string, projects: ProjectSetting[], ticket: string | undefined): ProjectSetting | undefined {
   const prefix = ticket?.split("-")[0];
   const byTicket = prefix ? projects.find((p) => p.prefix?.toUpperCase() === prefix) : undefined;
   if (byTicket) return byTicket;
   return projects.find((p) => {
-    const names = [p.slug, p.name].map(escape).join("|");
-    return new RegExp(`\\b(?:in|on|for)\\s+(?:the\\s+)?(?:${names})\\b|^\\s*(?:${names})\\s*:`, "i").test(task);
+    const names = namesOf(p).map(escape).join("|");
+    return new RegExp(
+      `\\b(?:in|on|for)\\s+(?:the\\s+)?(?:${names})\\b|\\b(?:a|an|the|new)\\s+(?:new\\s+)?(?:${names})\\s+(?:cloud\\s+)?(?:session|task|job|worker|builder)\\b|^\\s*(?:${names})\\s*:`,
+      "i",
+    ).test(task);
   });
 }
 
+/** The project a slug, name or alias names (any case); undefined when none does. */
+export function findProject(name: string, projects: ProjectSetting[] = []): ProjectSetting | undefined {
+  const n = name.trim().toLowerCase();
+  return n ? projects.find((p) => namesOf(p).some((x) => x.toLowerCase() === n)) : undefined;
+}
+
+/** "jarvis (JARVIS Desk), drift (Drift; also driftship, shelfzero)": for the tool description and errors. */
+export function describeProjects(projects: ProjectSetting[] = []): string {
+  return projects
+    .map((p) => {
+      const also = (p.aliases ?? []).filter((a) => a.toLowerCase() !== p.slug.toLowerCase());
+      return `${p.slug} (${p.name}${also.length ? `; also ${also.join(", ")}` : ""})`;
+    })
+    .join(", ");
+}
+
 /**
- * Repo, project tag, ticket and role for a task: a GitHub URL in the task wins, then a project the
- * task names (PROJECTS), then DEFAULT_REPO (and the project whose repo it is).
+ * Repo, project, environment, ticket and role for a task: the project the caller picked (`chosen`,
+ * start_session's project argument) wins, then a GitHub URL in the task, then a project the task
+ * names (PROJECTS), then DEFAULT_REPO (and the project whose repo it is).
  */
-export function planSession(task: string, config: Pick<Config, "projects" | "defaultRepo">): SessionPlan {
+export function planSession(task: string, config: Pick<Config, "projects" | "defaultRepo" | "sessionEnvironmentId">, chosen?: ProjectSetting): SessionPlan {
   const projects = config.projects ?? [];
   const prefixes = projects.map((p) => p.prefix).filter((p): p is string => Boolean(p));
   const ticket = ticketIdIn(task, prefixes) ?? (prefixes.length ? undefined : ticketIdIn(task));
-  const inTask = repoUrlOf(task.match(/\bhttps?:\/\/github\.com\/[\w.-]+\/[\w.-]+/i)?.[0]);
-  const project = inTask
-    ? projects.find((p) => ownerName(repoUrlOf(p.repo)) === ownerName(inTask))
-    : (namedProject(task, projects, ticket) ?? projects.find((p) => p.repo && ownerName(repoUrlOf(p.repo)) === ownerName(repoUrlOf(config.defaultRepo))));
+  const inTask = chosen ? undefined : repoUrlOf(task.match(/\bhttps?:\/\/github\.com\/[\w.-]+\/[\w.-]+/i)?.[0]);
+  const project =
+    chosen ??
+    (inTask
+      ? projects.find((p) => ownerName(repoUrlOf(p.repo)) === ownerName(inTask))
+      : (namedProject(task, projects, ticket) ?? projects.find((p) => p.repo && ownerName(repoUrlOf(p.repo)) === ownerName(repoUrlOf(config.defaultRepo)))));
   const repoUrl = inTask ?? repoUrlOf(project?.repo) ?? repoUrlOf(config.defaultRepo);
   const slug = project?.slug ?? ownerName(repoUrl)?.split("/")[1];
-  return { ...(repoUrl ? { repoUrl } : {}), ...(slug ? { project: slug } : {}), ...(ticket ? { ticket } : {}), role: ticket ? "builder" : "task" };
+  const environmentId = project?.environment ?? config.sessionEnvironmentId;
+  const rules = project ? projectRulesText(project) : undefined;
+  return {
+    ...(repoUrl ? { repoUrl } : {}),
+    ...(slug ? { project: slug } : {}),
+    ...(project ? { projectName: project.name } : {}),
+    ...(ticket ? { ticket } : {}),
+    role: ticket ? "builder" : "task",
+    ...(environmentId ? { environmentId } : {}),
+    ...(rules ? { rules } : {}),
+    routineFallback: !repoUrl || ownerName(repoUrl) === ownerName(repoUrlOf(config.defaultRepo)),
+  };
 }
 
 /** project:<slug>, role:builder|task, jarvis:<job> (and ticket:<ID>), so the Agents tree and JARVIS find it. */
@@ -112,15 +158,22 @@ export class SessionStarter {
     return titleFor(task, ticket, write);
   }
 
-  /** Paths 1 and 2; throws (CreateSessionError or Error) when neither works, so the caller can fire the routine. */
-  async start(jobId: string, task: string, sentAt: Date): Promise<DirectSession> {
+  /** The plan for a task, on the project `chosen` when the caller picked one. */
+  plan(task: string, chosen?: ProjectSetting): SessionPlan {
+    return planSession(task, this.config, chosen);
+  }
+
+  /**
+   * Paths 1 and 2; throws (CreateSessionError or Error) when neither works, so the caller can fire
+   * the routine (when `plan.routineFallback` allows it).
+   */
+  async start(jobId: string, task: string, sentAt: Date, plan = this.plan(task)): Promise<DirectSession> {
     // No login, no API: fail before spending a title call.
     if (!readAccessToken(this.deps.configDir ?? claudeConfigDir())) throw new CreateSessionError("no claude.ai login found (run: docker compose run --rm jarvis claude auth login)");
-    const plan = planSession(task, this.config);
     const tags = sessionTags(plan, jobId);
     const title = await this.title(task, plan.ticket);
-    const prompt = sessionPromptText(this.instructions, jobId, task, sentAt);
-    const base = { title, tags, repoUrl: plan.repoUrl, environmentId: this.config.sessionEnvironmentId };
+    const prompt = sessionPromptText(this.instructions, jobId, task, sentAt, plan.rules);
+    const base = { title, tags, repoUrl: plan.repoUrl, environmentId: plan.environmentId };
     const api = { fetchImpl: this.deps.fetchImpl, configDir: this.deps.configDir };
     try {
       const s = await createCloudSession({ ...base, prompt }, api);

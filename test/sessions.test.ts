@@ -81,7 +81,7 @@ test("the public reports endpoint passes the sender's session through", async ()
 
 test("follow-ups tell external sessions to use the plugin's reporter", () => {
   const at = new Date("2026-10-13T20:00:00.000Z");
-  assert.match(followUpText("j1", "go", at), /report back with scripts\/report\.sh j1/);
+  assert.match(followUpText("j1", "go", at), /report back with ~\/jarvis-report\.sh j1[\s\S]*started before it existed use scripts\/report\.sh/);
   const ext = followUpText("mk", "go", at, true);
   assert.match(ext, /<workflow plugin>\/scripts\/jarvis_report\.sh mk 2026-10-13T20:00:00\.000Z/);
   assert.match(ext, /just answer in this session/);

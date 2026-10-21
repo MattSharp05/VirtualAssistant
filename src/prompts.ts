@@ -4,12 +4,16 @@
 // handle, the send time (so reports can say how long the work took) and the instruction.
 
 import { readFileSync } from "node:fs";
+import type { ProjectSetting } from "./config.js";
+
+/** The report command the worker instructions have each session save (it works in any repo; JD-85). */
+export const REPORT_COMMAND = "~/jarvis-report.sh";
 
 /** Used only if docs/routine-prompt.md is missing from the image. */
 const FALLBACK_INSTRUCTIONS = [
   "You are a JARVIS worker: a Claude Code cloud session started by Matthew's personal assistant, JARVIS.",
   "Your task follows. It starts with `JARVIS job: <id>` and `Sent at: <time>`; remember both.",
-  'Report with scripts/report.sh <job id> <sent-at time> "<message>": a one-line acknowledgement, when you finish (with the branch or PR), whenever you need a decision, and if you get stuck.',
+  'Report with scripts/report.sh <job id> <sent-at time> "<message>" where it exists; elsewhere POST {"job","text"} as JSON to $JARVIS_REPORT_URL/api/reports with curl and the header "Authorization: Bearer $JARVIS_REPORT_SECRET" (no URL or secret: carry on). Report a one-line acknowledgement, when you finish (with the branch or PR), whenever you need a decision, and if you get stuck.',
   "Work on a new branch and never push to main. Never merge pull requests.",
 ].join("\n");
 
@@ -25,9 +29,20 @@ export function loadWorkerInstructions(path: string | URL = new URL("../../docs/
   }
 }
 
-/** The first message of a session JARVIS creates: the worker instructions, then the job text. */
-export function sessionPromptText(instructions: string, jobId: string, task: string, sentAt: Date): string {
-  return [instructions.trim(), "", "---", "", newJobText(jobId, task, sentAt)].join("\n");
+/** The first message of a session JARVIS creates: the worker instructions, the project's rules, then the job text. */
+export function sessionPromptText(instructions: string, jobId: string, task: string, sentAt: Date, projectRules?: string): string {
+  return [instructions.trim(), "", "---", "", ...(projectRules ? [projectRules.trim(), ""] : []), newJobText(jobId, task, sentAt)].join("\n");
+}
+
+/** A project's rules for its sessions (JD-85): base branch, merge policy, extra instructions. Undefined = none. */
+export function projectRulesText(p: ProjectSetting): string | undefined {
+  const lines = [
+    ...(p.baseBranch ? [`- Base branch: ${p.baseBranch}. Branch from it and open PRs against it.`] : []),
+    ...(p.mergePolicy === "never" ? ["- Open a PR, never merge. Matthew merges."] : []),
+    ...(p.extraInstructions ? [`- ${p.extraInstructions.trim()}`] : []),
+  ];
+  if (!lines.length) return undefined;
+  return [`**Project rules** (${p.name}${p.repo ? `, ${p.repo}` : ""}):`, ...lines].join("\n");
 }
 
 export function newJobText(jobId: string, task: string, sentAt: Date): string {
@@ -39,13 +54,14 @@ export function newJobText(jobId: string, task: string, sentAt: Date): string {
  * repo's scripts/report.sh, so they're pointed at the copy in the claude-workflow plugin.
  */
 export function followUpText(jobId: string, message: string, sentAt: Date, external = false): string {
-  const script = external ? "<workflow plugin>/scripts/jarvis_report.sh" : "scripts/report.sh";
+  const script = external ? "<workflow plugin>/scripts/jarvis_report.sh" : REPORT_COMMAND;
   return [
     `Message from Matthew via JARVIS (job ${jobId}, sent at ${sentAt.toISOString()}):`,
     "",
     message.trim(),
     "",
     `When you've acted on this, report back with ${script} ${jobId} ${sentAt.toISOString()} "<message>".`,
+    ...(external ? [] : ["(That's the report command from your instructions; sessions started before it existed use scripts/report.sh.)"]),
     ...(external
       ? ["If that script or JARVIS_REPORT_URL isn't available here, just answer in this session; Matthew can read it."]
       : []),

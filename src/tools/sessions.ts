@@ -1,4 +1,5 @@
 // Cloud sessions: status, history, messaging, starting new ones.
+import { describeProjects } from "../sessionStart.js";
 import { CoreTools } from "./core.js";
 import { int, schema, str, type ToolContext, type ToolGroup } from "./types.js";
 
@@ -52,10 +53,18 @@ const group: ToolGroup = {
     },
     {
       name: "start_session",
-      description:
-        "Start a new cloud session on a task: a normal Claude Code session with a short title, on the default repo or the project the task names (\"in trip\", a ticket ID). Uses plan usage.",
-      inputSchema: schema({ task: str("The task, written as a complete instruction") }, ["task"]),
-      handler: (a, ctx) => core(ctx).start(String(a.task ?? "")),
+      description: (ctx) => {
+        const projects = describeProjects(ctx.config.projects);
+        return (
+          "Start a new cloud session on a task: a normal Claude Code session with a short title, on the default repo or the project the task names (\"in trip\", a ticket ID). Uses plan usage." +
+          (projects ? ` Set project (slug or alias) when Matthew names one; it wins over the task text. Projects: ${projects}.` : "")
+        );
+      },
+      inputSchema: schema(
+        { task: str("The task, written as a complete instruction"), project: str("Optional: the project's slug or alias (see the description); default = from the task") },
+        ["task"],
+      ),
+      handler: (a, ctx) => core(ctx).start(String(a.task ?? ""), typeof a.project === "string" ? a.project : undefined),
     },
     {
       name: "rename_jarvis_sessions",

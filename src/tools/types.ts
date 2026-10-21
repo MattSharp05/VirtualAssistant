@@ -17,7 +17,8 @@ export type JsonSchema = Record<string, unknown>;
 
 export interface ToolDef {
   name: string;
-  description: string;
+  /** A function when it depends on the configuration (e.g. start_session lists the projects). */
+  description: string | ((ctx: ToolContext) => string);
   inputSchema: JsonSchema;
   /** Returns text the model reads. Throwing reports the message to the model as a tool error. */
   handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<string>;
