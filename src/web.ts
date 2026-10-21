@@ -61,7 +61,7 @@ async function internalRoute(
   registry: ToolRegistry,
   ctx: ToolContext,
 ): Promise<void> {
-  if (req.method === "GET" && url.pathname === "/internal/tools") return send(res, 200, { tools: registry.list() });
+  if (req.method === "GET" && url.pathname === "/internal/tools") return send(res, 200, { tools: registry.list(ctx) });
   const m = /^\/internal\/tool\/([^/]+)$/.exec(url.pathname);
   if (req.method === "POST" && m) {
     const body = await readJson(req);

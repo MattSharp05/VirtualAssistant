@@ -100,7 +100,7 @@ test("store tracks jobs, the current job and fires in the last hour", () => {
 test("prompts carry the job id and send time", () => {
   const at = new Date("2026-10-12T20:00:00.000Z");
   assert.match(newJobText("j1", " fix it ", at), /JARVIS job: j1\nSent at: 2026-10-12T20:00:00.000Z[\s\S]*fix it$/);
-  assert.match(followUpText("j1", "and this", at), /scripts\/report\.sh j1 2026-10-12T20:00:00\.000Z/);
+  assert.match(followUpText("j1", "and this", at), /~\/jarvis-report\.sh j1 2026-10-12T20:00:00\.000Z/);
 });
 
 test("a CLI that exits without reading stdin doesn't crash JARVIS", async () => {

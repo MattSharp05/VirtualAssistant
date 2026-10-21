@@ -60,8 +60,13 @@ export class ToolRegistry {
     return new ToolRegistry(groups);
   }
 
-  list(): ToolInfo[] {
-    return [...this.byName.values()].map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+  /** The tools; descriptions that depend on the configuration need `ctx` (without it they say less). */
+  list(ctx?: ToolContext): ToolInfo[] {
+    return [...this.byName.values()].map(({ name, description, inputSchema }) => ({
+      name,
+      description: typeof description === "function" ? (ctx ? description(ctx) : description({ config: {} } as ToolContext)) : description,
+      inputSchema,
+    }));
   }
 
   has(name: string): boolean {

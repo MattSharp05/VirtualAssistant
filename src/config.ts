@@ -38,7 +38,7 @@ export interface Config {
   githubToken?: string;
 }
 
-/** One project in PROJECTS: its tag slug, name, Tickets data source and repo. */
+/** One project in PROJECTS: its tag slug, name, Tickets data source, repo and how its sessions run (JD-85). */
 export interface ProjectSetting {
   /** The `project:` tag value (the project's CLAUDE.md `Project slug:`). */
   slug: string;
@@ -50,6 +50,16 @@ export interface ProjectSetting {
   /** Ticket ID prefix (e.g. "JD"), for sessions titled `JD-12: …` when the ticket isn't in flight. */
   prefix?: string;
   notionUrl?: string;
+  /** The cloud environment (env_…) its sessions run in; overrides SESSION_ENVIRONMENT_ID. */
+  environment?: string;
+  /** Other names for it ("driftship", "shelfzero"), matched like the slug, in any case. */
+  aliases?: string[];
+  /** The branch its PRs target (told to the session). */
+  baseBranch?: string;
+  /** "never": sessions open a PR and never merge. "orchestrator" (default): an orchestrator merges. */
+  mergePolicy?: "never" | "orchestrator";
+  /** Short project rules added to the first message of its sessions. */
+  extraInstructions?: string;
 }
 
 /** PROJECTS='[{"slug":"jarvis","name":"JARVIS Desk","tickets":"collection://…","repo":"MattSharp05/VirtualAssistant","prefix":"JD"}]' */
@@ -67,7 +77,12 @@ export function parseProjects(text: string | undefined): ProjectSetting[] {
     const slug = str(r?.slug);
     if (!slug) throw new Error(`PROJECTS[${i}] needs a slug`);
     const out: ProjectSetting = { slug, name: str(r.name) ?? slug };
-    for (const key of ["tickets", "repo", "prefix", "notionUrl"] as const) if (str(r[key])) out[key] = str(r[key]);
+    for (const key of ["tickets", "repo", "prefix", "notionUrl", "environment", "baseBranch", "extraInstructions"] as const) if (str(r[key])) out[key] = str(r[key]);
+    const aliases = Array.isArray(r.aliases) ? r.aliases.map(str).filter((a): a is string => Boolean(a)) : [];
+    if (aliases.length) out.aliases = aliases;
+    const policy = str(r.mergePolicy) as ProjectSetting["mergePolicy"] | undefined;
+    if (policy && policy !== "never" && policy !== "orchestrator") throw new Error(`PROJECTS[${i}].mergePolicy must be "never" or "orchestrator"`);
+    if (policy) out.mergePolicy = policy;
     return out;
   });
 }

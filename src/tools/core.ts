@@ -84,8 +84,8 @@ export class CoreTools {
     return `Sent to ${job.id} in ${(ms / 1000).toFixed(1)}s. Its answer will arrive as a report.`;
   }
 
-  async start(task: string): Promise<string> {
-    const { job, ms, fireNumber } = await this.jarvis.startJob(task);
+  async start(task: string, project?: string): Promise<string> {
+    const { job, ms, fireNumber } = await this.jarvis.startJob(task, { project });
     const how = fireNumber ? ` via the routine fallback (fire ${fireNumber}/30 this hour)` : job.title ? `, titled "${job.title}"` : "";
     return `Started ${job.id} in ${(ms / 1000).toFixed(1)}s${how}: ${job.url}`;
   }

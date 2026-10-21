@@ -51,6 +51,15 @@ the top of its first message. The routine below is only the **fallback** for whe
 unavailable; its sessions are routine runs (titled "Jarvis Worker", hidden from the sidebar, 30
 fires an hour). To title the older ones, ask JARVIS to "rename my JARVIS sessions".
 
+**Other projects** (JD-85) are entries in `PROJECTS` with their own `environment`, `aliases`,
+`baseBranch`, `mergePolicy` and `extraInstructions`; see `.env.example` for a two-project line
+with Drift. "Start a Drift session to …", "… in driftship" or start_session's `project` argument
+picks one: the session runs on its repo in its environment, tagged `project:<slug>`, with its rules
+in the first message. Their environment needs `JARVIS_REPORT_URL` and `JARVIS_REPORT_SECRET`: the
+worker instructions save a small curl reporter (`~/jarvis-report.sh`) that works in any repo and
+uses `scripts/report.sh` where it exists. The routine only runs on `DEFAULT_REPO`, so another
+project's failed start is an error ("Couldn't start a Drift session: …"), never a routine fire.
+
 **A2. Make the routine (fallback).** At claude.ai/code/routines → **New routine**:
 - **Repository:** `MattSharp05/VirtualAssistant` (it clones `main`, which has `scripts/report.sh`).
 - **Environment:** `JARVIS`.

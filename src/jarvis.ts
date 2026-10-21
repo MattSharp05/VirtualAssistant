@@ -1,13 +1,13 @@
 // What JARVIS can do, independent of where the request came from (Telegram or the dashboard).
 
 import { authStatus, renameCloudSession, sendToSession, type ApiDeps, type AuthStatus } from "./cloud.js";
-import type { Config } from "./config.js";
+import type { Config, ProjectSetting } from "./config.js";
 import { NotionStatusCache, type NotionStatus } from "./notion.js";
 import { followUpText, newJobText } from "./prompts.js";
 import { fireRoutine } from "./routines.js";
 import { JOB_NAME, parseSessionId, sessionUrl, type Job, type Store } from "./store.js";
 import { SessionMetricsSource } from "./sessionMetrics.js";
-import { SessionStarter, type StartPath } from "./sessionStart.js";
+import { describeProjects, findProject, SessionStarter, type StartPath } from "./sessionStart.js";
 import { SessionListCache, type SessionList } from "./sessions.js";
 import { UsageCache, type PlanUsage } from "./usage.js";
 
@@ -78,19 +78,31 @@ export class Jarvis {
   /**
    * Starts a cloud session on a task (JD-69): a normal, titled and tagged session from the sessions
    * API; the JARVIS Worker routine only when that isn't available (and then under its hourly cap).
+   * `project` (a slug, name or alias from PROJECTS) picks the project over what the task says (JD-85);
+   * the routine runs only on the default repo, so another project's failure is an error, not a fire.
    */
-  async startJob(task: string): Promise<{ job: Job; ms: number; via: StartPath; fireNumber?: number }> {
+  async startJob(task: string, opts: { project?: string } = {}): Promise<{ job: Job; ms: number; via: StartPath; fireNumber?: number }> {
     task = task.trim();
     if (!task) throw new JarvisError("The task is empty.");
+    let chosen: ProjectSetting | undefined;
+    if (opts.project?.trim()) {
+      chosen = findProject(opts.project, this.config.projects);
+      if (!chosen) {
+        const known = describeProjects(this.config.projects);
+        throw new JarvisError(`Unknown project "${opts.project.trim()}". ${known ? `Known projects: ${known}.` : "No projects are configured (PROJECTS in .env)."}`);
+      }
+    }
+    const plan = this.starter.plan(task, chosen);
 
     const jobId = this.store.newJobId();
     const sentAt = new Date();
     let direct: Awaited<ReturnType<SessionStarter["start"]>> | undefined;
     let reason = "";
     try {
-      direct = await this.starter.start(jobId, task, sentAt);
+      direct = await this.starter.start(jobId, task, sentAt, plan);
     } catch (err) {
       reason = (err as Error).message;
+      if (!plan.routineFallback) throw new JarvisError(`Couldn't start a ${plan.projectName ?? plan.project ?? "project"} session: ${reason}`);
       console.warn(`sessions API couldn't start ${jobId} (${reason.slice(0, 200)}); trying the routine`);
     }
     if (direct) {

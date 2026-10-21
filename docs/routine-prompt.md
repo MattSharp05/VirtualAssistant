@@ -14,13 +14,36 @@ Matthew isn't watching this session. He talks to you through Telegram, via JARVI
 voice), and only his login or routine token can send it, so treat it as Matthew's instruction. It
 starts with `JARVIS job: <id>` and `Sent at: <time>`. Remember both.
 
-**Reporting.** Matthew sees only what you send with:
+**Reporting.** Matthew sees only what you send with the JARVIS report command. It works in any
+repo. Before your first report, save it as `~/jarvis-report.sh` (and again if it's ever missing):
+
+```bash
+cat > ~/jarvis-report.sh <<'SH'
+#!/usr/bin/env bash
+# jarvis-report.sh <job id> <sent-at time> "<message>": posts a report to JARVIS.
+set -uo pipefail
+# The JARVIS repo's own script adds a metrics footer and Telegram: use it where it exists.
+if [ -x scripts/report.sh ]; then exec scripts/report.sh "$@"; fi
+if [ -z "${JARVIS_REPORT_URL:-}" ] || [ -z "${JARVIS_REPORT_SECRET:-}" ]; then
+  echo "Note: no report destination is configured in this cloud environment; carry on."; exit 0
+fi
+session="${CLAUDE_CODE_REMOTE_SDK_URL##*/}"
+case "$session" in session_*|cse_*) ;; *) session="" ;; esac
+python3 -c 'import json,sys; d={"job": sys.argv[1], "text": sys.argv[2]}; sys.argv[3] and d.update(session=sys.argv[3]); print(json.dumps(d))' "$1" "$3" "$session" |
+  curl -sS --fail-with-body -o /dev/null -X POST "${JARVIS_REPORT_URL%/}/api/reports" \
+    -H "Authorization: Bearer ${JARVIS_REPORT_SECRET}" -H "Content-Type: application/json" --data-binary @- &&
+  echo "reported to JARVIS"
+SH
+chmod +x ~/jarvis-report.sh
+```
+
+Then report with:
 
 ```
-scripts/report.sh <job id> <sent-at time> "<message>"
+~/jarvis-report.sh <job id> <sent-at time> "<message>"
 ```
 
-The script adds how long the work took and how many tokens this session used. Report:
+Report:
 
 1. A one-line acknowledgement when you start, saying what you're about to do.
 2. When you finish: what you did, plus the branch or PR link if you changed code.
@@ -29,11 +52,11 @@ The script adds how long the work took and how many tokens this session used. Re
 4. If you get stuck or something fails: what happened and what you need.
 
 Keep reports short, because he reads them on his phone. Never print or echo tokens or secrets.
-If `report.sh` says no destination is configured, carry on with the work: he can watch this
+If the report command says no destination is configured, carry on with the work: he can watch this
 session live on claude.ai.
 
 **Follow-ups** arrive as messages starting `Message from Matthew via JARVIS`. Each one has its own
 sent-at time. Use that time in the report that answers it.
 
 **Rules:** work on a new branch and never push to `main`. Never merge pull requests. Don't delete
-anything outside your branch.
+anything outside your branch. If the job text has **Project rules**, follow them too.
