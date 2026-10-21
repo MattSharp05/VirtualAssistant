@@ -21,7 +21,7 @@ export const TASKS_PROPERTIES: Json = {
   Due: { date: {} },
   Project: { select: { options: [] } },
   Priority: { select: options(["P1", "P2", "P3"], ["red", "yellow", "gray"]) },
-  Source: { select: options(["You", "Slack", "Email", "Session", "Notion QA"], ["default", "purple", "red", "blue", "brown"]) },
+  Source: { select: options(["You", "Slack", "Email", "Session", "Notion QA", "Idea"], ["default", "purple", "red", "blue", "brown", "yellow"]) },
   "Source link": { url: {} },
   "Dedupe key": { rich_text: {} },
   Created: { created_time: {} },

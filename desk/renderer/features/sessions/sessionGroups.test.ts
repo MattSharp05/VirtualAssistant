@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { DeskSession } from "@jarvis/shared";
-import { ago, clock, groupSessions, labelOf, matches, pillOf, toneOf, whoOf } from "./sessionGroups";
+import {
+  ago,
+  clock,
+  groupByProject,
+  groupSessions,
+  labelOf,
+  matches,
+  pillOf,
+  statusSummary,
+  toneOf,
+  whoOf,
+} from "./sessionGroups";
 
 const session = (over: Partial<DeskSession>): DeskSession => ({
   id: "x",
@@ -38,6 +49,41 @@ describe("sessionGroups", () => {
     expect(matches(list[0], "MK-81")).toBe(true);
     expect(matches(list[1], "  ")).toBe(true);
     expect(groupSessions(list, "nothing")).toEqual([]);
+  });
+
+  it("by project: one group per project in first-seen order, needs-you rows first, No project last", () => {
+    const sessions = [
+      session({ id: "scratch", group: "needs-you" }),
+      session({ id: "batch", project: "JARVIS Desk", group: "working" }),
+      session({ id: "mk", project: "MarioKart", group: "needs-you", latestKind: "blocked" }),
+      session({ id: "design", project: "JARVIS Desk", group: "needs-you" }),
+      session({ id: "builder", project: "MarioKart", group: "idle" }),
+      session({ id: "jd-62", project: "JARVIS Desk", group: "working" }),
+      session({ id: "blank", project: "  ", group: "idle" }),
+    ];
+    expect(groupByProject(sessions).map((g) => [g.label, g.summary, g.sessions.map((s) => s.id)])).toEqual([
+      ["JARVIS Desk", "1 needs you · 2 working", ["design", "batch", "jd-62"]],
+      ["MarioKart", "1 needs you · 1 idle", ["mk", "builder"]],
+      ["No project", "1 needs you · 1 idle", ["scratch", "blank"]],
+    ]);
+  });
+
+  it("by project: filters (also by project name) and drops projects left empty", () => {
+    const sessions = [
+      session({ id: "mk", name: "mk", project: "MarioKart" }),
+      session({ id: "trip", name: "trip", project: "TripPlanner" }),
+    ];
+    expect(groupByProject(sessions, "trip").map((g) => g.label)).toEqual(["TripPlanner"]);
+    expect(groupByProject(sessions, "mario").map((g) => g.sessions.map((s) => s.id))).toEqual([["mk"]]);
+    expect(groupByProject(sessions, "nothing")).toEqual([]);
+    expect(groupByProject([])).toEqual([]);
+  });
+
+  it("status summary counts only the statuses present", () => {
+    expect(statusSummary([{ group: "idle" }, { group: "working" }, { group: "idle" }])).toBe(
+      "1 working · 2 idle",
+    );
+    expect(statusSummary([])).toBe("");
   });
 
   it("dot colour and pill follow the group and what the latest report said", () => {

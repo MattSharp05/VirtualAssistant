@@ -33,7 +33,7 @@ export const labelOf = (s: Pick<DeskSession, "name" | "title">): string => s.nam
 export function matches(s: DeskSession, filter: string): boolean {
   const q = filter.trim().toLowerCase();
   if (!q) return true;
-  return [s.name, s.title, s.latestReport, s.status].some((v) => v?.toLowerCase().includes(q));
+  return [s.name, s.title, s.latestReport, s.status, s.project].some((v) => v?.toLowerCase().includes(q));
 }
 
 /** The groups that have sessions after filtering, in order (the server already sorts within one). */
@@ -45,6 +45,51 @@ export function groupSessions(
     ...g,
     sessions: sessions.filter((s) => s.group === g.id && matches(s, filter)),
   })).filter((g) => g.sessions.length > 0);
+}
+
+/** Where sessions without a project tag or repo go (JD-72), always last. */
+export const NO_PROJECT = "No project";
+
+export interface ProjectGroup {
+  /** The project's name, or NO_PROJECT. */
+  label: string;
+  /** "1 needs you · 2 working", counting only the statuses present. */
+  summary: string;
+  /** Needs you, then working, then idle (newest first within each, as the server sends them). */
+  sessions: DeskSession[];
+}
+
+const STATUS_ORDER: Record<SessionGroup, number> = { "needs-you": 0, working: 1, idle: 2 };
+
+/** "1 needs you · 2 working · 1 idle" (statuses with no sessions are left out). */
+export function statusSummary(sessions: Pick<DeskSession, "group">[]): string {
+  return GROUPS.map((g) => [sessions.filter((s) => s.group === g.id).length, g.label.toLowerCase()] as const)
+    .filter(([n]) => n > 0)
+    .map(([n, label]) => `${n} ${label}`)
+    .join(" · ");
+}
+
+/**
+ * By project (JD-72, the list's default): one group per project after filtering. Projects come in the
+ * order of their first session in the server's order (so those that need you lead); "No project" last.
+ */
+export function groupByProject(sessions: DeskSession[], filter = ""): ProjectGroup[] {
+  const byProject = new Map<string, DeskSession[]>();
+  for (const s of sessions) {
+    if (!matches(s, filter)) continue;
+    const label = s.project?.trim() || NO_PROJECT;
+    byProject.set(label, [...(byProject.get(label) ?? []), s]);
+  }
+  return [...byProject]
+    .sort(([a], [b]) => Number(a === NO_PROJECT) - Number(b === NO_PROJECT))
+    .map(([label, list]) => ({
+      label,
+      summary: statusSummary(list),
+      sessions: list
+        .map((s, i) => ({ s, i }))
+        .sort((a, b) => STATUS_ORDER[a.s.group] - STATUS_ORDER[b.s.group] || a.i - b.i)
+        .map((x) => x.s),
+    }));
 }
 
 /** "now", "12m", "3h", "2d". */

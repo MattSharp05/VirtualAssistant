@@ -34,6 +34,10 @@ export interface AppMenuActions {
   quit(): void;
   /** DevTools for the focused window, else the overlay (JD-63). */
   devTools(): void;
+  /** Restart now on a downloaded update (JD-74). */
+  restartToUpdate?(): void;
+  /** Check for updates now (JD-76): the menu bar icon can be hidden, so the Dock offers it too. */
+  checkForUpdates?(): void;
 }
 
 export const APP_NAME = "JARVIS Desk";
@@ -69,10 +73,15 @@ export function applicationMenu(act: AppMenuActions): AppMenuItem[] {
 }
 
 /** The Dock icon's right-click menu; macOS adds Options, Show in Finder and Quit below it. */
-export function dockMenu(dnd: boolean, act: AppMenuActions): AppMenuItem[] {
+export function dockMenu(dnd: boolean, act: AppMenuActions, updateReady?: string): AppMenuItem[] {
   return [
+    // A downloaded update (JD-74): the same Restart to update as the tray's.
+    ...(updateReady && act.restartToUpdate
+      ? [{ label: `Restart to update (v${updateReady})`, click: act.restartToUpdate }, separator]
+      : []),
     { label: "Command bar", click: act.commandBar },
     { label: "Open Settings…", click: act.openSettings },
+    ...(act.checkForUpdates ? [{ label: "Check for updates", click: act.checkForUpdates }] : []),
     separator,
     { label: "Do Not Disturb", type: "checkbox", checked: dnd, click: () => act.setDnd(!dnd) },
   ];

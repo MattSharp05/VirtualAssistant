@@ -6,6 +6,10 @@ interface ToolbarProps {
   projects: AgentProject[];
   filter: TreeFilter;
   onFilter(filter: TreeFilter): void;
+  /** Pans and zooms to fit a project's band. */
+  onJump(projectId: string): void;
+  /** Projects with a band on the canvas now (a search can leave some out). */
+  shown: ReadonlySet<string>;
   zoom: number;
   onZoom(factor: number): void;
   onFit(): void;
@@ -19,8 +23,12 @@ const ACTIVITY: { id: ActivityFilter; label: string }[] = [
   { id: "all", label: "All" },
 ];
 
-/** Filters (active only / all, one project, a ticket search) and the zoom controls. */
-export function Toolbar({ projects, filter, onFilter, zoom, onZoom, onFit, onRefresh, hits }: ToolbarProps) {
+/**
+ * Filters (active only / all, a ticket search), a jump chip per project (JD-75: brings its band into
+ * view and filters nothing away) and the zoom controls.
+ */
+export function Toolbar(props: ToolbarProps) {
+  const { projects, filter, onFilter, onJump, shown, zoom, onZoom, onFit, onRefresh, hits } = props;
   return (
     <div className="agents-toolbar" role="toolbar" aria-label="Agent tree controls">
       <div className="agents-segment" role="group" aria-label="Show">
@@ -35,22 +43,22 @@ export function Toolbar({ projects, filter, onFilter, zoom, onZoom, onFit, onRef
           </button>
         ))}
       </div>
-      <label className="agents-sr" htmlFor="agents-project">
-        Project
-      </label>
-      <select
-        id="agents-project"
-        className="agents-select"
-        value={filter.project ?? ""}
-        onChange={(e) => onFilter({ ...filter, project: e.target.value || undefined })}
-      >
-        <option value="">All projects</option>
-        {projects.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
+      {projects.length > 0 && (
+        <div className="agents-chips" role="group" aria-label="Jump to project">
+          {projects.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className="agents-chip"
+              aria-label={`Jump to ${p.name}, ${p.metrics.active} active`}
+              disabled={!shown.has(p.id)}
+              onClick={() => onJump(p.id)}
+            >
+              {p.name} <span className="agents-chip-count">{p.metrics.active}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="agents-search">
         <Icon name="search" size={15} />
         <label className="agents-sr" htmlFor="agents-search">

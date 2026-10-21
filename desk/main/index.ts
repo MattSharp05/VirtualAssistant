@@ -13,6 +13,7 @@ import {
   globalShortcut,
   ipcMain,
   Menu,
+  powerMonitor,
   safeStorage,
   screen,
   shell,
@@ -49,6 +50,7 @@ import { screenRpcHandlers } from "./rpcHandlers/screenNative";
 import { isSecretKey, Settings } from "./settings";
 import { StatusFileWriter } from "./statusFiles";
 import { createTray, trayCheck } from "./tray";
+import { appBundlePath } from "./updateInstaller";
 import { Updater } from "./updater";
 import { createVoice } from "./voice";
 import { Uploader, type UploadSource } from "./uploads";
@@ -245,7 +247,8 @@ app.whenReady().then(() => {
     },
     askName: () => askLayoutName(),
   });
-  // The updater (JD-46): newest desk-v* release on GitHub, on launch and daily; tray + notice to install.
+  // The updater (JD-46): newest desk-v* release on GitHub, on launch and daily. JD-74: a packaged app
+  // downloads it in the background and replaces itself (Restart now, or on quit); else the .dmg.
   const updater = new Updater({
     currentVersion: app.getVersion(),
     enabled: () => settings.get("checkForUpdates"),
@@ -253,8 +256,22 @@ app.whenReady().then(() => {
     publish: broadcast,
     openPath: (path) => shell.openPath(path),
     quit: () => app.quit(),
-    onChange: () => tray.refresh(),
+    onChange: () => {
+      tray.refresh();
+      if (settings.get("showInDock")) setDockMenu();
+    },
+    ...(app.isPackaged && !scenario && !testUserData
+      ? {
+          updatesDir: join(userData, "updates"),
+          appPath: appBundlePath(process.execPath),
+          autoInstall: () => settings.get("autoInstallUpdates"),
+          logFile: () => log!.file,
+          log: (level: "info" | "warn" | "error", message: string) => log?.write(level, "updater", message),
+        }
+      : {}),
   });
+  // Tells the helper this version started (else it rolls back), and queues "Updated to <v>".
+  updater.launched();
   let usage: UsageResponse | undefined;
   // Server→Mac requests (rpcHandlers/): folder access reads Settings → Folders on every call.
   const macFiles = new MacFiles({ allowedFolders: () => settings.get("allowedFolders") });
@@ -335,13 +352,16 @@ app.whenReady().then(() => {
     quit,
     // ⌥⌘I (JD-63): DevTools for the JARVIS window in front, else the overlay (packaged builds too).
     devTools: () => (BrowserWindow.getFocusedWindow() ?? overlay).webContents.toggleDevTools(),
+    restartToUpdate: () => updater.restartNow(),
+    checkForUpdates: () => void updater.check({ forced: true }),
   };
   // The menu bar while a JARVIS window is in front: ⌘Q, ⌘, and Edit (copy/paste in every window).
   Menu.setApplicationMenu(Menu.buildFromTemplate(applicationMenu(menuActions)));
   // The Dock icon (JD-62): shown by default (no LSUIElement), hidden at once when Show in Dock is off.
   // Its right-click menu adds Command bar, Settings and Do Not Disturb to macOS's own Quit.
   const dock = app.dock;
-  const setDockMenu = () => dock?.setMenu(Menu.buildFromTemplate(dockMenu(settings.get("dnd"), menuActions)));
+  const setDockMenu = () =>
+    dock?.setMenu(Menu.buildFromTemplate(dockMenu(settings.get("dnd"), menuActions, updater.state.ready)));
   if (settings.get("showInDock")) setDockMenu();
   else dock?.hide();
   settings.onChange((key) => {
@@ -385,6 +405,7 @@ app.whenReady().then(() => {
         version: updater.state.available?.version,
         downloading: updater.state.downloading,
         checking: updater.state.checking,
+        ready: updater.state.ready,
       },
       wake: { line: wakeStatusLine(voice.wake.status), lastTrigger: voice.wake.lastTrigger },
     }),
@@ -409,7 +430,7 @@ app.whenReady().then(() => {
       },
       openSettings,
       checkForUpdates: () => void updater.check({ forced: true }),
-      installUpdate: () => void updater.install(),
+      installUpdate: () => updater.installOrRestart(),
       quit,
     },
   );
@@ -491,14 +512,19 @@ app.whenReady().then(() => {
   // Camera hands (JD-47): the overlay grabs, moves, resizes and minimises windows.
   registerHandWindows(windows);
 
-  const overlay = createOverlay(rendererIndex, scenario, (url) => {
-    if (!updater.isInstallLink(url)) return false;
-    void updater.install();
-    return true;
-  });
+  // The update notices' buttons (Update, Restart now) go to the updater, not a browser.
+  const overlay = createOverlay(rendererIndex, scenario, (url) => updater.handleLink(url));
   // Not on a scenario (e.g. the smoke test): no network checks there.
-  if (!scenario && !testUserData) updater.start();
-  app.on("will-quit", () => updater.stop());
+  if (!scenario && !testUserData) {
+    updater.start();
+    // A Mac that slept through the hourly check looks again when it wakes (JD-76).
+    powerMonitor.on("resume", () => updater.woke());
+  }
+  app.on("will-quit", () => {
+    updater.stop();
+    // Install updates automatically (JD-74): a downloaded update goes in as the app quits.
+    updater.quitting();
+  });
   // The launcher ring opens in the overlay; focus it so Esc reaches the ring.
   ipcMain.on("desk:orb-click", () => overlay.focus());
   // The ambient face (JD-25) follows the Face setting; closing it (Esc) puts Face back to corner.

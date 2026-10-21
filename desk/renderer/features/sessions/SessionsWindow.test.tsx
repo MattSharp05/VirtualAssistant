@@ -4,6 +4,7 @@ import { BridgeProvider, chooseBridge } from "../../app/bridge";
 import type { DeskEvent } from "@jarvis/shared";
 import { createMockBridge, type MockBridge } from "../../mock/bridge";
 import { findScenario } from "../../mock/scenarios";
+import { WindowTitleContext } from "../../app/windowTitle";
 import SessionsWindow from "./index";
 
 function renderOn(scenario: string, hash = "") {
@@ -18,6 +19,17 @@ function renderOn(scenario: string, hash = "") {
 }
 
 const groupTitles = () => screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+const projectToggles = () =>
+  screen
+    .queryAllByRole("button", { expanded: true })
+    .concat(screen.queryAllByRole("button", { expanded: false }));
+const projects = () =>
+  [...document.querySelectorAll("[data-project]")].map((g) => [
+    g.getAttribute("data-project"),
+    g.querySelector(".sessions-project-summary")!.textContent,
+    [...g.querySelectorAll("[data-session-id]")].map((r) => r.getAttribute("data-session-id")),
+  ]);
+const listReady = () => screen.findByRole("button", { name: "MarioKart" });
 
 describe("Sessions window", () => {
   afterEach(() => {
@@ -25,12 +37,91 @@ describe("Sessions window", () => {
     window.location.hash = "";
   });
 
-  it("shows the three groups and selects the first session that needs you", async () => {
+  it("groups by project by default, needs-you rows first, No project last; selects the first session that needs you", async () => {
     renderOn("sessions");
-    expect(await screen.findByRole("heading", { name: "Needs you" })).toBeTruthy();
-    expect(groupTitles()).toEqual(["Needs you", "Working", "Idle", "mk"]);
+    await listReady();
+    expect((screen.getByLabelText("Group") as HTMLSelectElement).value).toBe("project");
+    expect(projects()).toEqual([
+      ["MarioKart", "1 needs you · 1 working", ["mk", "mk-80-builder"]],
+      ["Trip planner", "1 needs you", ["trip"]],
+      ["ShapeMint", "1 working", ["session_01SM"]],
+      ["JARVIS Desk", "1 idle", ["virtual-assistant"]],
+      ["No project", "1 idle", ["notes-cleanup"]],
+    ]);
     expect(await screen.findByText("Blocked · needs you", { selector: ".sessions-pill" })).toBeTruthy();
     expect(await screen.findByText(/drift boost at 1.5×/)).toBeTruthy();
+  });
+
+  it("a project folds away and opens again from its header", async () => {
+    renderOn("sessions");
+    const toggle = await listReady();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    const rows = document.getElementById(toggle.getAttribute("aria-controls")!)!;
+    expect(rows.hidden).toBe(true);
+    expect(projectToggles()).toHaveLength(5);
+    fireEvent.click(toggle);
+    expect(rows.hidden).toBe(false);
+  });
+
+  it("Needs you first brings back the status groups", async () => {
+    renderOn("sessions");
+    await listReady();
+    fireEvent.change(screen.getByLabelText("Group"), { target: { value: "needs-you" } });
+    expect(groupTitles()).toEqual(["Needs you", "Working", "Idle", "mk"]);
+  });
+
+  it("Pop out opens the session in a window of its own", async () => {
+    const bridge = renderOn("sessions");
+    fireEvent.click(await screen.findByRole("button", { name: "Pop out mk into its own window" }));
+    expect(bridge.opened).toEqual(["sessions?solo=mk"]);
+    fireEvent.click(document.querySelector("[data-session-id=session_01SM]")!);
+    fireEvent.click(await screen.findByRole("button", { name: /^Pop out ShapeMint/ }));
+    expect(bridge.opened.at(-1)).toBe("sessions?solo=session_01SM");
+  });
+
+  it("a popped-out window shows just that session, titled with its name, and still sends and refreshes", async () => {
+    const mock = createMockBridge(findScenario("sessions")!);
+    const listeners: ((e: DeskEvent) => void)[] = [];
+    const bridge = {
+      ...mock,
+      subscribe: (fn: (e: DeskEvent) => void) => (listeners.push(fn), () => undefined),
+    };
+    const titles: (string | undefined)[] = [];
+    window.location.hash = "#/sessions?solo=trip";
+    render(
+      <BridgeProvider value={{ bridge, scenario: "sessions" }}>
+        <WindowTitleContext.Provider value={(t) => titles.push(t)}>
+          <SessionsWindow />
+        </WindowTitleContext.Provider>
+      </BridgeProvider>,
+    );
+    expect(await screen.findByRole("heading", { level: 2, name: "trip" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Sessions" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Pop out/ })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Quick view" })).toBeTruthy();
+    expect(titles.at(-1)).toBe("trip");
+
+    const details = () => mock.requests.filter((r) => r.path === "/sessions/trip").length;
+    const before = details();
+    await act(async () => listeners.forEach((fn) => fn({ type: "sessions.changed" })));
+    expect(details()).toBe(before + 1);
+
+    fireEvent.change(screen.getByLabelText("Message trip"), { target: { value: "Thanks" } });
+    await act(async () => void fireEvent.click(screen.getByRole("button", { name: "Send to trip" })));
+    expect(await screen.findByText("Sent to trip")).toBeTruthy();
+  });
+
+  it("the sessions-solo scenario starts popped out on mk", async () => {
+    renderOn("sessions-solo");
+    expect(await screen.findByRole("heading", { level: 2, name: "mk" })).toBeTruthy();
+    expect(screen.queryByRole("navigation", { name: "Sessions" })).toBeNull();
+  });
+
+  it("a popped-out session that's gone says so", async () => {
+    renderOn("sessions", "#/sessions?solo=nope");
+    expect(await screen.findByText("No session called nope any more.")).toBeTruthy();
   });
 
   it("selects the session named in the window params, and follows a later change", async () => {
@@ -47,11 +138,13 @@ describe("Sessions window", () => {
 
   it("filters the list", async () => {
     renderOn("sessions");
-    await screen.findByRole("heading", { name: "Needs you" });
+    await listReady();
     fireEvent.change(screen.getByLabelText("Filter sessions"), { target: { value: "shapemint" } });
     const nav = screen.getByRole("navigation", { name: "Sessions" });
-    expect(within(nav).getAllByRole("button", { name: /ShapeMint/ })).toHaveLength(1);
-    expect(within(nav).queryByRole("heading", { name: "Needs you" })).toBeNull();
+    expect(within(nav).getAllByRole("button", { name: /ShapeMint/ })).toHaveLength(2);
+    expect(projects()).toEqual([["ShapeMint", "1 working", ["session_01SM"]]]);
+    fireEvent.change(screen.getByLabelText("Filter sessions"), { target: { value: "mariokart" } });
+    expect(projects().map((p) => p[0])).toEqual(["MarioKart"]);
   });
 
   it("sends a message through the bridge and says where it went", async () => {
@@ -76,7 +169,7 @@ describe("Sessions window", () => {
         <SessionsWindow />
       </BridgeProvider>,
     );
-    await screen.findByRole("heading", { name: "Needs you" });
+    await listReady();
     const lists = () => mock.requests.filter((r) => r.path === "/sessions").length;
     const before = lists();
     await act(async () => listeners.forEach((fn) => fn({ type: "sessions.changed" })));
@@ -106,7 +199,7 @@ describe("Sessions window", () => {
 
   it("list rows show cost, tokens, wall time and the context bar; unknown values are — with a tooltip", async () => {
     renderOn("sessions");
-    await screen.findByRole("heading", { name: "Needs you" });
+    await listReady();
     const row = (id: string) => document.querySelector(`[data-session-id="${id}"]`)!;
     const metric = (id: string, m: string) => row(id).querySelector(`[data-metric="${m}"]`)!;
     expect(metric("mk", "cost").textContent).toBe("$269.76");
@@ -176,10 +269,10 @@ describe("Sessions window", () => {
 
   it("sorts by cost or context into one list, and back to the groups", async () => {
     renderOn("sessions");
-    await screen.findByRole("heading", { name: "Needs you" });
+    await listReady();
     const order = () =>
       [...document.querySelectorAll("[data-session-id]")].map((r) => r.getAttribute("data-session-id"));
-    const sort = screen.getByLabelText("Sort");
+    const sort = screen.getByLabelText("Group");
     fireEvent.change(sort, { target: { value: "cost" } });
     expect(screen.getByRole("heading", { level: 2, name: "Most expensive" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Needs you" })).toBeNull();

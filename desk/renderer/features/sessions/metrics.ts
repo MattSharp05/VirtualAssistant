@@ -59,25 +59,29 @@ export function prLabel(url: string): string {
   return m ? `${m[1]} #${m[2]}` : url;
 }
 
-/** needs-you: the server's grouped order · cost and context: one list, biggest first. */
-export type SessionSort = "needs-you" | "cost" | "context";
+/**
+ * The list's Group control: project: a section per project (JD-72, the default) · needs-you: the
+ * server's status groups · cost and context: one list, biggest first.
+ */
+export type SessionSort = "project" | "needs-you" | "cost" | "context";
+
+/** The sorts that make one flat list. */
+export type MetricSort = Exclude<SessionSort, "project" | "needs-you">;
 
 export const SORTS: { id: SessionSort; label: string }[] = [
+  { id: "project", label: "By project" },
   { id: "needs-you", label: "Needs you first" },
   { id: "cost", label: "Most expensive" },
   { id: "context", label: "Context fullest" },
 ];
 
-const SORT_KEY: Record<Exclude<SessionSort, "needs-you">, (s: DeskSession) => number | undefined> = {
+const SORT_KEY: Record<MetricSort, (s: DeskSession) => number | undefined> = {
   cost: (s) => s.metrics?.costUsd,
   context: (s) => s.metrics?.contextPercent,
 };
 
 /** Biggest first; sessions that don't report the value go last, in the order they came. */
-export function sortSessions(
-  sessions: DeskSession[],
-  sort: Exclude<SessionSort, "needs-you">,
-): DeskSession[] {
+export function sortSessions(sessions: DeskSession[], sort: MetricSort): DeskSession[] {
   const key = SORT_KEY[sort];
   return sessions
     .map((s, i) => ({ s, i, v: key(s) }))

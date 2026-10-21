@@ -1,0 +1,413 @@
+/* The Ideas window (JD-73), from the agreed sketch: a 300 px sidebar of ideas by project, and one big
+   writing box centred in the rest, with the quiet "Then" row and its pop-ups under it. */
+.ideas {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.ideas-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ideas button,
+.ideas input,
+.ideas textarea,
+.ideas select {
+  font: inherit;
+}
+
+.ideas textarea::placeholder,
+.ideas input::placeholder {
+  color: #7d8a95;
+}
+
+/* ── Sidebar ── */
+.ideas-side {
+  flex: 0 0 300px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--glass-border);
+  overflow: hidden;
+}
+
+.ideas-side-top {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 2px;
+}
+
+.ideas-new {
+  height: 38px;
+  border: 1px solid rgba(95, 212, 230, 0.4);
+  border-radius: 10px;
+  background: rgba(95, 212, 230, 0.08);
+  color: var(--accent-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ideas-new[data-active] {
+  border-color: transparent;
+  background: var(--accent);
+  color: #0b1a1e;
+}
+
+.ideas-filter {
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: var(--bg-deep);
+  color: var(--ink);
+}
+
+.ideas-groups {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
+.ideas-group h2 {
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  padding: 14px 16px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ideas-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  padding: 9px 16px 9px 13px;
+  border: 0;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ideas-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.ideas-row[aria-current="true"] {
+  border-left-color: var(--accent);
+  background: rgba(95, 212, 230, 0.1);
+}
+
+.ideas-row-title {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ideas-row-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.ideas-empty {
+  margin: 0;
+  padding: 16px;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+/* ── The writing column ── */
+.ideas-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 40px;
+  overflow-y: auto;
+}
+
+.ideas-column {
+  width: 100%;
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ideas-project-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ideas-project-row label,
+.ideas-then-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.ideas-project {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(95, 212, 230, 0.4);
+  border-radius: 999px;
+  background: rgba(95, 212, 230, 0.08);
+  color: var(--accent-ink);
+  font-size: 13px;
+}
+
+.ideas-project option {
+  background: var(--bg-deep);
+  color: var(--ink);
+}
+
+.ideas-stamp {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.ideas-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ideas-delete:hover,
+.ideas-delete[data-confirm] {
+  color: var(--red);
+  border-color: rgba(242, 104, 92, 0.4);
+}
+
+.ideas-box {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  background: var(--bg-deep);
+}
+
+.ideas-box[data-new],
+.ideas-box:focus-within {
+  border-color: var(--accent);
+}
+
+.ideas-box textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 20px 22px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+
+.ideas-box-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 8px 12px 10px 22px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* ── Then: three small pills, each with a pop-up under it ── */
+.ideas-then {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ideas-then-label {
+  margin-right: 4px;
+}
+
+.ideas-action {
+  position: relative;
+}
+
+.ideas-then-button {
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ideas-then-button[data-open] {
+  border-color: rgba(95, 212, 230, 0.5);
+  background: rgba(95, 212, 230, 0.1);
+  color: var(--accent-ink);
+}
+
+.ideas-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  vertical-align: middle;
+}
+
+/* Padding, not margin, between the button and the pop-up: the pointer never crosses a gap. */
+.ideas-pop-wrap {
+  position: absolute;
+  left: 0;
+  top: 34px;
+  z-index: 2;
+  padding-top: 6px;
+}
+
+.ideas-pop {
+  width: 300px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: #182029;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.ideas-pop[data-pinned] {
+  border-color: rgba(95, 212, 230, 0.5);
+}
+
+.ideas-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ideas-pop-head span {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.ideas-pop-x {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.ideas-pop-x:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ideas-pop-row {
+  display: flex;
+  gap: 6px;
+}
+
+.ideas-pop-row input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: var(--bg-deep);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.ideas-go {
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #0b1a1e;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ideas-go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ideas-pop-foot {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #7d8a95;
+}
+
+.ideas-history,
+.ideas-note,
+.ideas-error {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.ideas-history a {
+  color: var(--accent-ink);
+}
+
+.ideas-history a:hover {
+  color: var(--accent);
+}
+
+.ideas-error {
+  color: var(--red);
+}

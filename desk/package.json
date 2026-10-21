@@ -17,7 +17,7 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "dist:mac": "npm run build && electron-builder --mac dmg --arm64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg --arm64 --publish never && node scripts/zip-mac.mjs",
     "e2e": "playwright test --project=web-desktop",
     "e2e:electron": "playwright test --project=electron"
   },

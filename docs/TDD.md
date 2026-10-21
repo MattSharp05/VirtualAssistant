@@ -22,7 +22,7 @@ Two halves that ship together:
 | Memory + tasks | Notion API with the existing internal integration (write scoped in code) | Matthew can read and edit both (ADR 0006) |
 | Calendar/Gmail/Slack | claude.ai connectors through the CLI (as today); calendar writes now allowed | No OAuth app of our own (ADR 0008) |
 | Hand tracking | MediaPipe Tasks Vision HandLandmarker (WASM) in the overlay renderer | Same building block as barehands; our own gestures (ADR 0012) |
-| Packaging | electron-builder → unsigned arm64 `.dmg` on GitHub Releases; own lightweight updater | No Apple developer account; Squirrel auto-update needs signing (ADR 0010) |
+| Packaging | electron-builder → unsigned arm64 `.dmg` on GitHub Releases; own updater that replaces the app from a release .zip (JD-74) | No Apple developer account; Squirrel auto-update needs signing (ADR 0010) |
 | QA preview | Vite web build of the renderer with a mock bridge + scenarios, deployed to Vercel per PR | Clickable links in the Notion QA block (ADR 0011) |
 
 ## Architecture

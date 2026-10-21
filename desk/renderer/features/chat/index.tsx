@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import type { ChatHistoryResponse, ChatModelResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { Icon } from "../../app/icons";
@@ -38,6 +47,7 @@ export default function Chat() {
   const [draft, setDraft] = useState("");
   const [loadError, setLoadError] = useState<string>();
   const log = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   /** Follow new messages (true while scrolled to the bottom). */
   const stick = useRef(true);
   /** Set while an older page loads, so the view stays on what Matthew was reading. */
@@ -103,14 +113,33 @@ export default function Chat() {
     [bridge],
   );
 
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault();
+  // The compose box grows with its text (CSS caps it at about six lines, then it scrolls) and shrinks back after sending.
+  useLayoutEffect(() => {
+    const el = input.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+  }, [draft]);
+
+  const submitDraft = () => {
     const text = draft.trim();
     if (!text || files.uploading) return;
     setDraft("");
     const ready = files.items.flatMap((a) => (a.upload ? [a.upload] : []));
     send(text, { ids: ready.map((u) => u.id), names: ready.map((u) => u.name) });
     files.clear();
+  };
+
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    submitDraft();
+  };
+
+  /** Enter sends, Shift+Enter is a new line; Enter that ends an IME composition doesn't send. */
+  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    submitDraft();
   };
 
   const changeModel = (next: string) => {
@@ -217,19 +246,25 @@ export default function Chat() {
             <path d="M5 11a7 7 0 0 0 14 0M12 18v3" strokeWidth="2" strokeLinecap="round" />
           </svg>
         </button>
-        <input
+        <textarea
+          ref={input}
           className="chat-input"
           aria-label="Message JARVIS"
           placeholder="Message JARVIS…  (or double-tap ⌥ to talk)"
+          rows={1}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={onKeyDown}
         />
         <button type="submit" className="chat-send" disabled={!draft.trim() || files.uploading}>
           Send
         </button>
       </form>
-      <div className="chat-today" data-testid="chat-today">
-        {formatToday(state.today)}
+      <div className="chat-foot">
+        <span className="chat-hint">↵ send · ⇧↵ new line</span>
+        <span className="chat-today" data-testid="chat-today">
+          {formatToday(state.today)}
+        </span>
       </div>
     </div>
   );
