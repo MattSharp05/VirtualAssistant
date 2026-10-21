@@ -273,6 +273,263 @@ a.todo-source:hover {
   color: var(--amber);
 }
 
+/* Row details (JD-83): QA checklist + action pop-ups, expanded under a row */
+.todo-row-wrap {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.todo-row-wrap .todo-row {
+  border-bottom: none;
+}
+
+.todo-qa-badge {
+  flex: none;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid rgba(95, 212, 230, 0.4);
+  border-radius: 999px;
+  background: rgba(95, 212, 230, 0.1);
+  color: var(--accent-ink);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
+.todo-expand {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.todo-expand:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+
+.todo-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 2px 4px 14px 38px;
+}
+
+.todo-qa-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: var(--bg-deep);
+}
+
+.todo-qa-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.todo-qa-head a {
+  color: var(--accent-ink);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.todo-qa-head a:hover {
+  color: var(--accent);
+}
+
+.todo-qa-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.todo-qa-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.todo-qa-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.todo-qa-list input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+/* Then: the same small pills + pop-ups as the Ideas window */
+.todo-then {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.todo-action {
+  position: relative;
+}
+
+.todo-then-button {
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.todo-then-button[data-open] {
+  border-color: rgba(95, 212, 230, 0.5);
+  background: rgba(95, 212, 230, 0.1);
+  color: var(--accent-ink);
+}
+
+.todo-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  vertical-align: middle;
+}
+
+.todo-pop-wrap {
+  position: absolute;
+  left: 0;
+  top: 30px;
+  z-index: 2;
+  padding-top: 6px;
+}
+
+.todo-pop {
+  width: 280px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: #182029;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+.todo-pop[data-pinned] {
+  border-color: rgba(95, 212, 230, 0.5);
+}
+
+.todo-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todo-pop-head span {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.todo-pop-x {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.todo-pop-x:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.todo-pop-row {
+  display: flex;
+  gap: 6px;
+}
+
+.todo-pop-row input {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: var(--bg-deep);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.todo-go {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #0b1a1e;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.todo-go:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.todo-pop-foot {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: #7d8a95;
+}
+
+.todo-row-history,
+.todo-row-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.todo-row-history a {
+  color: var(--accent-ink);
+}
+
+.todo-row-history a:hover {
+  color: var(--accent);
+}
+
 .todo-group h3 {
   margin: 14px 0 2px;
   font-family: var(--font-mono);

@@ -4,11 +4,15 @@
 //   POST /api/desk/tasks/:id/done | /reopen                          → TaskItem
 //   POST /api/desk/tasks/:id/accept (→ Open) | /dismiss (→ Dismissed) → TaskItem (suggestions)
 //   POST /api/desk/tasks/accept-all                                  → AcceptAllResponse
+//   POST /api/desk/tasks/:id/chat    { context? } → TaskActionResponse: the task sent to the brain
+//   POST /api/desk/tasks/:id/session { context? } → TaskActionResponse: a cloud session on its project
+//   GET  /api/desk/tasks/:id/qa                   → TaskQaResponse: a Notion QA ticket's checklist (read-only)
 // Changes publish tasks.changed on the live stream.
-import type { AcceptAllResponse, NewTask, TaskPriority, TasksResponse, TaskView } from "@jarvis/shared";
+import type { AcceptAllResponse, NewTask, TaskActionResponse, TaskPriority, TaskQaResponse, TasksResponse, TaskView } from "@jarvis/shared";
 import { JarvisError } from "../../jarvis.js";
-import { TasksService, tasksFor } from "../../tasks.js";
+import { taskChatText, taskSessionText, TasksService, tasksFor } from "../../tasks.js";
 import { DeskHttpError, type DeskContext, type DeskRoute } from "./index.js";
+import { notionDeskFor, notionFriendly } from "./notion.js";
 
 const VIEWS: TaskView[] = ["today", "upcoming", "project", "done", "suggested"];
 
@@ -58,6 +62,41 @@ const routes: DeskRoute[] = [
     method: "POST",
     path: "/tasks/accept-all",
     handler: async ({ ctx }): Promise<AcceptAllResponse> => ({ accepted: await friendly(() => service(ctx).acceptAll()) }),
+  },
+  {
+    method: "POST",
+    path: "/tasks/:id/chat",
+    handler: ({ params, body, ctx }): Promise<TaskActionResponse> =>
+      friendly(async () => {
+        const task = await service(ctx).find(params.id);
+        if (!ctx.brain) throw new DeskHttpError(503, "the brain isn't running");
+        const { messageId, done } = ctx.brain.start(taskChatText(task, body.context), "desk-typed");
+        // Failures reach the Desk as brain.error on the stream.
+        done.catch(() => undefined);
+        const saved = await service(ctx).recordHistory(task.id, { kind: "chat" });
+        return { task: saved, messageId };
+      }),
+  },
+  {
+    method: "POST",
+    path: "/tasks/:id/session",
+    handler: ({ params, body, ctx }): Promise<TaskActionResponse> =>
+      friendly(async () => {
+        const task = await service(ctx).find(params.id);
+        const { job } = await ctx.jarvis.startJob(taskSessionText(task, body.context));
+        ctx.bus.publish({ type: "sessions.changed" });
+        const saved = await service(ctx).recordHistory(task.id, { kind: "session", link: job.url, label: job.id });
+        return { task: saved, session: { name: job.id, url: job.url } };
+      }),
+  },
+  {
+    method: "GET",
+    path: "/tasks/:id/qa",
+    handler: async ({ params, ctx }): Promise<TaskQaResponse> => {
+      const task = await friendly(() => service(ctx).find(params.id));
+      if (task.source !== "Notion QA" || !task.sourceLink) throw new DeskHttpError(400, "This task has no Notion QA page.");
+      return { checklist: await notionFriendly(() => notionDeskFor(ctx).qaChecklist(task.sourceLink!)) };
+    },
   },
 ];
 

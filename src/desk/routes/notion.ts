@@ -8,7 +8,7 @@
 // Reads only: pins and recent live in DATA_DIR/notionDesk.json, never in Notion.
 import type { NotionPage, NotionPageRef, NotionPinnedResponse, NotionSearchResponse } from "@jarvis/shared";
 import { JarvisError } from "../../jarvis.js";
-import { Notion } from "../../notion.js";
+import { acceptanceChecklist, Notion } from "../../notion.js";
 import { normalizeId, notionIdsFile } from "../../notionWrite.js";
 import { JsonFile } from "../../storage.js";
 import { DeskHttpError, type DeskContext, type DeskRoute } from "./index.js";
@@ -68,6 +68,12 @@ export class NotionDesk {
     return page;
   }
 
+  /** A ticket's Acceptance Criteria checklist (the To-do window's QA panel, JD-83). Read-only. */
+  async qaChecklist(ticketUrlOrId: string): Promise<{ text: string; checked: boolean }[]> {
+    const page = await this.api().readPageJson(normalizeId(ticketUrlOrId));
+    return acceptanceChecklist(page.blocks);
+  }
+
   pinned(): NotionPinnedResponse {
     const fixed = this.fixed();
     const pins = this.file.get().pins.filter((p) => !fixed.some((f) => f.id === p.id));
@@ -114,7 +120,7 @@ function pageId(raw: string): string {
 }
 
 /** Not set up → 400 with what to do; Notion's 404 → 404; anything else from Notion → 502. */
-async function friendly<T>(work: () => Promise<T>): Promise<T> {
+export async function notionFriendly<T>(work: () => Promise<T>): Promise<T> {
   try {
     return await work();
   } catch (err) {
@@ -133,28 +139,28 @@ const routes: DeskRoute[] = [
     path: "/notion/search",
     handler: async ({ url, ctx }): Promise<NotionSearchResponse> => {
       const query = url.searchParams.get("q") ?? "";
-      return { query, results: await friendly(() => notionDeskFor(ctx).search(query)) };
+      return { query, results: await notionFriendly(() => notionDeskFor(ctx).search(query)) };
     },
   },
   {
     method: "GET",
     path: "/notion/page/:id",
-    handler: ({ params, ctx }) => friendly(() => notionDeskFor(ctx).page(pageId(params.id))),
+    handler: ({ params, ctx }) => notionFriendly(() => notionDeskFor(ctx).page(pageId(params.id))),
   },
   { method: "GET", path: "/notion/pinned", handler: ({ ctx }) => notionDeskFor(ctx).pinned() },
   {
     method: "POST",
     path: "/notion/pinned/:id",
     handler: ({ params, body, ctx }) =>
-      friendly(() =>
+      notionFriendly(() =>
         notionDeskFor(ctx).pin(pageId(params.id), {
           ...(typeof body.title === "string" && body.title.trim() ? { title: body.title.trim() } : {}),
           ...(body.kind === "database" || body.kind === "page" ? { kind: body.kind } : {}),
         }),
       ),
   },
-  { method: "DELETE", path: "/notion/pinned/:id", handler: ({ params, ctx }) => friendly(() => notionDeskFor(ctx).unpin(pageId(params.id))) },
-  { method: "POST", path: "/notion/pinned/:id/unpin", handler: ({ params, ctx }) => friendly(() => notionDeskFor(ctx).unpin(pageId(params.id))) },
+  { method: "DELETE", path: "/notion/pinned/:id", handler: ({ params, ctx }) => notionFriendly(() => notionDeskFor(ctx).unpin(pageId(params.id))) },
+  { method: "POST", path: "/notion/pinned/:id/unpin", handler: ({ params, ctx }) => notionFriendly(() => notionDeskFor(ctx).unpin(pageId(params.id))) },
 ];
 
 export default routes;

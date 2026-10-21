@@ -4,13 +4,30 @@
 // Suggested and a Dedupe key; Matthew accepts (→ Open) or dismisses (→ Dismissed) them. Why each
 // was suggested is written in the row's page and kept in DATA_DIR/suggestions.json for the Desk.
 
-import type { NewTask, TaskItem, TaskPriority, TaskSource, TaskStatus, TaskView } from "@jarvis/shared";
+import type { NewTask, TaskHistoryEntry, TaskItem, TaskPriority, TaskSource, TaskStatus, TaskView } from "@jarvis/shared";
 import type { EventBus } from "./events.js";
 import { JarvisError } from "./jarvis.js";
 import { JsonFile } from "./storage.js";
 import { NotionApi, NotionWriter, normalizeId, notionIdsFile, type Json, type NotionIds } from "./notionWrite.js";
 
 const CACHE_MS = 60_000;
+const MAX_CONTEXT_CHARS = 1_000;
+const cleanContext = (context: unknown) => (typeof context === "string" ? context.trim().slice(0, MAX_CONTEXT_CHARS) : "");
+
+/** Chat with JARVIS: the to-do, and what Matthew wants to work out. */
+export function taskChatText(task: TaskItem, context: unknown): string {
+  const extra = cleanContext(context);
+  return [`A to-do of mine${task.project ? ` (${task.project})` : ""}: ${task.name}`, ...(extra ? [extra] : [])].join("\n\n");
+}
+
+/**
+ * Start a session: the task, prefixed "<project>: " (src/sessionStart.ts's planSession matches a
+ * project by slug or name, and TaskItem.project is already a display name).
+ */
+export function taskSessionText(task: TaskItem, context: unknown): string {
+  const extra = cleanContext(context);
+  return [`${task.project ? `${task.project}: ` : ""}${task.name}`, ...(extra ? [extra] : [])].join("\n\n");
+}
 
 const plain = (rich: unknown) =>
   Array.isArray(rich) ? rich.map((r) => String((r as Json).plain_text ?? ((r as Json).text as Json | undefined)?.content ?? "")).join("") : "";
@@ -90,6 +107,7 @@ export class TasksService {
   private ids: NotionIds;
   private readonly writer?: NotionWriter;
   private readonly whyFile: JsonFile<{ why: Record<string, string> }>;
+  private readonly historyFile: JsonFile<{ history: Record<string, TaskHistoryEntry[]> }>;
 
   constructor(
     private readonly dataDir: string,
@@ -100,6 +118,7 @@ export class TasksService {
   ) {
     this.ids = notionIdsFile(dataDir).get();
     this.whyFile = new JsonFile(dataDir, "suggestions", { why: {} });
+    this.historyFile = new JsonFile(dataDir, "taskHistory", { history: {} });
     this.writer = notionToken ? new NotionWriter(new NotionApi(notionToken, fetchImpl), () => this.currentIds()) : undefined;
   }
 
@@ -131,13 +150,27 @@ export class TasksService {
     if (!fresh && this.cache && Date.now() - this.cache.at < CACHE_MS) return this.cache.tasks;
     const { writer, id } = this.db();
     const rows = await writer.queryRows(id, { filter: { property: "Status", select: { does_not_equal: "Dismissed" } } });
-    this.cache = { at: Date.now(), tasks: rows.map((r) => this.withWhy(rowToTask(r))) };
+    this.cache = { at: Date.now(), tasks: rows.map((r) => this.withHistory(this.withWhy(rowToTask(r)))) };
     return this.cache.tasks;
   }
 
   private withWhy(t: TaskItem): TaskItem {
     const why = this.whyFile.get().why[t.id];
     return why && t.status === "Suggested" ? { ...t, why } : t;
+  }
+
+  private withHistory(t: TaskItem): TaskItem {
+    const history = this.historyFile.get().history[t.id];
+    return history?.length ? { ...t, history } : t;
+  }
+
+  /** Appends a chat/session action to a task's history (JD-83); kept locally, not in Notion. */
+  async recordHistory(id: string, entry: Omit<TaskHistoryEntry, "at">): Promise<TaskItem> {
+    const task = await this.find(id);
+    const list = [...(this.historyFile.get().history[task.id] ?? []), { ...entry, at: this.now().toISOString() }];
+    await this.historyFile.update((f) => ({ history: { ...f.history, [task.id]: list } }));
+    this.bus?.publish({ type: "tasks.changed" });
+    return this.withHistory(task);
   }
 
   /** Every row with a dedupe key, any status (Dismissed too), straight from Notion: key → task. */

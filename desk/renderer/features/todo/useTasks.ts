@@ -2,7 +2,16 @@
 // and makes every change optimistically (the row moves at once, and moves back with an error line
 // if the server says no).
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AcceptAllResponse, DeskBridge, TaskItem, TasksResponse, TaskStatus } from "@jarvis/shared";
+import type {
+  AcceptAllResponse,
+  DeskBridge,
+  TaskAction as TaskActionKind,
+  TaskActionResponse,
+  TaskItem,
+  TaskQaResponse,
+  TasksResponse,
+  TaskStatus,
+} from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 
 /** What a write does to a task: the route under /tasks/:id and the status it ends in. */
@@ -42,6 +51,10 @@ export interface TasksState {
   acceptAll(): void;
   add(name: string): void;
   askJarvis(text: string): void;
+  /** Chat with JARVIS / Start a session (JD-83): mirrors Ideas' action pop-ups. */
+  runAction(task: TaskItem, action: TaskActionKind, context: string): Promise<TaskActionResponse>;
+  /** A Notion QA ticket's Acceptance Criteria checklist (JD-83), read fresh each call. */
+  qa(taskId: string): Promise<TaskQaResponse>;
 }
 
 export function useTasks(): TasksState {
@@ -170,5 +183,22 @@ export function useTasks(): TasksState {
     [bridge],
   );
 
-  return { tasks, loading, notionUrl, error, note, act, acceptAll, add, askJarvis };
+  const runAction = useCallback(
+    async (task: TaskItem, action: TaskActionKind, context: string) => {
+      const r = await bridge.request<TaskActionResponse>(`/tasks/${encodeURIComponent(task.id)}/${action}`, {
+        ...(context.trim() ? { context: context.trim() } : {}),
+      });
+      writes.current++;
+      setServer((s) => new Map([...s, [r.task.id, r.task]]));
+      return r;
+    },
+    [bridge],
+  );
+
+  const qa = useCallback(
+    (taskId: string) => bridge.request<TaskQaResponse>(`/tasks/${encodeURIComponent(taskId)}/qa`),
+    [bridge],
+  );
+
+  return { tasks, loading, notionUrl, error, note, act, acceptAll, add, askJarvis, runAction, qa };
 }

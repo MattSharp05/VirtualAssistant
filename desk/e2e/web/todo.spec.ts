@@ -83,6 +83,54 @@ test("todo: By project groups tasks; add box adds plain text and hands dates to 
   await waitForBridgeIdle(page);
 });
 
+test("JD-83: a Notion QA to-do shows a QA badge; expanding pulls in the checklist read-only with a Notion deep link", async ({
+  page,
+}) => {
+  await openWindow(page, "todo", "todo");
+  await tab(page, "By project").click();
+  const row = page.locator(".todo-row-wrap", { hasText: "QA TR-91: Confirm hotel cancellation policy" });
+  await expect(row.locator(".todo-qa-badge")).toHaveText("QA");
+  await expect(row.getByText(/Cancelling inside 24h/)).toHaveCount(0);
+
+  await row.getByRole("button", { name: /^Show details/ }).click();
+  const box = row.getByLabel(/Cancelling inside 24h/);
+  await expect(box).toBeVisible();
+  await expect(box).toBeChecked();
+  await expect(box).toBeDisabled();
+  const ticketLink = row.getByRole("link", { name: "Open ticket in Notion" });
+  await expect(ticketLink).toHaveAttribute("href", /notion\.so/);
+
+  // A to-do without a Notion QA source shows no QA panel.
+  const plainRow = page.locator(".todo-row-wrap", { hasText: "Call the bank about the card limit" });
+  await plainRow.getByRole("button", { name: /^Show details/ }).click();
+  await expect(plainRow.getByText("Acceptance criteria")).toHaveCount(0);
+});
+
+test("JD-83: a row's Chat and Session actions mirror Ideas, closing the pop-up and adding to its history", async ({
+  page,
+}) => {
+  await openWindow(page, "todo", "todo");
+  await tab(page, "By project").click();
+  const row = page.locator(".todo-row-wrap", { hasText: "Call the bank about the card limit" });
+  await row.getByRole("button", { name: /^Show details/ }).click();
+
+  await row.getByRole("button", { name: /^Chat with JARVIS/ }).hover();
+  const chat = row.getByRole("dialog", { name: "Chat with JARVIS" });
+  await expect(chat).toBeVisible();
+  await chat.getByRole("button", { name: "Go" }).click();
+  await expect(chat).toHaveCount(0);
+  await expect(row.getByText(/Opened in Chat/)).toBeVisible();
+
+  await row.getByRole("button", { name: /^Start a session/ }).hover();
+  await row.getByRole("textbox", { name: "Start a session: extra context" }).fill("spike it");
+  await page.keyboard.press("Enter");
+  await expect(row.getByRole("link", { name: /Session started/ })).toHaveAttribute(
+    "href",
+    /claude\.ai\/code\/session_/,
+  );
+  await waitForBridgeIdle(page);
+});
+
 test("todo is keyboard reachable: tabs, suggestion buttons, checkboxes", async ({ page }) => {
   await openWindow(page, "todo", "todo");
   await page.getByRole("link", { name: "Open JARVIS Tasks in Notion" }).focus();

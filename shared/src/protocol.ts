@@ -589,6 +589,8 @@ export interface TaskItem {
   createdAt: string;
   /** The row in Notion. */
   url?: string;
+  /** What's been done with it (JD-83): chats, sessions. Kept locally, not in Notion. Absent = none yet. */
+  history?: TaskHistoryEntry[];
 }
 
 /** GET /api/desk/tasks?view=… */
@@ -611,6 +613,46 @@ export interface NewTask {
   due?: string;
   project?: string;
   priority?: TaskPriority;
+}
+
+// ── To-do row actions (JD-83): mirrors Ideas' "Then" row, minus "todo" (the item already is one) ──
+
+/** What a to-do row's actions can do. */
+export type TaskAction = "chat" | "session";
+
+/** One thing done with a task, oldest first: a chat with JARVIS, a cloud session. */
+export interface TaskHistoryEntry {
+  kind: TaskAction;
+  at: string;
+  /** The session, when there is one to open. */
+  link?: string;
+  /** A short name for it: the session's job id. */
+  label?: string;
+}
+
+/** POST /api/desk/tasks/:id/<chat|session> { context? }: the context is optional extra words. */
+export interface TaskActionRequest {
+  context?: string;
+}
+
+/** The task with its new history entry, and what the action made. */
+export interface TaskActionResponse {
+  task: TaskItem;
+  /** chat: the brain turn, streamed as brain.* events with this id. */
+  messageId?: string;
+  /** session: the job JARVIS tracks it as, and its link. */
+  session?: { name: string; url: string };
+}
+
+/** One Acceptance Criteria item on a Notion QA ticket. */
+export interface TaskQaItem {
+  text: string;
+  checked: boolean;
+}
+
+/** GET /api/desk/tasks/:id/qa → the ticket's Acceptance Criteria checklist, read live from Notion. */
+export interface TaskQaResponse {
+  checklist: TaskQaItem[];
 }
 
 // ── Ideas (JD-73): quick notes tagged to a project, kept in JARVIS's own store (DATA_DIR/ideas.json, not Notion) ──

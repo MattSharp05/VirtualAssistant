@@ -84,6 +84,57 @@ describe("To-do window", () => {
     expect((await screen.findByRole("status")).textContent).toBe("Asked JARVIS: “add call Sam on Friday”");
   });
 
+  it("JD-83: a QA to-do shows a badge; expanding it pulls in the Acceptance Criteria checklist read-only", async () => {
+    renderTodo("todo");
+    fireEvent.click(tab("By project"));
+    const row = (await screen.findByText("QA TR-91: Confirm hotel cancellation policy")).closest(
+      ".todo-row-wrap",
+    ) as HTMLElement;
+    expect(within(row).getByText("QA", { exact: true })).toBeTruthy();
+    expect(within(row).queryByText(/Cancelling inside 24h/)).toBeNull();
+
+    fireEvent.click(within(row).getByRole("button", { name: /^Show details/ }));
+    expect(await within(row).findByText(/Cancelling inside 24h shows the correct refund/)).toBeTruthy();
+    const box = within(row).getByLabelText(/Cancelling inside 24h/) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(box.disabled).toBe(true);
+    expect(within(row).getByRole("link", { name: "Open ticket in Notion" }).getAttribute("href")).toMatch(
+      /notion\.so/,
+    );
+
+    // A to-do with no Notion QA source shows no QA panel.
+    const plain = (await screen.findByText("Call the bank about the card limit")).closest(
+      ".todo-row-wrap",
+    ) as HTMLElement;
+    fireEvent.click(within(plain).getByRole("button", { name: /^Show details/ }));
+    expect(within(plain).queryByText(/Acceptance criteria/)).toBeNull();
+  });
+
+  it("JD-83: a row's Chat and Session actions mirror Ideas, and record history", async () => {
+    renderTodo("todo");
+    fireEvent.click(tab("By project"));
+    const row = (await screen.findByText("Call the bank about the card limit")).closest(
+      ".todo-row-wrap",
+    ) as HTMLElement;
+    const openWindow = vi.spyOn(bridge, "openWindow");
+    fireEvent.click(within(row).getByRole("button", { name: /^Show details/ }));
+
+    fireEvent.click(within(row).getByRole("button", { name: /^Chat with JARVIS/ }));
+    fireEvent.click(within(row).getByRole("button", { name: "Go" }));
+    await waitFor(() => expect(openWindow).toHaveBeenCalledWith("chat"));
+    expect(await within(row).findByText(/Opened in Chat/)).toBeTruthy();
+    expect(within(row).queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(within(row).getByRole("button", { name: /^Start a session/ }));
+    fireEvent.click(within(row).getByRole("button", { name: "Go" }));
+    expect(await within(row).findByText(/Session started/)).toBeTruthy();
+    expect(
+      within(row)
+        .getByRole("link", { name: /Session started/ })
+        .getAttribute("href"),
+    ).toMatch(/claude\.ai\/code\/session_/);
+  });
+
   it("shows a suggestion made from an idea (JD-73) with its Idea source and why", async () => {
     const base = findScenario("todo")!;
     const suggested = {
