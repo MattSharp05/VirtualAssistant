@@ -1,14 +1,13 @@
-// The command bar's window (JD-28): ⌘⇧Space (or the tray's "Command bar") toggles a small frameless,
-// see-through window over whatever app is in front, on the display with the pointer. It closes on Esc
-// (the renderer's frame.close), on ↵, and as soon as it loses focus; the next toggle makes a new one.
+// The command bar's window (JD-28): its shortcut (Settings → Hotkeys, JD-83; ⌘⇧Space by default) or
+// the tray's "Command bar" toggles a small frameless, see-through window over whatever app is in
+// front, on the display with the pointer. It closes on Esc (the renderer's frame.close), on ↵, and as
+// soon as it loses focus; the next toggle makes a new one.
 import { join } from "node:path";
 import { app, BrowserWindow, screen } from "electron";
 import commandbar from "../../renderer/features/commandbar/feature";
 import { windowHash } from "../../renderer/app/router";
 import { DEFAULT_SIZE } from "../../renderer/features/types";
 import { commandBarBounds } from "./commandbarBounds";
-
-export const COMMAND_BAR_SHORTCUT = "CommandOrControl+Shift+Space";
 
 export class CommandBar {
   private win?: BrowserWindow;

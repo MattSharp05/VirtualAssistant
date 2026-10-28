@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { ConnectionTest, DeskBridge, DeskConnection, VoiceInfo } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import {
+  COMMAND_BAR_SHORTCUTS,
   normalizeServerUrl,
   SPEECH_RATE,
+  type CommandBarShortcut,
   type DeskSettings,
   type PttKey,
   type StatusFiles,
@@ -27,6 +29,15 @@ const SECTIONS = [
 
 const SAMPLE = "Good morning, Matthew. Two sessions need you, and your first meeting is at ten.";
 const F_KEYS = Array.from({ length: 20 }, (_, i) => `F${i + 1}`);
+
+/** Readable keycaps for each command bar shortcut, in the same order as COMMAND_BAR_SHORTCUTS. */
+const COMMAND_BAR_LABELS: Record<CommandBarShortcut, string> = {
+  "CommandOrControl+Shift+Space": "⌘⇧Space",
+  "CommandOrControl+Alt+Space": "⌘⌥Space",
+  "Control+Shift+Space": "⌃⇧Space",
+  "CommandOrControl+Shift+J": "⌘⇧J",
+  "CommandOrControl+Alt+J": "⌘⌥J",
+};
 
 /** The Settings window (JD-26): changes save as they're made; secrets go straight to the Keychain. */
 export default function SettingsWindow() {
@@ -521,8 +532,23 @@ function HotkeysSection({
         ))}
         <ErrorText>{errors.pttKey}</ErrorText>
       </fieldset>
-      <Row label="Command bar" hint="Type to JARVIS from anywhere.">
-        <kbd>⌘⇧Space</kbd>
+      <Row
+        label="Command bar"
+        hint="Type to JARVIS from anywhere. Pick another shortcut if this one clashes with another app."
+      >
+        <select
+          className="settings-input is-small"
+          aria-label="Command bar shortcut"
+          value={values.commandBarShortcut}
+          onChange={(e) => void update("commandBarShortcut", e.currentTarget.value as CommandBarShortcut)}
+        >
+          {COMMAND_BAR_SHORTCUTS.map((s) => (
+            <option key={s} value={s}>
+              {COMMAND_BAR_LABELS[s]}
+            </option>
+          ))}
+        </select>
+        <ErrorText>{errors.commandBarShortcut}</ErrorText>
       </Row>
     </Section>
   );

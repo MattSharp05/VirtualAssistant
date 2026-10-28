@@ -18,7 +18,7 @@ export interface TrayItem {
 }
 
 export interface TrayState {
-  settings: Pick<DeskSettings, "face" | "wakeWordEnabled" | "cameraHands" | "dnd">;
+  settings: Pick<DeskSettings, "face" | "wakeWordEnabled" | "cameraHands" | "dnd" | "commandBarShortcut">;
   /** Layout names (JD-37): the built-ins, then Matthew's own; the one the windows are in is ticked. */
   layouts: string[];
   activeLayout?: string;
@@ -104,7 +104,7 @@ export function trayMenu(state: TrayState, act: TrayActions): TrayItem[] {
     { label: "Talk to JARVIS (⌥⌥)", click: act.talk },
     {
       label: "Command bar",
-      accelerator: "CommandOrControl+Shift+Space",
+      accelerator: settings.commandBarShortcut,
       registerAccelerator: false,
       click: act.commandBar,
     },

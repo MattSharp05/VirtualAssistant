@@ -10,6 +10,7 @@ describe("launcher ring", () => {
       "chat",
       "sessions",
       "agents",
+      "browser",
       "today",
       "calendar",
       "todo",

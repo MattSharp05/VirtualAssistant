@@ -58,7 +58,7 @@ import { pttHint } from "./voice/cards";
 import { falseTriggerEntry, wakeStatusLine } from "./voice/wake";
 import { listVoices, speak } from "./voices";
 import { createAmbient } from "./windows/ambient";
-import { CommandBar, COMMAND_BAR_SHORTCUT } from "./windows/commandbar";
+import { CommandBar } from "./windows/commandbar";
 import { registerHandWindows } from "./windows/hands";
 import { WindowManager } from "./windows/manager";
 import { createOverlay } from "./windows/overlay";
@@ -130,8 +130,17 @@ app.whenReady().then(() => {
   const rendererIndex = join(__dirname, "../renderer/dist/index.html");
   const windows = new WindowManager(rendererIndex, settings, scenario);
   const commandBar = new CommandBar(rendererIndex, scenario);
-  if (!globalShortcut.register(COMMAND_BAR_SHORTCUT, () => commandBar.toggle()))
-    console.warn(`${COMMAND_BAR_SHORTCUT} is taken by another app; the tray still opens the command bar`);
+  let commandBarShortcut: string | undefined;
+  const registerCommandBarShortcut = (accel: string) => {
+    if (commandBarShortcut) globalShortcut.unregister(commandBarShortcut);
+    commandBarShortcut = accel;
+    if (!globalShortcut.register(accel, () => commandBar.toggle()))
+      console.warn(`${accel} is taken by another app; the tray still opens the command bar`);
+  };
+  registerCommandBarShortcut(settings.get("commandBarShortcut"));
+  settings.onChange(
+    (key) => key === "commandBarShortcut" && registerCommandBarShortcut(settings.get("commandBarShortcut")),
+  );
 
   // barehands / ai-visualizer status files (JD-45) follow every orb state and mood main broadcasts.
   const statusFiles = new StatusFileWriter({ dirs: () => settings.get("statusFiles") });

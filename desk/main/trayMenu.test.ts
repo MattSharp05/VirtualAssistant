@@ -58,6 +58,13 @@ describe("tray menu (mockup 8)", () => {
     ]);
   });
 
+  it("shows the command bar's current shortcut (JD-83), kept in sync with Settings", () => {
+    const commandBar = (s: TrayState) => trayMenu(s, actions()).find((i) => i.label === "Command bar");
+    expect(commandBar(state())?.accelerator).toBe("CommandOrControl+Shift+Space");
+    const changed = state({ settings: { ...DEFAULT_SETTINGS, commandBarShortcut: "Control+Shift+Space" } });
+    expect(commandBar(changed)?.accelerator).toBe("Control+Shift+Space");
+  });
+
   it("offers a newer version (JD-46), shows its download's progress, and forces a check", () => {
     const act = actions();
     const labels = (update: TrayState["update"]) =>

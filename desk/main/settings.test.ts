@@ -31,6 +31,7 @@ describe("settings schema", () => {
     expect(settings.all()).toEqual(DEFAULT_SETTINGS);
     expect(settings.get("voice")).toBe("Daniel");
     expect(settings.get("pttKey")).toBe("RightAlt-double");
+    expect(settings.get("commandBarShortcut")).toBe("CommandOrControl+Shift+Space");
     expect(settings.get("wakeWordEnabled")).toBe(true);
     expect(settings.get("wakeSensitivity")).toBe(0.5);
     expect(settings.get("face")).toBe("corner");
@@ -61,13 +62,16 @@ describe("settings schema", () => {
     expect(() => settings.set("serverUrl", "not a url")).toThrow();
     expect(() => settings.set("wakeSensitivity", 1.5)).toThrow(/between 0 and 1/);
     expect(() => settings.set("pttKey", "Space")).toThrow();
+    expect(() => settings.set("commandBarShortcut", "CommandOrControl+Space")).toThrow();
     expect(() => settings.set("face", "huge")).toThrow();
     expect(() => settings.set("allowedFolders", ["relative/path"])).toThrow(/full folder path/);
     expect(settings.all()).toEqual(DEFAULT_SETTINGS);
     settings.set("pttKey", "F13");
+    settings.set("commandBarShortcut", "CommandOrControl+Shift+J");
     settings.set("speechRate", 999);
     settings.set("allowedFolders", ["/Users/matthew/Projects", "/Users/matthew/Projects"]);
     expect(settings.get("pttKey")).toBe("F13");
+    expect(settings.get("commandBarShortcut")).toBe("CommandOrControl+Shift+J");
     expect(settings.get("speechRate")).toBe(300);
     expect(settings.get("allowedFolders")).toEqual(["/Users/matthew/Projects"]);
   });

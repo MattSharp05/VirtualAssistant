@@ -14,6 +14,7 @@ const RING = [
   { id: "chat", title: "Chat", icon: "chat" },
   { id: "sessions", title: "Sessions", icon: "sessions" },
   { id: "agents", title: "Agents", icon: "agents" },
+  { id: "browser", title: "Browser", icon: "browser" },
   { id: "today", title: "Today", icon: "today" },
   { id: "calendar", title: "Calendar", icon: "calendar" },
   { id: "todo", title: "To-do", icon: "todo" },

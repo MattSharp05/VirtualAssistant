@@ -8,6 +8,20 @@ import type { Rect } from "./windows/bounds";
 export type PttKey = "RightAlt-double" | "RightAlt-hold" | `F${number}`;
 export type Face = "corner" | "ambient";
 
+/**
+ * The command bar's global shortcut (JD-83): a closed set so it's always a valid, sane Electron
+ * accelerator, picked to give Matthew a way around a clash with another app's shortcut without
+ * editing settings.json by hand.
+ */
+export const COMMAND_BAR_SHORTCUTS = [
+  "CommandOrControl+Shift+Space",
+  "CommandOrControl+Alt+Space",
+  "Control+Shift+Space",
+  "CommandOrControl+Shift+J",
+  "CommandOrControl+Alt+J",
+] as const;
+export type CommandBarShortcut = (typeof COMMAND_BAR_SHORTCUTS)[number];
+
 /** Folders whose status files the faces can show (optional; later tickets read them). */
 export interface StatusFiles {
   barehandsDir?: string;
@@ -24,6 +38,8 @@ export interface DeskSettings {
   /** Say voice replies out loud (JD-38); typed turns are never spoken. */
   speakReplies: boolean;
   pttKey: PttKey;
+  /** Toggles the command bar from anywhere (JD-28); changeable in Settings (JD-83) to dodge a clash. */
+  commandBarShortcut: CommandBarShortcut;
   wakeWordEnabled: boolean;
   /** Porcupine sensitivity, 0–1. */
   wakeSensitivity: number;
@@ -67,6 +83,7 @@ export const DEFAULT_SETTINGS: DeskSettings = {
   speechRate: 185,
   speakReplies: true,
   pttKey: "RightAlt-double",
+  commandBarShortcut: COMMAND_BAR_SHORTCUTS[0],
   wakeWordEnabled: true,
   wakeSensitivity: 0.5,
   micDevice: "",
@@ -163,6 +180,10 @@ const validators: { [K in SettingKey]: (v: unknown) => DeskSettings[K] } = {
     if (v === "RightAlt-double" || v === "RightAlt-hold") return v;
     if (typeof v === "string" && /^F([1-9]|1[0-9]|20)$/.test(v)) return v as PttKey;
     throw new SettingError("Push-to-talk is ⌥⌥, hold right Option, or F1–F20.");
+  },
+  commandBarShortcut: (v) => {
+    if ((COMMAND_BAR_SHORTCUTS as readonly string[]).includes(v as string)) return v as CommandBarShortcut;
+    throw new SettingError("That isn't one of the command bar's shortcuts.");
   },
   wakeWordEnabled: (v) => bool("wakeWordEnabled", v),
   wakeSensitivity: (v) => {

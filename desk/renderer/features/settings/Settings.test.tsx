@@ -124,6 +124,13 @@ describe("Settings window", () => {
     fireEvent.change(screen.getByLabelText("Function key"), { target: { value: "F5" } });
     await waitFor(async () => expect(await setting(bridge, "pttKey")).toBe("F5"));
 
+    fireEvent.change(screen.getByLabelText("Command bar shortcut"), {
+      target: { value: "Control+Shift+Space" },
+    });
+    await waitFor(async () =>
+      expect(await setting(bridge, "commandBarShortcut")).toBe("Control+Shift+Space"),
+    );
+
     fireEvent.click(screen.getByRole("switch", { name: /Listen for/ }));
     await waitFor(async () => expect(await setting(bridge, "wakeWordEnabled")).toBe(false));
     expect((screen.getByLabelText("Sensitivity") as HTMLInputElement).disabled).toBe(true);

@@ -80,6 +80,7 @@ describe("Overlay + orb", () => {
       "Chat",
       "Sessions",
       "Agents",
+      "Browser",
       "Today",
       "Calendar",
       "To-do",
