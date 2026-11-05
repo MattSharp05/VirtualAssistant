@@ -124,7 +124,7 @@ jobs:
   desk-mac:
     needs: changes
     if: needs.changes.outputs.desk_native == 'true' || github.event_name == 'push'
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 15
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
