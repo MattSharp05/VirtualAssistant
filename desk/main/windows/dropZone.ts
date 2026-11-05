@@ -7,10 +7,14 @@ import type { Rect } from "./bounds";
 /** How often the pointer is checked (cheap: one cursor read). */
 export const DROP_POLL_MS = 120;
 
-/** The corner orb (overlay.css: 28 px dot, 28 px in from the top and right) plus this much around it. */
+/**
+ * The corner orb (overlay.css: 28 px dot, 28 px in from the top and right) plus a thin buffer for
+ * poll latency while a file is dragged toward it. Kept small: this zone takes the mouse (and swallows
+ * clicks meant for whatever's underneath) whenever the pointer is merely nearby, not just dragging.
+ */
 const ORB_INSET = 28;
 const ORB_SIZE = 28;
-const MARGIN = 26;
+const MARGIN = 4;
 
 /** The square around the corner orb, in screen coordinates, for the overlay's work area. */
 export function orbZone(workArea: Rect): Rect {
