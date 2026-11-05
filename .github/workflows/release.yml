@@ -19,8 +19,8 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-14
-    timeout-minutes: 20
+    runs-on: macos-15
+    timeout-minutes: 30
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
@@ -37,9 +37,35 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=desk-v$VERSION" >> "$GITHUB_OUTPUT"
           cd desk && npm version --no-git-tag-version --allow-same-version "$VERSION" >/dev/null
+      # whisper-cli for voice (ADR 0004, JD-24), the same build and cache as CI's desk-mac job. Without
+      # it electron-builder silently skips extraResources and the app says "whisper-cli isn't in this build".
+      - name: Cache whisper-cli
+        id: whisper-cache
+        uses: actions/cache@v4
+        with:
+          path: desk/vendor/whisper
+          key: whisper-cli-v1.9.5-metal-arm64-1
+      - name: Build whisper-cli
+        if: steps.whisper-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch v1.9.5 https://github.com/ggml-org/whisper.cpp "$RUNNER_TEMP/whisper.cpp"
+          cmake -S "$RUNNER_TEMP/whisper.cpp" -B "$RUNNER_TEMP/whisper-build" -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_OPENMP=OFF \
+            -DGGML_NATIVE=OFF -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
+            -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
+          cmake --build "$RUNNER_TEMP/whisper-build" -j"$(sysctl -n hw.ncpu)" --target whisper-cli
+          mkdir -p desk/vendor/whisper
+          cp "$RUNNER_TEMP/whisper-build/bin/whisper-cli" desk/vendor/whisper/whisper-cli
       - name: Build the .dmg and the .zip
         working-directory: desk
         run: npm run dist:mac
+      - name: whisper-cli runs from the app bundle
+        working-directory: desk
+        run: |
+          bin="release/mac-arm64/JARVIS Desk.app/Contents/Resources/whisper/whisper-cli"
+          test -x "$bin" || { echo "::error::whisper-cli is missing from the app"; exit 1; }
+          otool -L "$bin"
+          "$bin" --help > /dev/null
       - name: Write latest-mac.json
         working-directory: desk
         run: node scripts/latest-mac.mjs "${{ steps.version.outputs.version }}"

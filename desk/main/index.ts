@@ -53,6 +53,7 @@ import { createTray, trayCheck } from "./tray";
 import { appBundlePath } from "./updateInstaller";
 import { Updater } from "./updater";
 import { createVoice } from "./voice";
+import { findWhisper } from "./voice/stt";
 import { Uploader, type UploadSource } from "./uploads";
 import { pttHint } from "./voice/cards";
 import { falseTriggerEntry, wakeStatusLine } from "./voice/wake";
@@ -106,6 +107,32 @@ app.on("web-contents-created", (_e, contents) => {
     if (items.length) Menu.buildFromTemplate(items).popup();
   });
 });
+
+/**
+ * One line in desk.log at startup for voice and Camera hands: is whisper-cli in the app, has macOS
+ * granted the mic and camera, is there a Picovoice key. Each "no" names what to fix.
+ */
+function logVoiceCheck(settings: Settings): void {
+  let whisper: string;
+  try {
+    whisper = findWhisper({
+      resourcesPath: app.isPackaged ? process.resourcesPath : undefined,
+      appDir: app.getAppPath(),
+      env: process.env,
+    });
+  } catch {
+    whisper = "MISSING (this build has no whisper-cli; install a release that bundles it)";
+  }
+  const access = (kind: "microphone" | "camera") =>
+    process.platform === "darwin" ? systemPreferences.getMediaAccessStatus(kind) : "n/a";
+  log?.write(
+    "info",
+    "voice",
+    `Voice check: whisper-cli ${whisper}; microphone ${access("microphone")}; camera ${access("camera")}; ` +
+      `Picovoice key ${settings.hasSecret("picovoiceKey") ? "set" : "missing"}; wake word ${settings.get("wakeWordEnabled") ? "on" : "off"}; ` +
+      `Camera hands ${settings.get("cameraHands") ? "on" : "off"}`,
+  );
+}
 
 app.whenReady().then(() => {
   log = createLog({ file: join(app.getPath("logs"), "desk.log") });
@@ -184,7 +211,15 @@ app.whenReady().then(() => {
     chimePath: app.isPackaged
       ? join(process.resourcesPath, "chime.wav")
       : join(app.getAppPath(), "resources/chime.wav"),
-    onWakeStatus: () => tray.refresh(),
+    onWakeStatus: (status) => {
+      // Why "Jarvis" isn't answering (no key, rejected key, mic refused) lands in desk.log.
+      log?.write(
+        status === "error" || status === "bad-key" ? "warn" : "info",
+        "voice",
+        `Wake word: ${status}`,
+      );
+      tray.refresh();
+    },
     // Voice latency (JD-48): the knobs, each turn into userData/voice-latency.jsonl and to the server
     // (the System window's summary), and the brain woken as Matthew starts talking.
     tuning: () => ({
@@ -442,7 +477,10 @@ app.whenReady().then(() => {
     tray.refresh();
   });
   connection.restart();
-  if (!scenario) voice.wake.start();
+  if (!scenario) {
+    logVoiceCheck(settings);
+    voice.wake.start();
+  }
   // Windows re-read a setting when told (e.g. the overlay starts or stops Camera hands, JD-42). macOS
   // asks for the camera once, before the overlay opens it.
   const askCamera = () =>
