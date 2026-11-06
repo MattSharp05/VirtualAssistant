@@ -21,6 +21,8 @@ function renderOn(scenario: string | Scenario, withWebview = false) {
 
 const card = (name: RegExp | string) => screen.findByRole("button", { name });
 const panel = () => screen.getByRole("complementary", { name: "Details" });
+/** Board is the default view; these tests exercise the Tree, so switch to it first. */
+const toTree = async () => fireEvent.click(await screen.findByRole("button", { name: "Tree" }));
 
 describe("Agents window", () => {
   afterEach(() => {
@@ -30,6 +32,7 @@ describe("Agents window", () => {
 
   it("draws the tree: projects, orchestrators and builders with their badges and CI", async () => {
     renderOn("agents");
+    await toTree();
     expect(await card("Project JARVIS Desk")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Project Trip planner" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Orchestrator JARVIS batch 13 orchestrator" })).toBeTruthy();
@@ -48,6 +51,7 @@ describe("Agents window", () => {
 
   it("clicking a builder shows its details with every CI check; Close hides them", async () => {
     renderOn("agents");
+    await toTree();
     fireEvent.click(await card(/^Builder JD-57/));
     expect(within(panel()).getByRole("heading", { name: /JD-57: Agent graph/ })).toBeTruthy();
     const ci = within(panel()).getByRole("region", { name: "CI" });
@@ -63,6 +67,7 @@ describe("Agents window", () => {
 
   it("Open shows claude.ai and Notion in the window's full view; GitHub goes to the browser", async () => {
     const { webview } = renderOn("agents", true);
+    await toTree();
     fireEvent.click(await card(/^Builder JD-57/));
     const open = within(panel()).getByRole("group", { name: /^Open/ });
     expect(
@@ -75,11 +80,11 @@ describe("Agents window", () => {
       "https://claude.ai/code/session_01JD57",
       expect.any(Object),
     );
-    fireEvent.click(screen.getByRole("button", { name: "← Back to the tree" }));
+    fireEvent.click(screen.getByRole("button", { name: "← Back to Agents" }));
     expect(webview.hide).toHaveBeenCalled();
     fireEvent.click(within(panel()).getByRole("button", { name: "Ticket JD-57 in Notion" }));
     expect(webview.show).toHaveBeenLastCalledWith("https://app.notion.com/p/jd-57", expect.any(Object));
-    fireEvent.click(screen.getByRole("button", { name: "← Back to the tree" }));
+    fireEvent.click(screen.getByRole("button", { name: "← Back to Agents" }));
     fireEvent.click(within(panel()).getByRole("button", { name: "Run page in Notion" }));
     expect(webview.show).toHaveBeenLastCalledWith(
       "https://app.notion.com/p/3fc24983f3ca81aa9c1e00000000b013",
@@ -89,6 +94,7 @@ describe("Agents window", () => {
 
   it("collapses and expands a run", async () => {
     renderOn("agents");
+    await toTree();
     const toggle = await screen.findByRole("button", {
       name: "Collapse Orchestrator JARVIS batch 13 orchestrator",
     });
@@ -102,6 +108,7 @@ describe("Agents window", () => {
 
   it("filters: active only and a ticket search; a jump chip filters nothing away", async () => {
     renderOn("agents");
+    await toTree();
     await card(/^Builder JD-47/);
     fireEvent.click(screen.getByRole("button", { name: "Active only" }));
     expect(screen.queryByRole("button", { name: /^Builder JD-47/ })).toBeNull();
@@ -122,6 +129,7 @@ describe("Agents window", () => {
       ...live,
       events: [{ after: 400, event: { type: "agents.changed", ids: ["session:session_01JD55"] } }],
     });
+    await toTree();
     fireEvent.click(await card(/^Builder JD-55/));
     expect(within(panel()).getByText("Running 1/2")).toBeTruthy();
     expect(await within(panel()).findByText("Passed 2/2")).toBeTruthy();
@@ -132,6 +140,7 @@ describe("Agents window", () => {
 
   it("the keyboard pans and zooms the canvas", async () => {
     renderOn("agents");
+    await toTree();
     await card("Project JARVIS Desk");
     const canvas = screen.getByRole("group", { name: "Agent tree" });
     const world = canvas.querySelector<HTMLElement>(".agents-world")!;
@@ -146,6 +155,7 @@ describe("Agents window", () => {
 
   it("four projects: a band, a jump chip with its active count and a minimap bar each", async () => {
     renderOn("agents-projects");
+    await toTree();
     await card("Project Gogentic site");
     const chips = within(screen.getByRole("group", { name: "Jump to project" })).getAllByRole("button");
     expect(chips.map((c) => c.textContent)).toEqual([
@@ -174,6 +184,7 @@ describe("Agents window", () => {
 
   it("the project label stays pinned to the left edge when panning right", async () => {
     renderOn("agents");
+    await toTree();
     await card("Project JARVIS Desk");
     const canvas = screen.getByRole("group", { name: "Agent tree" });
     const label = document.querySelector<HTMLElement>('[data-node-id="project:jarvis"]')!;
@@ -204,9 +215,52 @@ describe("Agents window", () => {
     expect(screen.getByText("Loading agents…")).toBeTruthy();
   });
 
-  it("?node= selects that node", async () => {
+  it("?node= selects that node, opening the Tree since Board might not have it", async () => {
     window.location.hash = "#/agents?node=ticket:TR-22";
     renderOn("agents");
     expect(await screen.findByRole("heading", { name: /TR-22: Itinerary export/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tree" }).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("Agents window: Board", () => {
+  afterEach(() => {
+    cleanup();
+    window.location.hash = "";
+  });
+
+  it("is the default view: a box per template slot, idle ones included", async () => {
+    renderOn("agents");
+    expect(screen.getByRole("button", { name: "Board" }).getAttribute("aria-pressed")).toBe("true");
+    // Jarvis: the newer orchestrator overflows the one orchestrator box; JD-54 builds, the tester
+    // box has nothing QA Pending so it's idle, and JD-48/55/57 are all In Review so one of them
+    // seats and the rest overflow instead of disappearing.
+    expect(await screen.findByRole("button", { name: /^Builder JD-54/ })).toBeTruthy();
+    expect(screen.getAllByText("Idle").length).toBeGreaterThan(0);
+    expect(
+      within(screen.getByRole("group", { name: /more review, beyond the template/ })).getAllByRole("button"),
+    ).toHaveLength(2);
+  });
+
+  it("clicking a seated box or an overflow chip opens the same details panel as the Tree", async () => {
+    renderOn("agents");
+    fireEvent.click(await screen.findByRole("button", { name: /^Builder JD-54/ }));
+    expect(within(panel()).getByRole("heading", { name: /JD-54: Sessions window/ })).toBeTruthy();
+    const overflow = within(screen.getByRole("group", { name: /more review, beyond the template/ }));
+    fireEvent.click(overflow.getByRole("button", { name: "JD-55" }));
+    expect(within(panel()).getByRole("heading", { name: /JD-55: System window/ })).toBeTruthy();
+  });
+
+  it("a project's own box opens its metrics", async () => {
+    renderOn("agents");
+    fireEvent.click(await screen.findByRole("button", { name: /Project\s*JARVIS Desk/ }));
+    expect(within(panel()).getByRole("heading", { name: "JARVIS Desk" })).toBeTruthy();
+  });
+
+  it("switches back to the Tree and keeps the selection where the Tree has the same node", async () => {
+    renderOn("agents");
+    fireEvent.click(await screen.findByRole("button", { name: /^Builder JD-54/ }));
+    await toTree();
+    expect(within(panel()).getByRole("heading", { name: /JD-54: Sessions window/ })).toBeTruthy();
   });
 });

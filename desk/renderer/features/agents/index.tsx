@@ -3,10 +3,19 @@ import type { AgentsResponse } from "@jarvis/shared";
 import { useBridge } from "../../app/bridge";
 import { FullView } from "../../app/FullView";
 import { useWindowParam } from "../../app/useWindowParam";
+import { Board } from "./Board";
 import { Canvas } from "./Canvas";
 import { DetailPanel, type FullViewTarget } from "./DetailPanel";
 import { bandBounds, CARD, fit, layoutTree, reveal, zoomAt, type Viewport } from "./layout";
-import { allIds, buildTree, changedIds, findNode, projectTone, type TreeFilter } from "./model";
+import {
+  allIds,
+  buildTree,
+  changedIds,
+  findNode,
+  projectTone,
+  type TreeFilter,
+  type ViewMode,
+} from "./model";
 import { Toolbar } from "./Toolbar";
 import "./agents.css";
 
@@ -24,6 +33,9 @@ export const FLASH_MS = 1600;
 export default function AgentsWindow() {
   const bridge = useBridge();
   const wanted = useWindowParam("node");
+  // Board (the template graph) is the default landing view; a deep link to a specific node opens
+  // the Tree instead, since Board only ever shows what's live now and might not have that node.
+  const [mode, setMode] = useState<ViewMode>(wanted ? "tree" : "board");
   const [graph, setGraph] = useState<AgentsResponse>();
   const [error, setError] = useState<string>();
   const [filter, setFilter] = useState<TreeFilter>({ activity: "all" });
@@ -84,7 +96,10 @@ export default function AgentsWindow() {
 
   const tree = useMemo(() => (graph ? buildTree(graph, filter) : []), [graph, filter]);
   const layout = useMemo(() => layoutTree(tree, collapsed), [tree, collapsed]);
-  const node = findNode(tree, selected);
+  // Board shows only what's live now, independent of the Tree's own filter: a node it selects (a
+  // builder, an orchestrator, a project) needs its own unfiltered lookup for the side panel.
+  const fullTree = useMemo(() => (graph ? buildTree(graph, { activity: "all" }) : []), [graph]);
+  const node = findNode(mode === "board" ? fullTree : tree, selected);
   const tones = useMemo(() => new Map((graph?.projects ?? []).map((p) => [p.id, projectTone(p)])), [graph]);
   const shown = useMemo(() => new Set(layout.bands.map((b) => b.id)), [layout]);
 
@@ -161,13 +176,15 @@ export default function AgentsWindow() {
           setVersion((v) => v + 1);
         }}
         hits={hits}
+        mode={mode}
+        onMode={setMode}
       />
       <div className="agents-main">
         {full && (
           <section className="agents-full" aria-label={`Full view: ${full.name}`}>
             <div className="agents-full-bar">
               <button type="button" className="agents-back" onClick={() => setFull(undefined)}>
-                ← Back to the tree
+                ← Back to Agents
               </button>
               <span className="agents-muted">{full.name}</span>
             </div>
@@ -187,6 +204,17 @@ export default function AgentsWindow() {
                 session is tagged <code>project:&lt;slug&gt;</code>.
               </p>
             </div>
+          ) : mode === "board" ? (
+            <>
+              <Board projects={graph.projects} selected={node?.id} flash={flash} onSelect={onSelect} />
+              {graph.warnings.length > 0 && (
+                <ul className="agents-warnings" aria-label="Warnings">
+                  {graph.warnings.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              )}
+            </>
           ) : (
             <>
               <Canvas

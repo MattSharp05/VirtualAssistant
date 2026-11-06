@@ -878,3 +878,140 @@
   border-bottom: 1px solid var(--glass-border);
   font-size: 13px;
 }
+
+/* ── Board: the per-project template graph, JD-? ── */
+.agents-board {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 18px 20px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.agents-board-project {
+  flex: none;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.agents-board-project-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgb(17, 22, 28);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agents-board-project-head:hover {
+  background: rgb(22, 28, 35);
+}
+
+.agents-board-project-head[aria-pressed="true"] {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.agents-board-project-head .agents-eyebrow {
+  flex: 0 0 auto;
+}
+
+.agents-board-project-head .agents-card-title {
+  flex: 0 0 auto;
+}
+
+.agents-board-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.agents-board-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.agents-board-row-label {
+  flex: 0 0 84px;
+  padding-top: 11px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.agents-board-boxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.agents-board-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 220px;
+  min-height: 86px;
+  padding: 10px 13px;
+  text-align: left;
+  font: inherit;
+}
+
+.agents-board-box[data-empty="true"] {
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.agents-board-box.agents-card[data-flash] {
+  animation: agents-flash 1.4s ease-out;
+}
+
+.agents-board-overflow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 11px;
+}
+
+.agents-board-chip {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--amber);
+  border-radius: 999px;
+  background: rgba(230, 180, 80, 0.1);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agents-board-chip:hover,
+.agents-board-chip[aria-pressed="true"] {
+  background: rgba(230, 180, 80, 0.2);
+}
+
+.agents-board-chip[data-flash] {
+  animation: agents-flash 1.4s ease-out;
+}
