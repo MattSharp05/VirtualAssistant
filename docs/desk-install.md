@@ -87,6 +87,37 @@ downloads the `.dmg` and opens it, JARVIS quits, and you drag the new app over t
 Updating by hand: quit JARVIS Desk (above), drag the new app from the `.dmg` into Applications and
 choose **Replace**, then open it again. Finder refuses to replace the app while it's still running.
 
+### Signing, so permissions survive updates (JD-88)
+macOS remembers the microphone and camera permission for one signer. A release without a certificate is
+signed ad hoc, so each update looks like a new app and the permissions can quietly stop working. To
+sign every release with your own certificate (once, about 5 minutes, on your Mac, in Terminal):
+
+1. Make the certificate, with the script from this repo:
+   ```
+   mkdir -p ~/jarvis-sign && cd ~/jarvis-sign
+   curl -fsSL https://raw.githubusercontent.com/MattSharp05/VirtualAssistant/main/desk/scripts/make-sign-cert.sh -o make-sign-cert.sh
+   PASS=$(bash make-sign-cert.sh)
+   ```
+   It writes `jarvis-sign.p12` (the certificate and its key) and puts its password in `$PASS`.
+2. Give them to GitHub as Actions secrets (needs the GitHub CLI: `brew install gh`, then `gh auth login`):
+   ```
+   base64 -i jarvis-sign.p12 | gh secret set MAC_SIGN_P12 --repo MattSharp05/VirtualAssistant
+   printf '%s' "$PASS" | gh secret set MAC_SIGN_PASSWORD --repo MattSharp05/VirtualAssistant
+   ```
+   Without the CLI: GitHub → the repo → **Settings → Secrets and variables → Actions → New
+   repository secret**, `MAC_SIGN_P12` = the output of `base64 -i jarvis-sign.p12 | pbcopy` (pasted),
+   and `MAC_SIGN_PASSWORD` = the output of `echo $PASS`.
+3. Keep `jarvis-sign.p12` and the password in your password manager (a new certificate means
+   granting the permissions once more), then `rm -rf ~/jarvis-sign`.
+
+The next release is signed with it (its log shows `Authority=JARVIS Desk Signing`). After updating to
+it, grant the microphone and camera once more (below); from then on they stay through updates.
+
+If the microphone or camera stopped working after an update: quit JARVIS Desk, run
+`tccutil reset Microphone ai.jarvis.desk; tccutil reset Camera ai.jarvis.desk` in Terminal, open
+JARVIS Desk again and allow both when asked. `desk.log`'s **Voice check** line (at each start) says
+whether each is granted.
+
 ## When something looks wrong
 JARVIS Desk keeps a log: `~/Library/Logs/JARVIS Desk/desk.log` (**Settings → Updates → Open log**
 shows it in Finder). It records errors from every window (a missing orb, a blank window), crashes and

@@ -43,7 +43,10 @@ mac:
       arch: arm64
   category: public.app-category.productivity
   # "-" = ad-hoc signature: required for arm64 apps to launch; Gatekeeper still asks once (right-click → Open).
+  # A release with the MAC_SIGN_P12 secret is signed with a stable self-signed certificate instead (JD-88).
   identity: "-"
+  # JD-88: the actual signing; ad hoc, or Matthew's certificate in a release (scripts/sign-mac.cjs).
+  sign: scripts/sign-mac.cjs
   hardenedRuntime: false
   # No LSUIElement (JD-62): a normal app with a Dock icon; Settings → Show in Dock hides it at runtime.
   extendInfo:

@@ -158,11 +158,29 @@ jobs:
           cmake --build "$RUNNER_TEMP/whisper-build" -j"$(sysctl -n hw.ncpu)" --target whisper-cli
           mkdir -p desk/vendor/whisper
           cp "$RUNNER_TEMP/whisper-build/bin/whisper-cli" desk/vendor/whisper/whisper-cli
+      # JD-88: sign this build with a throwaway "JARVIS Desk Signing" certificate, made the way Matthew
+      # makes his (scripts/make-sign-cert.sh), to test the release's certificate signing end to end.
+      - name: Throwaway signing certificate
+        working-directory: desk
+        run: |
+          cd "$RUNNER_TEMP"
+          export MAC_SIGN_PASSWORD="$(bash "$GITHUB_WORKSPACE/desk/scripts/make-sign-cert.sh")"
+          export MAC_SIGN_P12="$(base64 -i jarvis-sign.p12)"
+          rm -f jarvis-sign.p12 jarvis-sign.crt
+          bash "$GITHUB_WORKSPACE/desk/scripts/import-sign-cert.sh"
       - name: Build the .dmg
         working-directory: desk
         run: |
           npm version --no-git-tag-version "0.0.0-ci.${GITHUB_RUN_NUMBER}" >/dev/null
           npm run dist:mac
+      - name: Signed with the certificate (JD-88)
+        working-directory: desk
+        run: |
+          app="release/mac-arm64/JARVIS Desk.app"
+          codesign --verify --deep --strict "$app"
+          codesign -dvv "$app" 2>&1 | grep -E "Identifier|Authority|Signature"
+          codesign -d -r- "$app"
+          codesign -dvv "$app" 2>&1 | grep -q "Authority=JARVIS Desk Signing"
       - name: whisper-cli runs from the app bundle
         working-directory: desk
         run: |
