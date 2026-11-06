@@ -56,9 +56,32 @@ jobs:
           cmake --build "$RUNNER_TEMP/whisper-build" -j"$(sysctl -n hw.ncpu)" --target whisper-cli
           mkdir -p desk/vendor/whisper
           cp "$RUNNER_TEMP/whisper-build/bin/whisper-cli" desk/vendor/whisper/whisper-cli
+      # JD-88: Matthew's self-signed "JARVIS Desk Signing" certificate (secrets MAC_SIGN_P12, base64,
+      # and MAC_SIGN_PASSWORD), so every release has the same signer and macOS keeps the mic and camera
+      # permission across updates. Without the secrets the app is signed ad hoc, as before.
+      - name: Import the signing certificate
+        env:
+          MAC_SIGN_P12: ${{ secrets.MAC_SIGN_P12 }}
+          MAC_SIGN_PASSWORD: ${{ secrets.MAC_SIGN_PASSWORD }}
+        run: |
+          if [ -z "$MAC_SIGN_P12" ]; then
+            echo "::warning::No MAC_SIGN_P12 secret: this release is signed ad hoc, so macOS asks for the mic and camera again after the update."
+            exit 0
+          fi
+          bash desk/scripts/import-sign-cert.sh
       - name: Build the .dmg and the .zip
         working-directory: desk
         run: npm run dist:mac
+      - name: The app's signature
+        working-directory: desk
+        run: |
+          app="release/mac-arm64/JARVIS Desk.app"
+          codesign --verify --deep --strict "$app"
+          codesign -dvv "$app" 2>&1 | grep -E "Identifier|Authority|Signature" || true
+          codesign -d -r- "$app"
+          if [ -n "$JARVIS_SIGN_IDENTITY" ] && ! codesign -dvv "$app" 2>&1 | grep -q "Authority=JARVIS Desk Signing"; then
+            echo "::error::The app isn't signed with JARVIS Desk Signing"; exit 1
+          fi
       - name: whisper-cli runs from the app bundle
         working-directory: desk
         run: |
