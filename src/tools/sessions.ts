@@ -16,6 +16,7 @@ const group: ToolGroup = {
     "- Use your tools; never guess a session's state. \"What's X doing / how's X going\" → overview, then session_activity for that session.",
     "- When Matthew asks you to tell a session something, send it with send_to_session (clear, self-contained, in his voice), then confirm in one line what you sent. Its answer arrives later as a report.",
     "- You may start new cloud sessions with start_session when he asks for work to be done.",
+    "- start_session on an unlisted project fails with \"Unknown project\". If Matthew wants to work on a new project, offer add_project (repo and an optional ticket prefix are usually enough; no environment needed unless he says the project needs its own).",
   ].join("\n"),
   tools: [
     {
@@ -71,6 +72,42 @@ const group: ToolGroup = {
       ),
       handler: (a, ctx) =>
         core(ctx).start(String(a.task ?? ""), typeof a.project === "string" ? a.project : undefined, typeof a.model === "string" ? a.model : undefined),
+    },
+    {
+      name: "list_projects",
+      description: "The projects JARVIS knows about and can route sessions to (slug, name, aliases).",
+      inputSchema: schema({}),
+      handler: (_a, ctx) => core(ctx).listProjects(),
+    },
+    {
+      name: "add_project",
+      description:
+        "Add a project JARVIS can route sessions to, so Matthew can say \"in <name>\" or name it in a task, without editing PROJECTS or restarting. " +
+        "Most projects don't need their own cloud environment: leave `environment` unset and it shares the default one (the one SESSION_ENVIRONMENT_ID " +
+        "points to, or JARVIS's own). Only set `environment` when this project genuinely needs different network access, secrets or a setup script, " +
+        "and Matthew has already made that environment at claude.ai/code — JARVIS can't create one.",
+      inputSchema: schema(
+        {
+          slug: str("Short lowercase id, e.g. \"trip\" (the project: tag and the word that routes to it)"),
+          name: str("Display name, e.g. \"Trip planner\"; default = slug"),
+          repo: str("GitHub repo, \"owner/name\" or a URL; default = the account's default repo"),
+          aliases: str("Other names that also pick it, comma-separated, e.g. \"tripper, holiday\""),
+          prefix: str("Ticket ID prefix, e.g. \"TP\", so tasks naming a ticket pick this project"),
+          environment: str("Optional, rare: an existing cloud environment's env_… id. Default = the shared environment."),
+          model: str("Optional: opus, sonnet, haiku or a full model id; default = SESSION_MODEL (Opus)"),
+          baseBranch: str("Optional: the branch its PRs target"),
+          mergePolicy: str("\"never\" (sessions open a PR, never merge) or \"orchestrator\" (default: an orchestrator merges)"),
+          extraInstructions: str("Optional: short rules added to the first message of its sessions"),
+        },
+        ["slug"],
+      ),
+      handler: (a, ctx) => core(ctx).addProject(a),
+    },
+    {
+      name: "remove_project",
+      description: "Remove a project added with add_project. A project from PROJECTS (.env) can't be removed this way.",
+      inputSchema: schema({ slug: str("The project's slug") }, ["slug"]),
+      handler: (a, ctx) => core(ctx).removeProject(String(a.slug ?? "")),
     },
     {
       name: "rename_jarvis_sessions",

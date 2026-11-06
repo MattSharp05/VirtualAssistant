@@ -77,12 +77,19 @@ test("planSession: the default repo and its project, role:task for a plain task"
 });
 
 test("planSession: a project the task names picks its repo (\"in trip\", \"trip: …\", the project's name)", () => {
-  for (const task of ["Add a packing list in trip", "trip: add a packing list", "Add a packing list for the Trip planner"]) {
+  for (const task of [
+    "Add a packing list in trip",
+    "trip: add a packing list",
+    "Add a packing list for the Trip planner",
+    "work on my Trip project",
+    "please pick up work on your Trip project",
+  ]) {
     const plan = planSession(task, config(tmp()));
     assert.equal(plan.repoUrl, "https://github.com/MattSharp05/trip", task);
     assert.equal(plan.project, "trip", task);
   }
   assert.equal(planSession("Plan a trip to Rome", config(tmp())).project, "jarvis", "a bare word isn't a project mention");
+  assert.equal(planSession("I enjoyed my trip to Spain", config(tmp())).project, "jarvis", "\"my\" alone doesn't make it a mention");
 });
 
 test("planSession: a ticket ID makes a builder and picks its project by prefix", () => {
@@ -496,4 +503,59 @@ test("startJob: a routine start says why, and that it runs on the routine's envi
   const text = describeStart(r, jarvis.config);
   assert.match(text, /⚠️ Started via the routine fallback \(fire 1\/30 this hour\) because the sessions API failed: session create answered HTTP 503: nope\./);
   assert.match(text, /not JARVIS default \(env_01TEST\) \/ claude-opus-5-5\.$/);
+});
+
+// ── Projects added at runtime, no .env edit or restart (add_project) ──
+
+test("Jarvis.addProject: validates the slug, checks for a collision, and defaults to the shared environment", () => {
+  const jarvis = new Jarvis(config(tmp(), { projects: PROJECTS }), new Store(tmp()));
+  assert.throws(() => jarvis.addProject({ slug: "Mario Kart" }), /lowercase letters, digits or dashes.*"Mario Kart"/);
+  assert.throws(() => jarvis.addProject({ slug: "jarvis" }), /collides with the existing project jarvis \(JARVIS Desk\)/);
+  const p = jarvis.addProject({ slug: "mk" });
+  assert.deepEqual(p, { slug: "mk", name: "mk" });
+  assert.equal(p.environment, undefined, "no environment forced on it — it shares the default");
+});
+
+test("Jarvis.addProject: routes new tasks to it, and survives a restart (the store, not PROJECTS)", () => {
+  const dir = tmp();
+  let jarvis = new Jarvis(config(dir, { projects: PROJECTS }), new Store(dir));
+  const p = jarvis.addProject({ slug: "mk", name: "Mario Kart", repo: "MattSharp05/mario-kart", aliases: ["mariokart", "kart"] });
+  assert.deepEqual(p, { slug: "mk", name: "Mario Kart", repo: "MattSharp05/mario-kart", aliases: ["mariokart", "kart"] });
+  assert.equal(findProject("mariokart", jarvis.config.projects)?.slug, "mk");
+  assert.equal(planSession("work on my Mario Kart project", jarvis.config).project, "mk");
+
+  jarvis = new Jarvis(config(dir, { projects: PROJECTS }), new Store(dir));
+  assert.equal(findProject("mk", jarvis.config.projects)?.name, "Mario Kart", "a fresh Store still has it");
+});
+
+test("Jarvis.removeProject: removes one added with addProject; a PROJECTS entry refuses", () => {
+  const jarvis = new Jarvis(config(tmp(), { projects: PROJECTS }), new Store(tmp()));
+  jarvis.addProject({ slug: "mk", name: "Mario Kart" });
+  const removed = jarvis.removeProject("mk");
+  assert.equal(removed.slug, "mk");
+  assert.equal(findProject("mk", jarvis.config.projects), undefined);
+  assert.throws(() => jarvis.removeProject("jarvis"), /JARVIS Desk \(jarvis\) is configured in PROJECTS \(\.env\), not added with add_project/);
+  assert.throws(() => jarvis.removeProject("nope"), /No project "nope"/);
+});
+
+test("add_project / list_projects / remove_project: tool wiring", async () => {
+  const dir = tmp();
+  const jarvis = new Jarvis(config(dir, { projects: PROJECTS }), new Store(dir));
+  const ctx = { config: jarvis.config, jarvis } as unknown as ToolContext;
+  const add = sessionsGroup.tools.find((t) => t.name === "add_project")!;
+  const remove = sessionsGroup.tools.find((t) => t.name === "remove_project")!;
+  const list = sessionsGroup.tools.find((t) => t.name === "list_projects")!;
+
+  assert.match(await list.handler({}, ctx), /jarvis \(JARVIS Desk\), trip \(Trip planner\)/);
+
+  const added = await add.handler({ slug: "mk", name: "Mario Kart", aliases: "mariokart, kart", model: "sonnet" }, ctx);
+  assert.equal(added, 'Added mk (Mario Kart). Runs in the shared default environment, model claude-sonnet-5-5. Aliases: mariokart, kart. Say "in mk" or name "Mario Kart" to route a session there.');
+  assert.equal(findProject("mariokart", jarvis.config.projects)?.slug, "mk");
+  assert.match(await list.handler({}, ctx), /mk \(Mario Kart; also mariokart, kart\)/);
+
+  await assert.rejects(add.handler({ slug: "mk2", model: "gpt-5" }, ctx), /Unknown model "gpt-5"/);
+
+  const removed = await remove.handler({ slug: "mk" }, ctx);
+  assert.equal(removed, "Removed mk (Mario Kart). New sessions won't route there unless it's added again.");
+  assert.equal(findProject("mk", jarvis.config.projects), undefined);
 });

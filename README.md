@@ -57,12 +57,30 @@ fires an hour). To title the older ones, ask JARVIS to "rename my JARVIS session
 
 **Other projects** (JD-85) are entries in `PROJECTS` with their own `environment`, `aliases`,
 `baseBranch`, `mergePolicy` and `extraInstructions`; see `.env.example` for a two-project line
-with Drift. "Start a Drift session to …", "… in driftship" or start_session's `project` argument
-picks one: the session runs on its repo in its environment, tagged `project:<slug>`, with its rules
-in the first message. Their environment needs `JARVIS_REPORT_URL` and `JARVIS_REPORT_SECRET`: the
-worker instructions save a small curl reporter (`~/jarvis-report.sh`) that works in any repo and
-uses `scripts/report.sh` where it exists. The routine only runs on `DEFAULT_REPO`, so another
-project's failed start is an error ("Couldn't start a Drift session: …"), never a routine fire.
+with Drift. "Start a Drift session to …", "… in driftship", "work on my Drift project" or
+start_session's `project` argument picks one: the session runs on its repo in its environment,
+tagged `project:<slug>`, with its rules in the first message. Their environment needs
+`JARVIS_REPORT_URL` and `JARVIS_REPORT_SECRET`: the worker instructions save a small curl reporter
+(`~/jarvis-report.sh`) that works in any repo and uses `scripts/report.sh` where it exists. The
+routine only runs on `DEFAULT_REPO`, so another project's failed start is an error ("Couldn't start
+a Drift session: …"), never a routine fire.
+
+**One environment or one per project?** A cloud environment is *not* tied to a repo — it's just
+network access, env vars and an optional setup script; the repo is chosen per session. So most new
+projects don't need their own environment at all: just add a `PROJECTS` entry (or ask JARVIS, below)
+with a `repo` and no `environment`, and it runs in the same shared environment as everything else.
+Only give a project its *own* environment when it genuinely needs something different — its own
+secrets, a tighter or looser network allowlist, or a setup script that installs a different
+toolchain (Drift's does, which is why it has one). Making a new environment for every project (what
+went wrong with Trip) is slow and usually unnecessary; reach for it only when the shared one won't
+do.
+
+**Ask JARVIS to add a project.** Say "add a project called trip, repo MattSharp05/trip" and JARVIS
+calls `add_project` (slug and repo are the useful minimum; name, aliases, a ticket prefix, model,
+base branch and merge policy are all optional, and leaving `environment` unset is almost always
+right — see above). It's saved in `data/state.json`, so it survives a restart without touching
+`.env`. `list_projects` shows what's configured; `remove_project` undoes an `add_project` (a
+`PROJECTS` entry from `.env` can only be removed by editing `.env`).
 
 **A2. Make the routine (fallback).** At claude.ai/code/routines → **New routine**:
 - **Repository:** `MattSharp05/VirtualAssistant` (it clones `main`, which has `scripts/report.sh`).
