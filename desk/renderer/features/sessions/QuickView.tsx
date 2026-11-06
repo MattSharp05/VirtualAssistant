@@ -118,6 +118,16 @@ export function QuickView({ session, version, view, onView, onPopOut }: QuickVie
             Full view (claude.ai)
           </button>
         </div>
+        <button
+          type="button"
+          className="sessions-popout sessions-browser-open"
+          aria-label="Open the Browser window"
+          title="Open the Browser window, on the same signed-in profile this session can use"
+          onClick={() => bridge.openWindow("browser")}
+        >
+          <Icon name="browser" size={15} />
+          Browser
+        </button>
         {onPopOut && (
           <button
             type="button"

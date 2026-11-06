@@ -81,6 +81,12 @@ describe("Sessions window", () => {
     expect(bridge.opened.at(-1)).toBe("sessions?solo=session_01SM");
   });
 
+  it("the Browser button opens the Browser window, from the list and from a popped-out session", async () => {
+    const bridge = renderOn("sessions");
+    fireEvent.click(await screen.findByRole("button", { name: "Open the Browser window" }));
+    expect(bridge.opened).toEqual(["browser"]);
+  });
+
   it("a popped-out window shows just that session, titled with its name, and still sends and refreshes", async () => {
     const mock = createMockBridge(findScenario("sessions")!);
     const listeners: ((e: DeskEvent) => void)[] = [];
@@ -100,6 +106,7 @@ describe("Sessions window", () => {
     expect(await screen.findByRole("heading", { level: 2, name: "trip" })).toBeTruthy();
     expect(screen.queryByRole("navigation", { name: "Sessions" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Pop out/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Open the Browser window" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "Quick view" })).toBeTruthy();
     expect(titles.at(-1)).toBe("trip");
 
