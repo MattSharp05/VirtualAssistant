@@ -24,6 +24,9 @@ export interface TreeNode {
 
 export type ActivityFilter = "all" | "active";
 
+/** Board (JD-?): a per-project template graph of role boxes. Tree (JD-58): the full pan/zoom graph. */
+export type ViewMode = "board" | "tree";
+
 export interface TreeFilter {
   activity: ActivityFilter;
   /** A project id, or undefined for every project. */
@@ -265,6 +268,133 @@ export function ago(iso: string | undefined, now = Date.now()): string | undefin
 export function contextTone(percent: number): "ok" | "amber" | "red" {
   if (percent >= 85) return "red";
   return percent >= 70 ? "amber" : "ok";
+}
+
+// ── Board: the per-project template graph (JD-?), fixed role boxes with live work slotted in ──
+// Matthew's ask: a predetermined graph per project (orchestrator, N builders, N testers, a reviewer)
+// that he can glance at even when nothing is running, with live sessions appearing in their boxes.
+// v1 infers a builder's box from its ticket's status, so it works with today's tagging (no new
+// session tag or server change); a `role:` tag beyond orchestrator/builder would be a cleaner signal
+// later, worth asking Matthew about once this ships.
+
+export type Stage = "orchestrator" | "builder" | "tester" | "review";
+
+export const STAGE_LABEL: Record<Stage, string> = {
+  orchestrator: "Orchestrator",
+  builder: "Builder",
+  tester: "Tester",
+  review: "Review",
+};
+
+export interface TemplateSlot {
+  stage: Stage;
+  /** How many boxes of this stage the board draws; live work beyond it overflows, not hidden. */
+  count: number;
+}
+
+/** Used until a project has its own template: one orchestrator, two builders, a tester, a reviewer. */
+export const DEFAULT_TEMPLATE: TemplateSlot[] = [
+  { stage: "orchestrator", count: 1 },
+  { stage: "builder", count: 2 },
+  { stage: "tester", count: 1 },
+  { stage: "review", count: 1 },
+];
+
+/**
+ * Where a builder sits in the pipeline, from its ticket's status: QA Pending is testing, In Review is
+ * review (CI plus Matthew's look), anything else (In Progress, or a sub-agent/ticket with no status
+ * yet) is still building.
+ */
+export function builderStage(b: AgentBuilder): Stage {
+  const status = b.ticket?.status;
+  if (status === "QA Pending") return "tester";
+  if (status === "In Review") return "review";
+  return "builder";
+}
+
+/** A box on the board: a template slot's Nth seat, filled by live work or empty. */
+export interface BoardBox {
+  key: string;
+  stage: Stage;
+  /** 1-based position within its stage. */
+  index: number;
+  orchestrator?: AgentOrchestrator;
+  builder?: AgentBuilder;
+}
+
+export interface BoardRow {
+  stage: Stage;
+  boxes: BoardBox[];
+  /** Live work past the stage's boxes: shown as a chip list rather than dropped. */
+  overflow: (AgentOrchestrator | AgentBuilder)[];
+}
+
+export interface ProjectBoard {
+  project: AgentProject;
+  rows: BoardRow[];
+}
+
+function allBuilders(p: AgentProject): AgentBuilder[] {
+  return [...p.orchestrators.flatMap((o) => o.builders), ...p.loose];
+}
+
+/** Natural order for ticket ids (JD-9 before JD-10); builders without one go last, stably by id. */
+function byTicket(a: AgentBuilder, b: AgentBuilder): number {
+  const ka = a.ticket?.id;
+  const kb = b.ticket?.id;
+  if (!ka || !kb) return Number(!ka) - Number(!kb) || a.id.localeCompare(b.id);
+  return ka.localeCompare(kb, undefined, { numeric: true }) || a.id.localeCompare(b.id);
+}
+
+const orchCreatedAt = (o: AgentOrchestrator) => o.session.metrics?.createdAt ?? "";
+
+/**
+ * The project's board (JD-?): the template's boxes, each seated by the oldest live orchestrator or
+ * builder of its stage that hasn't already taken an earlier seat; finished work leaves its box empty
+ * on the next read, and anything beyond a stage's boxes lists in that row's overflow.
+ */
+export function buildBoard(
+  project: AgentProject,
+  template: readonly TemplateSlot[] = DEFAULT_TEMPLATE,
+): ProjectBoard {
+  const liveOrchs = project.orchestrators
+    .filter(orchestratorActive)
+    .sort((a, b) => orchCreatedAt(a).localeCompare(orchCreatedAt(b)));
+  const byStage = new Map<Stage, AgentBuilder[]>();
+  for (const b of allBuilders(project).filter(builderActive)) {
+    const stage = builderStage(b);
+    const list = byStage.get(stage);
+    if (list) list.push(b);
+    else byStage.set(stage, [b]);
+  }
+  for (const list of byStage.values()) list.sort(byTicket);
+
+  const rows: BoardRow[] = template.map((slot): BoardRow => {
+    const pool: (AgentOrchestrator | AgentBuilder)[] =
+      slot.stage === "orchestrator" ? liveOrchs : (byStage.get(slot.stage) ?? []);
+    const boxes: BoardBox[] = Array.from({ length: slot.count }, (_, i) => {
+      const item = pool[i];
+      return {
+        key: `${project.id}:${slot.stage}:${i}`,
+        stage: slot.stage,
+        index: i + 1,
+        ...(isOrchestrator(item) ? { orchestrator: item } : item ? { builder: item } : {}),
+      };
+    });
+    return { stage: slot.stage, boxes, overflow: pool.slice(slot.count) };
+  });
+  return { project, rows };
+}
+
+export function isOrchestrator(
+  item: AgentOrchestrator | AgentBuilder | undefined,
+): item is AgentOrchestrator {
+  return item !== undefined && "builders" in item;
+}
+
+/** The id and title DetailPanel and board cards show for either half of a board box's union. */
+export function boardItemTitle(item: AgentOrchestrator | AgentBuilder): { id?: string; title: string } {
+  return isOrchestrator(item) ? { title: item.session.title } : builderTitle(item);
 }
 
 /** Every session in a project: its orchestrators', their builders' and the loose ones. */

@@ -3,11 +3,15 @@ import type { AgentBuilder, AgentOrchestrator, AgentsResponse } from "@jarvis/sh
 import { agents } from "../../mock/data/agents";
 import {
   allIds,
+  boardItemTitle,
   builderActive,
+  builderStage,
   builderStatus,
+  buildBoard,
   buildTree,
   changedIds,
   ciLabel,
+  DEFAULT_TEMPLATE,
   findNode,
   formatCost,
   formatTokens,
@@ -126,5 +130,67 @@ describe("numbers and changes", () => {
     next.projects[0]!.orchestrators[0]!.builders[1]!.ci!.state = "passed";
     expect(changedIds(agents, next)).toEqual(["session:session_01JD55"]);
     expect(changedIds(undefined, next)).toEqual([]);
+  });
+});
+
+describe("board", () => {
+  it("builderStage reads the ticket's status: QA Pending tests, In Review reviews, else builds", () => {
+    expect(builderStage(builder("JD-54"))).toBe("builder"); // In Progress
+    expect(builderStage(builder("JD-55"))).toBe("review"); // In Review
+    expect(builderStage(builder("TR-22"))).toBe("builder"); // In Progress, no session
+    expect(builderStage({ id: "x", kind: "cloud", sources: [] })).toBe("builder"); // no ticket at all
+  });
+
+  it("seats the oldest live orchestrator and builder of each stage into the default template's boxes", () => {
+    const board = buildBoard(agents.projects[0]!); // jarvis: two live runs, batch 12 started first
+    expect(board.rows.map((r) => r.stage)).toEqual(["orchestrator", "builder", "tester", "review"]);
+    const [orchRow, builderRow, testerRow, reviewRow] = board.rows;
+    // Only one orchestrator box by default; the newer run overflows rather than vanishing.
+    expect(orchRow!.boxes.map((b) => b.orchestrator?.id)).toEqual(["session:session_01JDorch12"]);
+    expect(orchRow!.overflow.map((o) => o.id)).toEqual(["session:session_01JDorch13"]);
+    // JD-54 (In Progress) takes the first builder box; the second sits idle.
+    expect(builderRow!.boxes.map((b) => b.builder?.id)).toEqual(["session:session_01JD54", undefined]);
+    // Nothing is QA Pending right now: the tester box is idle, not missing.
+    expect(testerRow!.boxes).toHaveLength(1);
+    expect(testerRow!.boxes[0]!.builder).toBeUndefined();
+    // Three builders are In Review (JD-55, JD-57, JD-48); one review box seats the oldest by
+    // ticket id and the rest overflow instead of being hidden.
+    expect(reviewRow!.boxes.map((b) => b.builder?.id)).toEqual([
+      `sub:3fc24983f3ca81aa9c1e00000000b012:JD-48`,
+    ]);
+    expect(reviewRow!.overflow.map((o) => o.id)).toEqual([
+      "session:session_01JD55",
+      "session:session_01JD57",
+    ]);
+    // Merged and finished work (JD-47, the loose session) never occupies a box.
+    expect(
+      board.rows.flatMap((r) => [
+        ...r.boxes.flatMap((b) => [b.orchestrator?.id, b.builder?.id]),
+        ...r.overflow.map((o) => o.id),
+      ]),
+    ).not.toContain(`sub:3fc24983f3ca81aa9c1e00000000b012:JD-47`);
+  });
+
+  it("an idle project (nothing active) is all empty boxes, not an empty board", () => {
+    const idle: AgentsResponse["projects"][0] = { ...agents.projects[1]!, orchestrators: [], loose: [] };
+    const board = buildBoard(idle);
+    expect(board.rows).toHaveLength(DEFAULT_TEMPLATE.length);
+    expect(board.rows.every((r) => r.boxes.every((b) => !b.orchestrator && !b.builder))).toBe(true);
+    expect(board.rows.every((r) => r.overflow.length === 0)).toBe(true);
+  });
+
+  it("a custom template changes the box counts", () => {
+    const board = buildBoard(agents.projects[0]!, [{ stage: "review", count: 3 }]);
+    expect(board.rows).toHaveLength(1);
+    expect(board.rows[0]!.boxes).toHaveLength(3);
+    expect(board.rows[0]!.overflow).toEqual([]);
+  });
+
+  it("boardItemTitle reads either half of the union", () => {
+    expect(boardItemTitle(orch("session:session_01JDorch13")).title).toBe("JARVIS batch 13 orchestrator");
+    expect(boardItemTitle(builder("JD-54"))).toEqual({
+      id: "JD-54",
+      title: "Sessions window: tokens, cost and context per session",
+    });
   });
 });
