@@ -9,6 +9,17 @@ const transform = (page: Page) =>
   page.locator(".agents-world").evaluate((el) => (el as HTMLElement).style.transform);
 const zoom = (page: Page) => page.getByLabel("Zoom level");
 const builders = (page: Page) => page.locator('.agents-node[data-kind="builder"]');
+/**
+ * Board is the default view; these specs exercise the Tree, so switch to it first. The canvas
+ * measures itself and fits the view via a ResizeObserver callback once it mounts, which lands a
+ * frame or two after the click resolves; wait for that paint so transform() reads the fitted view,
+ * not the pre-fit default.
+ */
+const toTree = async (page: Page) => {
+  await page.getByRole("button", { name: "Tree" }).click();
+  await expect(page.getByRole("group", { name: "Agent tree" })).toBeVisible();
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+};
 
 test.describe("fixed clock", () => {
   test.beforeEach(async ({ page }) => {
@@ -20,6 +31,7 @@ test.describe("fixed clock", () => {
   }) => {
     await openWindow(page, "agents", "agents");
     await waitForBridgeIdle(page);
+    await toTree(page);
     await expect(page.locator('.agents-node[data-kind="project"]')).toHaveCount(2);
     await expect(page.locator('.agents-node[data-kind="orchestrator"]')).toHaveCount(3);
     await expect(builders(page)).toHaveCount(8);
@@ -42,6 +54,7 @@ test.describe("fixed clock", () => {
   test("agents: drag pans, ⌘-scroll zooms around the pointer, Fit and the zoom buttons", async ({ page }) => {
     await openWindow(page, "agents", "agents");
     await waitForBridgeIdle(page);
+    await toTree(page);
     const canvas = page.getByRole("group", { name: "Agent tree" });
     const box = (await canvas.boundingBox())!;
     const fitted = await transform(page);
@@ -80,6 +93,7 @@ test.describe("fixed clock", () => {
   test("agents: collapse, filters and search by ticket ID", async ({ page }) => {
     await openWindow(page, "agents", "agents");
     await waitForBridgeIdle(page);
+    await toTree(page);
     await page.getByRole("button", { name: "Collapse Orchestrator JARVIS batch 13 orchestrator" }).click();
     await expect(builders(page)).toHaveCount(5);
     await page.getByRole("button", { name: "Expand Orchestrator JARVIS batch 13 orchestrator" }).click();
@@ -105,6 +119,7 @@ test.describe("fixed clock", () => {
   }) => {
     await openWindow(page, "agents", "agents");
     await waitForBridgeIdle(page);
+    await toTree(page);
     await page.getByRole("button", { name: /^Builder JD-57/ }).click();
     const panel = page.getByRole("complementary", { name: "Details" });
     await expect(panel.getByRole("heading", { name: /JD-57: Agent graph/ })).toBeVisible();
@@ -119,7 +134,7 @@ test.describe("fixed clock", () => {
     const full = page.getByRole("region", { name: /^Full view/ });
     await expect(full.getByText("Full view works in the app")).toBeVisible();
     await expect(full.getByRole("link")).toHaveAttribute("href", "https://claude.ai/code/session_01JD57");
-    await page.getByRole("button", { name: "← Back to the tree" }).click();
+    await page.getByRole("button", { name: "← Back to Agents" }).click();
     await expect(page.getByRole("group", { name: "Agent tree" })).toBeVisible();
     await panel.getByRole("button", { name: "Ticket JD-57 in Notion" }).click();
     await expect(full.getByRole("link")).toHaveAttribute("href", "https://app.notion.com/p/jd-57");
@@ -134,6 +149,7 @@ test.describe("fixed clock", () => {
   }) => {
     await openWindow(page, "agents", "agents-projects");
     await waitForBridgeIdle(page);
+    await toTree(page);
     await expect(page.locator(".agents-band")).toHaveCount(4);
     const canvas = (await page.getByRole("group", { name: "Agent tree" }).boundingBox())!;
     const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
@@ -175,6 +191,7 @@ test.describe("fixed clock", () => {
   }) => {
     await openWindow(page, "agents", "agents-projects");
     await waitForBridgeIdle(page);
+    await toTree(page);
     const map = page.getByRole("group", { name: "Overview map" });
     await expect(map).toBeVisible();
     await expect(map.locator(".agents-minimap-band")).toHaveCount(4);
@@ -208,6 +225,7 @@ test.describe("fixed clock", () => {
   test("agents-ci-failed: every check with its state in the panel", async ({ page }) => {
     await openWindow(page, "agents", "agents-ci-failed");
     await waitForBridgeIdle(page);
+    await toTree(page);
     await expect(page.getByRole("button", { name: /^Builder JD-57/ })).toContainText("Failed 2 of 4");
     await expect(page.getByRole("button", { name: /^Builder JD-55/ })).toContainText("Failed 1 of 2");
     await page.getByRole("button", { name: /^Builder JD-57/ }).click();
@@ -230,6 +248,7 @@ test("agents-live: an agents.changed keeps the pan, zoom and selection, and flas
 }) => {
   await page.clock.install({ time: NOW });
   await openWindow(page, "agents", "agents-live");
+  await toTree(page);
   const canvas = page.getByRole("group", { name: "Agent tree" });
   await expect(canvas).toBeVisible();
   await page.getByRole("button", { name: "Zoom in" }).click();
