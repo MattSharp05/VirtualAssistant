@@ -116,11 +116,14 @@ function namedProject(task: string, projects: ProjectSetting[], ticket: string |
   return projects.find((p) => {
     const names = namesOf(p).map(escape).join("|");
     return new RegExp(
-      `\\b(?:in|on|for)\\s+(?:the\\s+)?(?:${names})\\b|\\b(?:a|an|the|new)\\s+(?:new\\s+)?(?:${names})\\s+(?:cloud\\s+)?(?:session|task|job|worker|builder)\\b|^\\s*(?:${names})\\s*:`,
+      `\\b(?:in|on|for)\\s+(?:(?:the|my|your|our)\\s+)?(?:${names})\\b|\\b(?:a|an|the|my|your|our|new)\\s+(?:new\\s+)?(?:${names})\\s+(?:cloud\\s+)?(?:session|task|job|worker|builder)\\b|^\\s*(?:${names})\\s*:`,
       "i",
     ).test(task);
   });
 }
+
+/** Project slugs: 1-24 lowercase letters, digits or dashes, starting with a letter (e.g. "trip" or "mario-kart"). */
+export const PROJECT_SLUG = /^[a-z][a-z0-9-]{0,23}$/;
 
 /** The project a slug, name or alias names (any case); undefined when none does. */
 export function findProject(name: string, projects: ProjectSetting[] = []): ProjectSetting | undefined {

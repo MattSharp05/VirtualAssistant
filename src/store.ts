@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { BrainChannel, BrainMetrics, ChatStep } from "@jarvis/shared";
 import { join } from "node:path";
+import type { ProjectSetting } from "./config.js";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -89,6 +90,8 @@ interface State {
   fires?: string[];
   reports?: Report[];
   brain?: BrainState;
+  /** Projects added at runtime (add_project), merged into Config.projects at startup; a PROJECTS entry isn't stored here. */
+  extraProjects?: ProjectSetting[];
 }
 
 export class Store {
@@ -109,6 +112,26 @@ export class Store {
     const id = `j${this.state.nextJob++}`;
     this.save();
     return id;
+  }
+
+  /** Projects added at runtime (add_project), oldest first. */
+  listExtraProjects(): ProjectSetting[] {
+    return this.state.extraProjects ?? [];
+  }
+
+  addProject(p: ProjectSetting): void {
+    this.state.extraProjects = [...(this.state.extraProjects ?? []), p];
+    this.save();
+  }
+
+  /** Removes a project added at runtime; false when there wasn't one by that slug (a PROJECTS entry can't be removed this way). */
+  removeProject(slug: string): boolean {
+    const extra = this.state.extraProjects ?? [];
+    const next = extra.filter((p) => p.slug !== slug);
+    if (next.length === extra.length) return false;
+    this.state.extraProjects = next;
+    this.save();
+    return true;
   }
 
   addJob(job: Job): void {

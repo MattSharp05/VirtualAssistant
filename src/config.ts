@@ -69,6 +69,22 @@ export interface ProjectSetting {
   extraInstructions?: string;
 }
 
+const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+/** One project row, from PROJECTS or an `add_project` call (JD-…); throws (prefixed with `label`) on a bad one. */
+export function parseProject(r: Record<string, unknown>, label = "a project"): ProjectSetting {
+  const slug = str(r?.slug);
+  if (!slug) throw new Error(`${label} needs a slug`);
+  const out: ProjectSetting = { slug, name: str(r.name) ?? slug };
+  for (const key of ["tickets", "repo", "prefix", "notionUrl", "environment", "model", "baseBranch", "extraInstructions"] as const) if (str(r[key])) out[key] = str(r[key]);
+  const aliases = Array.isArray(r.aliases) ? r.aliases.map(str).filter((a): a is string => Boolean(a)) : [];
+  if (aliases.length) out.aliases = aliases;
+  const policy = str(r.mergePolicy) as ProjectSetting["mergePolicy"] | undefined;
+  if (policy && policy !== "never" && policy !== "orchestrator") throw new Error(`${label}.mergePolicy must be "never" or "orchestrator"`);
+  if (policy) out.mergePolicy = policy;
+  return out;
+}
+
 /** PROJECTS='[{"slug":"jarvis","name":"JARVIS Desk","tickets":"collection://…","repo":"MattSharp05/VirtualAssistant","prefix":"JD"}]' */
 export function parseProjects(text: string | undefined): ProjectSetting[] {
   if (!text) return [];
@@ -79,19 +95,7 @@ export function parseProjects(text: string | undefined): ProjectSetting[] {
     throw new Error("PROJECTS must be a JSON list, e.g. [{\"slug\":\"jarvis\",\"name\":\"JARVIS Desk\"}]");
   }
   if (!Array.isArray(rows)) throw new Error("PROJECTS must be a JSON list of projects");
-  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
-  return rows.map((r: Record<string, unknown>, i) => {
-    const slug = str(r?.slug);
-    if (!slug) throw new Error(`PROJECTS[${i}] needs a slug`);
-    const out: ProjectSetting = { slug, name: str(r.name) ?? slug };
-    for (const key of ["tickets", "repo", "prefix", "notionUrl", "environment", "model", "baseBranch", "extraInstructions"] as const) if (str(r[key])) out[key] = str(r[key]);
-    const aliases = Array.isArray(r.aliases) ? r.aliases.map(str).filter((a): a is string => Boolean(a)) : [];
-    if (aliases.length) out.aliases = aliases;
-    const policy = str(r.mergePolicy) as ProjectSetting["mergePolicy"] | undefined;
-    if (policy && policy !== "never" && policy !== "orchestrator") throw new Error(`PROJECTS[${i}].mergePolicy must be "never" or "orchestrator"`);
-    if (policy) out.mergePolicy = policy;
-    return out;
-  });
+  return rows.map((r: Record<string, unknown>, i) => parseProject(r, `PROJECTS[${i}]`));
 }
 
 function optional(name: string): string | undefined {

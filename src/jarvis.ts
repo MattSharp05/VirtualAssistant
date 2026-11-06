@@ -1,13 +1,13 @@
 // What JARVIS can do, independent of where the request came from (Telegram or the dashboard).
 
 import { authStatus, renameCloudSession, sendToSession, type ApiDeps, type AuthStatus } from "./cloud.js";
-import type { Config, ProjectSetting } from "./config.js";
+import { parseProject, type Config, type ProjectSetting } from "./config.js";
 import { NotionStatusCache, type NotionStatus } from "./notion.js";
 import { followUpText, newJobText } from "./prompts.js";
 import { fireRoutine } from "./routines.js";
 import { JOB_NAME, parseSessionId, sessionUrl, type Job, type Store } from "./store.js";
 import { SessionMetricsSource } from "./sessionMetrics.js";
-import { describeProjects, describeSetup, environmentLabel, findProject, modelId, SessionStarter, type DirectSession, type SessionPlan, type StartPath } from "./sessionStart.js";
+import { describeProjects, describeSetup, environmentLabel, findProject, modelId, PROJECT_SLUG, SessionStarter, type DirectSession, type SessionPlan, type StartPath } from "./sessionStart.js";
 import { SessionListCache, type SessionList } from "./sessions.js";
 import { UsageCache, type PlanUsage } from "./usage.js";
 
@@ -72,6 +72,9 @@ export class Jarvis {
     readonly config: Config,
     readonly store: Store,
   ) {
+    // Projects added at runtime (add_project) survive a restart in the store, not PROJECTS.
+    const extra = store.listExtraProjects();
+    if (extra.length) config.projects = [...(config.projects ?? []), ...extra];
     this.usage = new UsageCache(config.claudeBin);
     this.sessionList = new SessionListCache(config.claudeBin);
     this.notion = new NotionStatusCache(config.notionToken);
@@ -176,6 +179,36 @@ export class Jarvis {
     const job: Job = { id: jobId, ...session, task, createdAt: sentAt.toISOString(), kind: "started", via: "routine" };
     this.store.addJob(job);
     return { job, ms: Date.now() - sentAt.getTime(), via: "routine", plan, fireNumber: recent.length + 1, fallbackReason: reason };
+  }
+
+  /**
+   * Adds a project JARVIS can route sessions to ("in trip", a ticket prefix, an alias), without
+   * editing PROJECTS or restarting. No `environment` given = the shared default environment
+   * (SESSION_ENVIRONMENT_ID) — most projects don't need their own; only set one when a project
+   * genuinely needs different network access, secrets or a setup script, and it already exists at
+   * claude.ai/code. Persisted in the store, so it survives a restart.
+   */
+  addProject(input: Record<string, unknown>): ProjectSetting {
+    const project = parseProject(input, "the new project");
+    if (!PROJECT_SLUG.test(project.slug)) {
+      throw new JarvisError(`Project slugs are 1-24 lowercase letters, digits or dashes, starting with a letter (e.g. trip or mario-kart), not "${project.slug}".`);
+    }
+    const clash = [project.slug, project.name, ...(project.aliases ?? [])].map((n) => findProject(n, this.config.projects)).find(Boolean);
+    if (clash) throw new JarvisError(`That collides with the existing project ${clash.slug} (${clash.name}). Use a different slug, name or alias.`);
+    this.config.projects = [...(this.config.projects ?? []), project];
+    this.store.addProject(project);
+    return project;
+  }
+
+  /** Removes a project added with addProject; a PROJECTS (.env) entry can't be removed this way. */
+  removeProject(slug: string): ProjectSetting {
+    const project = findProject(slug, this.config.projects);
+    if (!project) throw new JarvisError(`No project "${slug}". ${describeProjects(this.config.projects) ? `Known projects: ${describeProjects(this.config.projects)}.` : "No projects are configured."}`);
+    if (!this.store.removeProject(project.slug)) {
+      throw new JarvisError(`${project.name} (${project.slug}) is configured in PROJECTS (.env), not added with add_project, so it can't be removed this way.`);
+    }
+    this.config.projects = (this.config.projects ?? []).filter((p) => p.slug !== project.slug);
+    return project;
   }
 
   /**

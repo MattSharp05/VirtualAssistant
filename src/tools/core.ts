@@ -4,6 +4,7 @@
 import { sessionActivity } from "../activity.js";
 import { describeStart, JarvisError, type Jarvis } from "../jarvis.js";
 import { Notion } from "../notion.js";
+import { describeProjects, environmentLabel, modelId } from "../sessionStart.js";
 import { parseSessionId, type Job } from "../store.js";
 
 function ago(iso?: string): string {
@@ -86,6 +87,37 @@ export class CoreTools {
 
   async start(task: string, project?: string, model?: string): Promise<string> {
     return describeStart(await this.jarvis.startJob(task, { project, model }), this.jarvis.config);
+  }
+
+  async listProjects(): Promise<string> {
+    const known = describeProjects(this.jarvis.config.projects);
+    return known ? `Known projects: ${known}.` : "No projects configured yet. Add one with add_project.";
+  }
+
+  async addProject(a: Record<string, unknown>): Promise<string> {
+    const input: Record<string, unknown> = { ...a };
+    if (typeof a.aliases === "string" && a.aliases.trim()) {
+      input.aliases = a.aliases
+        .split(/[,;]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    if (typeof a.model === "string" && a.model.trim()) {
+      const model = modelId(a.model);
+      if (!model) throw new JarvisError(`Unknown model "${a.model.trim()}". Use opus, sonnet, haiku or a full id such as claude-opus-5-5.`);
+      input.model = model;
+    }
+    const p = this.jarvis.addProject(input);
+    const env = p.environment ? environmentLabel(p.environment, this.jarvis.config) : "the shared default environment";
+    return (
+      `Added ${p.slug} (${p.name})${p.repo ? `, repo ${p.repo}` : ""}. Runs in ${env}, model ${p.model ?? "the default (Opus)"}.` +
+      `${p.aliases?.length ? ` Aliases: ${p.aliases.join(", ")}.` : ""} Say "in ${p.slug}" or name "${p.name}" to route a session there.`
+    );
+  }
+
+  async removeProject(slug: string): Promise<string> {
+    const p = this.jarvis.removeProject(slug);
+    return `Removed ${p.slug} (${p.name}). New sessions won't route there unless it's added again.`;
   }
 
   async renameRoutineSessions(): Promise<string> {
